@@ -7,6 +7,8 @@ import * as Hauler from './roles/Hauler';
 import * as Builder from './roles/Builder';
 import * as Upgrader from './roles/Upgrader';
 import { ensureRoomMemory, ensureCreepMemory } from './lib/Memory';
+import { getTerrainMatrix } from './lib/TerrainMatrix';
+import { planLayout, planSwap } from './colony/LayoutPlanner';
 import { Goal } from './types';
 
 function runCreeps(room: Room, goal: Goal): void {
@@ -48,6 +50,19 @@ export const loop = (): void => {
     
     ensureRoomMemory(room);
     colonyTick(room);
+
+    // Terrain and layout planning
+    getTerrainMatrix(room.name);
+    const layout = planLayout(room);
+    const swapPlan = planSwap(room, layout);
+
+    if (!room.memory.layout) {
+      room.memory.layout = {};
+    }
+    room.memory.layout.bunker = layout;
+    room.memory.layout.swap = swapPlan;
+    room.memory.layout.lastUpdated = Game.time;
+
     spawnerTick(room, room.memory.goal);
     runCreeps(room, room.memory.goal);
   }
