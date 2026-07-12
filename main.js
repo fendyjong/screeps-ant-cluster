@@ -295,11 +295,11 @@ function run$2(creep, goal) {
 }
 
 // src/roles/Builder.ts
+const MAX_DEMOLISH_PER_TICK = 3;
 function findConstructionSite(creep) {
     const sites = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
     if (sites.length === 0)
         return null;
-    // Prioritize by progress ratio
     return creep.pos.findClosestByPath(sites);
 }
 function findDamagedStructure(creep) {
@@ -326,7 +326,97 @@ function repairStructures(creep) {
         }
     }
 }
+function dismantleStructure(creep, structureId) {
+    const structure = Game.getObjectById(structureId);
+    if (!structure)
+        return false;
+    const result = creep.dismantle(structure);
+    if (result === ERR_NOT_IN_RANGE) {
+        moveTo(creep, structure);
+        return false;
+    }
+    return result === OK;
+}
+function buildFromSwapPlan(creep) {
+    const layout = creep.room.memory.layout;
+    if (!layout || !layout.swap || layout.swap.build.length === 0)
+        return false;
+    // Find first construction site that matches build list
+    const sites = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
+    for (const entry of layout.swap.build) {
+        const site = sites.find(s => s.pos.isEqualTo(entry.pos) && s.structureType === entry.structureType);
+        if (site) {
+            if (creep.build(site) === ERR_NOT_IN_RANGE) {
+                moveTo(creep, site);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+function harvestEnergy(creep) {
+    const sources = creep.room.find(FIND_SOURCES);
+    if (sources.length > 0) {
+        const source = sources[0];
+        if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
+            moveTo(creep, source);
+        }
+    }
+}
 function run$1(creep, goal) {
+    const layout = creep.room.memory.layout;
+    const swapPlan = layout?.swap;
+    let stateChanged = false;
+    if (swapPlan && swapPlan.destroy.length > 0) {
+        if (swapPlan.state !== 'destroying') {
+            swapPlan.state = 'destroying';
+            stateChanged = true;
+        }
+        if (!stateChanged) {
+            let demolishCount = 0;
+            const toRemove = [];
+            for (let i = 0; i < swapPlan.destroy.length && demolishCount < MAX_DEMOLISH_PER_TICK; i++) {
+                const structureId = swapPlan.destroy[i];
+                const structure = Game.getObjectById(structureId);
+                if (!structure) {
+                    toRemove.push(i);
+                    continue;
+                }
+                const success = dismantleStructure(creep, structureId);
+                if (success) {
+                    toRemove.push(i);
+                    demolishCount++;
+                }
+            }
+            for (let i = toRemove.length - 1; i >= 0; i--) {
+                swapPlan.destroy.splice(toRemove[i], 1);
+            }
+        }
+        return;
+    }
+    if (swapPlan && swapPlan.build.length > 0) {
+        if (swapPlan.state !== 'building') {
+            swapPlan.state = 'building';
+            stateChanged = true;
+        }
+        if (!stateChanged) {
+            if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+                const built = buildFromSwapPlan(creep);
+                if (!built) {
+                    buildStructures(creep);
+                }
+            }
+            else {
+                harvestEnergy(creep);
+            }
+        }
+        return;
+    }
+    if (swapPlan) {
+        if (swapPlan.state !== 'idle') {
+            swapPlan.state = 'idle';
+        }
+    }
     if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
         switch (goal) {
             case Goal.ECONOMY:
@@ -341,14 +431,7 @@ function run$1(creep, goal) {
         }
     }
     else {
-        // Find energy
-        const sources = creep.room.find(FIND_SOURCES);
-        if (sources.length > 0) {
-            const source = sources[0];
-            if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
-                moveTo(creep, source);
-            }
-        }
+        harvestEnergy(creep);
     }
 }
 
@@ -544,6 +627,87 @@ function findOptimalTowerPositions(roomName, count) {
     return positions;
 }
 
+const REBUILD_COSTS = {
+    [STRUCTURE_SPAWN]: 15000,
+    [STRUCTURE_STORAGE]: 100000,
+    [STRUCTURE_TOWER]: 5000,
+    [STRUCTURE_LINK]: 5000,
+    [STRUCTURE_TERMINAL]: 100000,
+    [STRUCTURE_LAB]: 50000,
+    [STRUCTURE_FACTORY]: 100000,
+    [STRUCTURE_OBSERVER]: 8000,
+    [STRUCTURE_NUKER]: 100000,
+    [STRUCTURE_POWER_SPAWN]: 200000,
+    [STRUCTURE_EXTRACTOR]: 5000,
+    [STRUCTURE_ROAD]: 300,
+    [STRUCTURE_WALL]: 10000,
+    [STRUCTURE_RAMPART]: 10000,
+    [STRUCTURE_CONTAINER]: 5000,
+    [STRUCTURE_EXTENSION]: 3000,
+};
+function isSafeToDestroy(room, structure) {
+    const type = structure.structureType;
+    const cost = REBUILD_COSTS[type] || 0;
+    // Don't destroy spawn unless we have energy to rebuild or another spawn exists
+    if (type === STRUCTURE_SPAWN) {
+        const otherSpawns = room.find(FIND_MY_STRUCTURES, {
+            filter: (s) => s.structureType === STRUCTURE_SPAWN && s.id !== structure.id
+        });
+        if (otherSpawns.length > 0)
+            return true;
+        return room.energyCapacityAvailable >= cost;
+    }
+    // Don't destroy terminal/storage before RCL 4
+    if (type === STRUCTURE_TERMINAL || type === STRUCTURE_STORAGE) {
+        if (room.controller && room.controller.level < 4)
+            return false;
+    }
+    // Don't destroy terminal until storage exists
+    if (type === STRUCTURE_TERMINAL) {
+        const storage = room.find(FIND_MY_STRUCTURES, {
+            filter: (s) => s.structureType === STRUCTURE_STORAGE
+        })[0];
+        if (!storage)
+            return false;
+    }
+    // Don't destroy storage until terminal has no non-energy resources
+    if (type === STRUCTURE_STORAGE) {
+        const terminal = room.find(FIND_MY_STRUCTURES, {
+            filter: (s) => s.structureType === STRUCTURE_TERMINAL
+        })[0];
+        if (terminal) {
+            const nonEnergy = Object.keys(terminal.store).filter(r => r !== RESOURCE_ENERGY);
+            if (nonEnergy.some(r => (terminal.store[r] || 0) > 1000))
+                return false;
+        }
+    }
+    return true;
+}
+const BUILD_PRIORITIES = [
+    STRUCTURE_SPAWN,
+    STRUCTURE_STORAGE,
+    STRUCTURE_TOWER,
+    STRUCTURE_LINK,
+    STRUCTURE_TERMINAL,
+    STRUCTURE_LAB,
+    STRUCTURE_FACTORY,
+    STRUCTURE_OBSERVER,
+    STRUCTURE_NUKER,
+    STRUCTURE_POWER_SPAWN,
+    STRUCTURE_EXTRACTOR,
+    STRUCTURE_ROAD,
+    STRUCTURE_WALL,
+    STRUCTURE_RAMPART,
+    STRUCTURE_CONTAINER,
+    STRUCTURE_EXTENSION,
+];
+function sortByPriority(buildList) {
+    return buildList.sort((a, b) => {
+        const aIdx = BUILD_PRIORITIES.indexOf(a.structureType);
+        const bIdx = BUILD_PRIORITIES.indexOf(b.structureType);
+        return aIdx - bIdx;
+    });
+}
 function findSpawnPosition(roomName) {
     const matrix = getTerrainMatrix(roomName);
     // Find central walkable position
@@ -628,16 +792,20 @@ function planSwap(room, layout) {
         filter: (s) => s.structureType === STRUCTURE_SPAWN
     })[0];
     if (existingSpawn && !existingSpawn.pos.isEqualTo(layout.spawn)) {
-        destroy.push(existingSpawn.id);
-        build.push({ pos: layout.spawn, structureType: STRUCTURE_SPAWN });
+        if (isSafeToDestroy(room, existingSpawn)) {
+            destroy.push(existingSpawn.id);
+            build.push({ pos: layout.spawn, structureType: STRUCTURE_SPAWN });
+        }
     }
     // Check storage
     const existingStorage = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_STORAGE
     })[0];
     if (existingStorage && !existingStorage.pos.isEqualTo(layout.storage)) {
-        destroy.push(existingStorage.id);
-        build.push({ pos: layout.storage, structureType: STRUCTURE_STORAGE });
+        if (isSafeToDestroy(room, existingStorage)) {
+            destroy.push(existingStorage.id);
+            build.push({ pos: layout.storage, structureType: STRUCTURE_STORAGE });
+        }
     }
     // Check towers
     const existingTowers = room.find(FIND_MY_STRUCTURES, {
@@ -645,7 +813,7 @@ function planSwap(room, layout) {
     });
     for (const tower of existingTowers) {
         const inLayout = layout.towers.some(t => t.isEqualTo(tower.pos));
-        if (!inLayout) {
+        if (!inLayout && isSafeToDestroy(room, tower)) {
             destroy.push(tower.id);
         }
     }
@@ -655,9 +823,11 @@ function planSwap(room, layout) {
             build.push({ pos: towerPos, structureType: STRUCTURE_TOWER });
         }
     }
+    // Sort build list by priority
+    const sortedBuild = sortByPriority(build);
     return {
         destroy,
-        build,
+        build: sortedBuild,
         state: 'idle',
     };
 }
@@ -685,6 +855,88 @@ function runCreeps(room, goal) {
         }
     }
 }
+const STRUCTURE_COSTS = {
+    [STRUCTURE_SPAWN]: 15000,
+    [STRUCTURE_STORAGE]: 100000,
+    [STRUCTURE_TOWER]: 5000,
+    [STRUCTURE_LINK]: 5000,
+    [STRUCTURE_TERMINAL]: 100000,
+    [STRUCTURE_LAB]: 50000,
+    [STRUCTURE_FACTORY]: 100000,
+    [STRUCTURE_OBSERVER]: 8000,
+    [STRUCTURE_NUKER]: 100000,
+    [STRUCTURE_POWER_SPAWN]: 200000,
+    [STRUCTURE_EXTRACTOR]: 5000,
+    [STRUCTURE_ROAD]: 300,
+    [STRUCTURE_WALL]: 10000,
+    [STRUCTURE_RAMPART]: 10000,
+    [STRUCTURE_CONTAINER]: 5000,
+    [STRUCTURE_EXTENSION]: 3000,
+};
+function createConstructionSites(room) {
+    const layout = room.memory.layout;
+    if (!layout || !layout.swap || layout.swap.build.length === 0)
+        return;
+    // Only create sites every 100 ticks
+    if (Game.time % 100 !== 0)
+        return;
+    // Check energy availability
+    const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
+    for (const entry of layout.swap.build) {
+        // Skip if construction site already exists at this position
+        const existingSite = sites.find(s => s.pos.isEqualTo(entry.pos) && s.structureType === entry.structureType);
+        if (existingSite)
+            continue;
+        // Skip if structure already exists at this position
+        const existingStructure = room.lookForAt(LOOK_STRUCTURES, entry.pos.x, entry.pos.y)
+            .find(s => s.structureType === entry.structureType);
+        if (existingStructure)
+            continue;
+        // Check energy availability (50% of structure cost)
+        const cost = STRUCTURE_COSTS[entry.structureType] || 0;
+        if (cost > 0 && room.energyAvailable < cost * 0.5)
+            continue;
+        // Create construction site
+        const result = room.createConstructionSite(entry.pos, entry.structureType);
+        if (result === OK)
+            break; // Only create one site per run
+    }
+}
+function recheckLayout(room) {
+    // Only recheck every 200 ticks
+    if (Game.time % 200 !== 0)
+        return;
+    const layout = room.memory.layout;
+    if (!layout || !layout.bunker)
+        return;
+    // Verify all planned positions are still valid
+    let needsReplan = false;
+    // Check if planned structures still exist at correct positions
+    for (const towerPos of layout.bunker.towers) {
+        const tower = room.lookForAt(LOOK_STRUCTURES, towerPos.x, towerPos.y)
+            .find(s => s.structureType === STRUCTURE_TOWER);
+        if (!tower) {
+            needsReplan = true;
+            break;
+        }
+    }
+    // Check if structures moved or were destroyed
+    const existingSpawns = room.find(FIND_MY_STRUCTURES, {
+        filter: (s) => s.structureType === STRUCTURE_SPAWN
+    });
+    if (existingSpawns.length > 0) {
+        const spawn = existingSpawns[0];
+        if (!spawn.pos.isEqualTo(layout.bunker.spawn)) {
+            needsReplan = true;
+        }
+    }
+    // Re-plan if needed
+    if (needsReplan) {
+        const newLayout = planLayout(room);
+        const newSwapPlan = planSwap(room, newLayout);
+        room.memory.layout = { bunker: newLayout, swap: newSwapPlan, lastUpdated: Game.time };
+    }
+}
 const loop = () => {
     // Clean up dead creep memory
     for (const name in Memory.creeps) {
@@ -706,6 +958,10 @@ const loop = () => {
             const swapPlan = planSwap(room, layout);
             room.memory.layout = { bunker: layout, swap: swapPlan, lastUpdated: Game.time };
         }
+        // Create construction sites from swap plan
+        createConstructionSites(room);
+        // Periodic layout rechecking
+        recheckLayout(room);
         tick(room, room.memory.goal);
         runCreeps(room, room.memory.goal);
     }
