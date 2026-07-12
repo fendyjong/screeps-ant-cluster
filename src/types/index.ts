@@ -21,3 +21,18 @@ export interface CreepMemory {
 export interface RoomMemory {
   goal: Goal;
 }
+
+export interface TerrainCache {
+  matrix: number[];
+  tick: number;
+}
+
+export interface PathingMemory {
+  terrain: Record<string, TerrainCache>;
+}
+
+declare global {
+  interface Memory {
+    pathing?: PathingMemory;
+  }
+}
