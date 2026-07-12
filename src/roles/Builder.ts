@@ -48,6 +48,7 @@ function dismantleStructure(creep: Creep, structureId: string): boolean {
   const result = creep.dismantle(structure);
   if (result === ERR_NOT_IN_RANGE) {
     moveTo(creep, structure);
+    return false;
   }
   return result === OK;
 }
@@ -73,71 +74,79 @@ function buildFromSwapPlan(creep: Creep): boolean {
   return false;
 }
 
+function harvestEnergy(creep: Creep): void {
+  const sources = creep.room.find(FIND_SOURCES);
+  if (sources.length > 0) {
+    const source = sources[0];
+    if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
+      moveTo(creep, source);
+    }
+  }
+}
+
 export function run(creep: Creep, goal: Goal): void {
-  // Get swap plan
   const layout = creep.room.memory.layout;
   const swapPlan = layout?.swap;
+  let stateChanged = false;
   
-  // Phase 1: Demolish misplaced structures
   if (swapPlan && swapPlan.destroy.length > 0) {
-    swapPlan.state = 'destroying';
-    
-    // Limit demolitions per tick
-    let demolishCount = 0;
-    const toRemove: number[] = [];
-    
-    for (let i = 0; i < swapPlan.destroy.length && demolishCount < MAX_DEMOLISH_PER_TICK; i++) {
-      const structureId = swapPlan.destroy[i];
-      const structure = Game.getObjectById(structureId) as Structure | null;
-      
-      if (!structure) {
-        // Structure already destroyed, remove from list
-        toRemove.push(i);
-        continue;
-      }
-      
-      const success = dismantleStructure(creep, structureId);
-      if (success) {
-        toRemove.push(i);
-        demolishCount++;
-      }
+    if (swapPlan.state !== 'destroying') {
+      swapPlan.state = 'destroying';
+      stateChanged = true;
     }
     
-    // Remove demolished structures from list (reverse order to maintain indices)
-    for (let i = toRemove.length - 1; i >= 0; i--) {
-      swapPlan.destroy.splice(toRemove[i], 1);
-    }
-    
-    return;
-  }
-  
-  // Phase 2: Build new structures
-  if (swapPlan && swapPlan.build.length > 0) {
-    swapPlan.state = 'building';
-    
-    if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
-      const built = buildFromSwapPlan(creep);
-      if (!built) {
-        // No matching construction site, fall back to regular building
-        buildStructures(creep);
-      }
-    } else {
-      // Find energy
-      const sources = creep.room.find(FIND_SOURCES);
-      if (sources.length > 0) {
-        const source = sources[0];
-        if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
-          moveTo(creep, source);
+    if (!stateChanged) {
+      let demolishCount = 0;
+      const toRemove: number[] = [];
+      
+      for (let i = 0; i < swapPlan.destroy.length && demolishCount < MAX_DEMOLISH_PER_TICK; i++) {
+        const structureId = swapPlan.destroy[i];
+        const structure = Game.getObjectById(structureId) as Structure | null;
+        
+        if (!structure) {
+          toRemove.push(i);
+          continue;
+        }
+        
+        const success = dismantleStructure(creep, structureId);
+        if (success) {
+          toRemove.push(i);
+          demolishCount++;
         }
       }
+      
+      for (let i = toRemove.length - 1; i >= 0; i--) {
+        swapPlan.destroy.splice(toRemove[i], 1);
+      }
     }
     
     return;
   }
   
-  // Phase 3: Idle - fall back to regular behavior
+  if (swapPlan && swapPlan.build.length > 0) {
+    if (swapPlan.state !== 'building') {
+      swapPlan.state = 'building';
+      stateChanged = true;
+    }
+    
+    if (!stateChanged) {
+      if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+        const built = buildFromSwapPlan(creep);
+        if (!built) {
+          buildStructures(creep);
+        }
+      } else {
+        harvestEnergy(creep);
+      }
+    }
+    
+    return;
+  }
+  
   if (swapPlan) {
-    swapPlan.state = 'idle';
+    if (swapPlan.state !== 'idle') {
+      swapPlan.state = 'idle';
+    }
   }
   
   if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
@@ -153,13 +162,6 @@ export function run(creep: Creep, goal: Goal): void {
         break;
     }
   } else {
-    // Find energy
-    const sources = creep.room.find(FIND_SOURCES);
-    if (sources.length > 0) {
-      const source = sources[0];
-      if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
-        moveTo(creep, source);
-      }
-    }
+    harvestEnergy(creep);
   }
 }
