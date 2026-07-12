@@ -1,0 +1,211 @@
+# Screeps Rebuild MVP — Goal-Driven Colony Design
+
+**Date:** 2026-07-12
+**Author:** OpenCode (AI)
+
+---
+
+## 1. Overview
+
+Complete rebuild of the Screeps bot from scratch. Single-room economy bot using a goal-driven ant colony pattern. Colony has a global goal (ECONOMY, DEFEND, RECOVER) that shifts based on conditions. Each creep reads the goal and follows role-specific rules for that goal. Target counting drives spawn decisions.
+
+No defense, no military, no multi-room in MVP. Goal system designed to support them later.
+
+---
+
+## 2. Architecture
+
+### Folder structure
+```
+src/
+  main.ts                    ← entry point, game loop
+  colony/
+    Colony.ts                ← reads room state, sets colony goal
+    Goal.ts                  ← goal enum + transition logic
+  roles/
+    Harvester.ts             ← behavior per goal
+    Hauler.ts
+    Builder.ts
+    Upgrader.ts
+  spawn/
+    Spawner.ts               ← reads targets, spawns creeps
+    Body.ts                  ← body part calculations
+  lib/
+    Pathing.ts               ← moveTo wrapper
+    Memory.ts                ← typed memory helpers
+  types/
+    index.ts                 ← shared type definitions
+```
+
+### Tick flow
+```
+main.ts → for each owned room:
+  1. Colony.getGoal(room)         → read hostiles, damage, set goal
+  2. room.memory.goal = goal      → persist for creeps to read
+  3. Spawner.tick(room, goal)     → spawn if role count below target
+  4. runCreeps(room, goal)        → each creep runs its role function
+```
+
+---
+
+## 3. Goal System
+
+### Goals
+```ts
+enum Goal {
+  ECONOMY = 'economy',
+  DEFEND = 'defend',
+  RECOVER = 'recover',
+}
+```
+
+### Transition logic
+```ts
+function getColonyGoal(room: Room): Goal {
+  if (room.find(FIND_HOSTILE_CREEPS).length > 0) return Goal.DEFEND;
+  // future: check damage threshold for RECOVER
+  return Goal.ECONOMY;
+}
+```
+
+MVP implements ECONOMY only. DEFEND and RECOVER are coded but not triggered (no hostile detection in MVP scope).
+
+---
+
+## 4. Target Counting
+
+### Interface
+```ts
+interface RoleTargets {
+  harvester: number;
+  hauler: number;
+  builder: number;
+  upgrader: number;
+}
+```
+
+### Targets per goal
+| Role     | ECONOMY | DEFEND | RECOVER |
+|----------|---------|--------|---------|
+| harvester| 2       | 1      | 2       |
+| hauler   | 1       | 0      | 1       |
+| builder  | 1       | 0      | 2       |
+| upgrader | 1       | 0      | 0       |
+
+### Spawn priority order
+`harvester → hauler → builder → upgrader`
+
+Spawn one creep per tick. First role below target gets spawned if energy available.
+
+---
+
+## 5. Role Behavior
+
+Each role has a `run(creep, goal)` function with a switch on goal.
+
+### Harvester
+| Goal    | Behavior |
+|---------|----------|
+| ECONOMY | Harvest source → transfer to container |
+| DEFEND  | Repair nearby structures |
+| RECOVER | Harvest source → transfer to container |
+
+### Hauler
+| Goal    | Behavior |
+|---------|----------|
+| ECONOMY | Move energy from container to storage/spawn |
+| DEFEND  | Pick up dropped energy → deliver to towers |
+| RECOVER | Same as ECONOMY |
+
+### Builder
+| Goal    | Behavior |
+|---------|----------|
+| ECONOMY | Build construction sites |
+| DEFEND  | Repair ramparts/walls |
+| RECOVER | Repair damaged structures |
+
+### Upgrader
+| Goal    | Behavior |
+|---------|----------|
+| ECONOMY | Upgrade controller |
+| DEFEND  | Park near spawn (save energy) |
+| RECOVER | Upgrade controller (prevent downgrade) |
+
+---
+
+## 6. Spawn System
+
+### Spawner.tick(room, goal)
+1. Get targets for current goal
+2. Count existing creeps per role
+3. For each role in priority order:
+   - If count < target and energy >= body cost → spawn
+   - Break after first spawn (one per tick)
+
+### Body generation
+```ts
+Body.forRole(role: string, room: Room): BodyPartConstant[]
+```
+- harvester: [WORK, CARRY, MOVE] minimum, scale with energy
+- hauler: [CARRY, CARRY, MOVE]
+- builder: [WORK, CARRY, MOVE]
+- upgrader: [WORK, CARRY, MOVE]
+
+---
+
+## 7. Memory Structure
+
+```ts
+interface RoomMemory {
+  goal: Goal;
+}
+
+interface CreepMemory {
+  role: string;
+  roomName: string;
+}
+```
+
+Minimal memory. Goal stored per room. Role stored per creep.
+
+---
+
+## 8. Build Pipeline
+
+- TypeScript compiled via Rollup
+- `src/main.ts` is entry point
+- Output: `dist/main.js` (CommonJS)
+- `npm run build` to compile
+- Screeps client syncs `dist/main.js`
+
+---
+
+## 9. MVP Scope
+
+**In scope:**
+- Single room
+- ECONOMY goal
+- Harvest → haul → build → upgrade
+- Basic spawn logic
+- TypeScript + Rollup build
+
+**Out of scope (future):**
+- DEFEND/RECOVER goal triggers
+- Multi-room
+- Military roles
+- Labs, factory, market
+- Colony phase system
+
+---
+
+## 10. Self-Review
+
+- No placeholders or TODOs
+- Architecture consistent: goal system drives both behavior and spawning
+- Scope is single-room economy only
+- All type definitions explicit
+- No contradictions between sections
+
+---
+
+*Generated by OpenCode (AI) on 2026-07-12.*

@@ -1,6 +1,6 @@
 // src/types/index.ts
 
-import { BunkerLayout, SwapPlan } from '../colony/LayoutPlanner';
+import { BunkerLayout, SwapPlan } from '../colony/Architect';
 
 export enum Goal {
   ECONOMY = 'economy',

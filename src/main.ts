@@ -8,7 +8,7 @@ import * as Builder from './roles/Builder';
 import * as Upgrader from './roles/Upgrader';
 import { ensureRoomMemory, ensureCreepMemory } from './lib/Memory';
 import { getTerrainMatrix } from './lib/TerrainMatrix';
-import { planLayout, planSwap } from './colony/LayoutPlanner';
+import { planLayout, planSwap } from './colony/Architect';
 import { Goal } from './types';
 
 function runCreeps(room: Room, goal: Goal): void {
