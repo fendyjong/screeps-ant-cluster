@@ -59,6 +59,33 @@ function isSafeToDestroy(room: Room, structure: Structure): boolean {
   return true;
 }
 
+export const BUILD_PRIORITIES: StructureConstant[] = [
+  STRUCTURE_SPAWN,
+  STRUCTURE_STORAGE,
+  STRUCTURE_TOWER,
+  STRUCTURE_LINK,
+  STRUCTURE_TERMINAL,
+  STRUCTURE_LAB,
+  STRUCTURE_FACTORY,
+  STRUCTURE_OBSERVER,
+  STRUCTURE_NUKER,
+  STRUCTURE_POWER_SPAWN,
+  STRUCTURE_EXTRACTOR,
+  STRUCTURE_ROAD,
+  STRUCTURE_WALL,
+  STRUCTURE_RAMPART,
+  STRUCTURE_CONTAINER,
+  STRUCTURE_EXTENSION,
+];
+
+export function sortByPriority(buildList: { pos: RoomPosition; structureType: StructureConstant }[]): { pos: RoomPosition; structureType: StructureConstant }[] {
+  return buildList.sort((a, b) => {
+    const aIdx = BUILD_PRIORITIES.indexOf(a.structureType);
+    const bIdx = BUILD_PRIORITIES.indexOf(b.structureType);
+    return aIdx - bIdx;
+  });
+}
+
 export interface BunkerLayout {
   spawn: RoomPosition;
   towers: RoomPosition[];
@@ -214,9 +241,12 @@ export function planSwap(room: Room, layout: BunkerLayout): SwapPlan {
     }
   }
   
+  // Sort build list by priority
+  const sortedBuild = sortByPriority(build);
+  
   return {
     destroy,
-    build,
+    build: sortedBuild,
     state: 'idle',
   };
 }
