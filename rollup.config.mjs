@@ -11,7 +11,7 @@ export default {
   ],
   treeshake: false,
   output: {
-    file: "dist/main.js",
+    file: "main.js",
     format: "cjs",
     sourcemap: false
   }
