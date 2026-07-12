@@ -35,6 +35,57 @@ function runCreeps(room: Room, goal: Goal): void {
   }
 }
 
+const STRUCTURE_COSTS: Record<string, number> = {
+  [STRUCTURE_SPAWN]: 15000,
+  [STRUCTURE_STORAGE]: 100000,
+  [STRUCTURE_TOWER]: 5000,
+  [STRUCTURE_LINK]: 5000,
+  [STRUCTURE_TERMINAL]: 100000,
+  [STRUCTURE_LAB]: 50000,
+  [STRUCTURE_FACTORY]: 100000,
+  [STRUCTURE_OBSERVER]: 8000,
+  [STRUCTURE_NUKER]: 100000,
+  [STRUCTURE_POWER_SPAWN]: 200000,
+  [STRUCTURE_EXTRACTOR]: 5000,
+  [STRUCTURE_ROAD]: 300,
+  [STRUCTURE_WALL]: 10000,
+  [STRUCTURE_RAMPART]: 10000,
+  [STRUCTURE_CONTAINER]: 5000,
+  [STRUCTURE_EXTENSION]: 3000,
+};
+
+function createConstructionSites(room: Room): void {
+  const layout = room.memory.layout;
+  if (!layout || !layout.swap || layout.swap.build.length === 0) return;
+  
+  // Only create sites every 100 ticks
+  if (Game.time % 100 !== 0) return;
+  
+  // Check energy availability
+  const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
+  
+  for (const entry of layout.swap.build) {
+    // Skip if construction site already exists at this position
+    const existingSite = sites.find(s => 
+      s.pos.isEqualTo(entry.pos) && s.structureType === entry.structureType
+    );
+    if (existingSite) continue;
+    
+    // Skip if structure already exists at this position
+    const existingStructure = room.lookForAt(LOOK_STRUCTURES, entry.pos.x, entry.pos.y)
+      .find(s => s.structureType === entry.structureType);
+    if (existingStructure) continue;
+    
+    // Check energy availability (50% of structure cost)
+    const cost = STRUCTURE_COSTS[entry.structureType] || 0;
+    if (cost > 0 && room.energyAvailable < cost * 0.5) continue;
+    
+    // Create construction site
+    const result = room.createConstructionSite(entry.pos, entry.structureType);
+    if (result === OK) break; // Only create one site per tick
+  }
+}
+
 export const loop = (): void => {
   // Clean up dead creep memory
   for (const name in Memory.creeps) {
@@ -58,6 +109,9 @@ export const loop = (): void => {
       const swapPlan = planSwap(room, layout);
       room.memory.layout = { bunker: layout, swap: swapPlan, lastUpdated: Game.time };
     }
+
+    // Create construction sites from swap plan
+    createConstructionSites(room);
 
     spawnerTick(room, room.memory.goal);
     runCreeps(room, room.memory.goal);
