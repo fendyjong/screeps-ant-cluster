@@ -1,4 +1,4 @@
-import { getTerrainMatrix, isWalkable, findOptimalTowerPositions } from '../lib/TerrainMatrix';
+import { getTerrainMatrix, isWalkable, findOptimalTowerPositions, findChokepoints } from '../lib/TerrainMatrix';
 
 export interface BunkerLayout {
   spawn: RoomPosition;
@@ -85,31 +85,8 @@ function findRampartPositions(roomName: string, layout: BunkerLayout): RoomPosit
   return ramparts.slice(0, 10); // Limit to 10 ramparts
 }
 
-function findWallPositions(roomName: string, layout: BunkerLayout): RoomPosition[] {
-  const matrix = getTerrainMatrix(roomName);
-  const walls: RoomPosition[] = [];
-  
-  // Find positions to block enemy paths
-  for (let y = 1; y < 49; y++) {
-    for (let x = 1; x < 49; x++) {
-      if (!isWalkable(matrix, x, y)) continue;
-      
-      // Check if this is a chokepoint
-      const neighbors = [
-        isWalkable(matrix, x - 1, y),
-        isWalkable(matrix, x + 1, y),
-        isWalkable(matrix, x, y - 1),
-        isWalkable(matrix, x, y + 1),
-      ];
-      
-      const walkableCount = neighbors.filter(Boolean).length;
-      if (walkableCount <= 2) {
-        walls.push(new RoomPosition(x, y, roomName));
-      }
-    }
-  }
-  
-  return walls.slice(0, 20); // Limit to 20 walls
+function findWallPositions(roomName: string, _layout: BunkerLayout): RoomPosition[] {
+  return findChokepoints(roomName).slice(0, 20);
 }
 
 export function planLayout(room: Room): BunkerLayout {

@@ -51,17 +51,13 @@ export const loop = (): void => {
     ensureRoomMemory(room);
     colonyTick(room);
 
-    // Terrain and layout planning
+    // Terrain and layout planning — cache every 100 ticks
     getTerrainMatrix(room.name);
-    const layout = planLayout(room);
-    const swapPlan = planSwap(room, layout);
-
-    if (!room.memory.layout) {
-      room.memory.layout = {};
+    if (Game.time % 100 === 0 || !room.memory.layout || !room.memory.layout.lastUpdated) {
+      const layout = planLayout(room);
+      const swapPlan = planSwap(room, layout);
+      room.memory.layout = { bunker: layout, swap: swapPlan, lastUpdated: Game.time };
     }
-    room.memory.layout.bunker = layout;
-    room.memory.layout.swap = swapPlan;
-    room.memory.layout.lastUpdated = Game.time;
 
     spawnerTick(room, room.memory.goal);
     runCreeps(room, room.memory.goal);
