@@ -1,5 +1,64 @@
 import { getTerrainMatrix, isWalkable, findOptimalTowerPositions, findChokepoints } from '../lib/TerrainMatrix';
 
+const REBUILD_COSTS: Record<StructureConstant, number> = {
+  [STRUCTURE_SPAWN]: 15000,
+  [STRUCTURE_STORAGE]: 100000,
+  [STRUCTURE_TOWER]: 5000,
+  [STRUCTURE_LINK]: 5000,
+  [STRUCTURE_TERMINAL]: 100000,
+  [STRUCTURE_LAB]: 50000,
+  [STRUCTURE_FACTORY]: 100000,
+  [STRUCTURE_OBSERVER]: 8000,
+  [STRUCTURE_NUKER]: 100000,
+  [STRUCTURE_POWER_SPAWN]: 200000,
+  [STRUCTURE_EXTRACTOR]: 5000,
+  [STRUCTURE_ROAD]: 300,
+  [STRUCTURE_WALL]: 10000,
+  [STRUCTURE_RAMPART]: 10000,
+  [STRUCTURE_CONTAINER]: 5000,
+  [STRUCTURE_EXTENSION]: 3000,
+};
+
+function isSafeToDestroy(room: Room, structure: Structure): boolean {
+  const type = structure.structureType;
+  const cost = REBUILD_COSTS[type] || 0;
+
+  // Don't destroy spawn unless we have energy to rebuild or another spawn exists
+  if (type === STRUCTURE_SPAWN) {
+    const otherSpawns = room.find(FIND_MY_STRUCTURES, {
+      filter: (s) => s.structureType === STRUCTURE_SPAWN && s.id !== structure.id
+    });
+    if (otherSpawns.length > 0) return true;
+    return room.energyCapacityAvailable >= cost;
+  }
+
+  // Don't destroy terminal/storage before RCL 4
+  if (type === STRUCTURE_TERMINAL || type === STRUCTURE_STORAGE) {
+    if (room.controller && room.controller.level < 4) return false;
+  }
+
+  // Don't destroy terminal until storage exists
+  if (type === STRUCTURE_TERMINAL) {
+    const storage = room.find(FIND_MY_STRUCTURES, {
+      filter: (s) => s.structureType === STRUCTURE_STORAGE
+    })[0];
+    if (!storage) return false;
+  }
+
+  // Don't destroy storage until terminal has no non-energy resources
+  if (type === STRUCTURE_STORAGE) {
+    const terminal = room.find(FIND_MY_STRUCTURES, {
+      filter: (s) => s.structureType === STRUCTURE_TERMINAL
+    })[0] as StructureTerminal | undefined;
+    if (terminal) {
+      const nonEnergy = Object.keys(terminal.store).filter(r => r !== RESOURCE_ENERGY);
+      if (nonEnergy.some(r => (terminal.store[r] || 0) > 1000)) return false;
+    }
+  }
+
+  return true;
+}
+
 export interface BunkerLayout {
   spawn: RoomPosition;
   towers: RoomPosition[];
@@ -118,8 +177,10 @@ export function planSwap(room: Room, layout: BunkerLayout): SwapPlan {
   })[0];
   
   if (existingSpawn && !existingSpawn.pos.isEqualTo(layout.spawn)) {
-    destroy.push(existingSpawn.id);
-    build.push({ pos: layout.spawn, structureType: STRUCTURE_SPAWN });
+    if (isSafeToDestroy(room, existingSpawn)) {
+      destroy.push(existingSpawn.id);
+      build.push({ pos: layout.spawn, structureType: STRUCTURE_SPAWN });
+    }
   }
   
   // Check storage
@@ -128,8 +189,10 @@ export function planSwap(room: Room, layout: BunkerLayout): SwapPlan {
   })[0];
   
   if (existingStorage && !existingStorage.pos.isEqualTo(layout.storage)) {
-    destroy.push(existingStorage.id);
-    build.push({ pos: layout.storage, structureType: STRUCTURE_STORAGE });
+    if (isSafeToDestroy(room, existingStorage)) {
+      destroy.push(existingStorage.id);
+      build.push({ pos: layout.storage, structureType: STRUCTURE_STORAGE });
+    }
   }
   
   // Check towers
@@ -139,7 +202,7 @@ export function planSwap(room: Room, layout: BunkerLayout): SwapPlan {
   
   for (const tower of existingTowers) {
     const inLayout = layout.towers.some(t => t.isEqualTo(tower.pos));
-    if (!inLayout) {
+    if (!inLayout && isSafeToDestroy(room, tower)) {
       destroy.push(tower.id);
     }
   }
