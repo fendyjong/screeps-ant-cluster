@@ -82,8 +82,49 @@ function createConstructionSites(room: Room): void {
     
     // Create construction site
     const result = room.createConstructionSite(entry.pos, entry.structureType);
-    if (result === OK) break; // Only create one site per tick
+    if (result === OK) break; // Only create one site per run
   }
+}
+
+function recheckLayout(room: Room): void {
+  // Only recheck every 200 ticks
+  if (Game.time % 200 !== 0) return;
+  
+  const layout = room.memory.layout;
+  if (!layout || !layout.bunker) return;
+  
+  // Verify all planned positions are still valid
+  let needsReplan = false;
+  
+  // Check if planned structures still exist at correct positions
+  for (const towerPos of layout.bunker.towers) {
+    const tower = room.lookForAt(LOOK_STRUCTURES, towerPos.x, towerPos.y)
+      .find(s => s.structureType === STRUCTURE_TOWER);
+    if (!tower) {
+      needsReplan = true;
+      break;
+    }
+  }
+  
+  // Check if structures moved or were destroyed
+  const existingSpawns = room.find(FIND_MY_STRUCTURES, {
+    filter: (s) => s.structureType === STRUCTURE_SPAWN
+  });
+  
+  if (existingSpawns.length > 0) {
+    const spawn = existingSpawns[0];
+    if (!spawn.pos.isEqualTo(layout.bunker.spawn)) {
+      needsReplan = true;
+    }
+  }
+  
+  // Re-plan if needed
+  if (needsReplan) {
+    const newLayout = planLayout(room);
+    const newSwapPlan = planSwap(room, newLayout);
+    room.memory.layout = { bunker: newLayout, swap: newSwapPlan, lastUpdated: Game.time };
+  }
+}
 }
 
 export const loop = (): void => {
@@ -112,6 +153,9 @@ export const loop = (): void => {
 
     // Create construction sites from swap plan
     createConstructionSites(room);
+
+    // Periodic layout rechecking
+    recheckLayout(room);
 
     spawnerTick(room, room.memory.goal);
     runCreeps(room, room.memory.goal);
