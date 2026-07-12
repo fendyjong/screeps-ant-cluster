@@ -1,5 +1,7 @@
 // src/types/index.ts
 
+import { BunkerLayout, SwapPlan } from '../colony/LayoutPlanner';
+
 export enum Goal {
   ECONOMY = 'economy',
   DEFEND = 'defend',
@@ -18,8 +20,15 @@ export interface CreepMemory {
   roomName: string;
 }
 
+export interface LayoutMemory {
+  bunker?: BunkerLayout;
+  swap?: SwapPlan;
+  lastUpdated?: number;
+}
+
 export interface RoomMemory {
   goal: Goal;
+  layout?: LayoutMemory;
 }
 
 export interface TerrainCache {
