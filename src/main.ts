@@ -64,6 +64,9 @@ function createConstructionSites(room: Room): void {
   // Check energy availability
   const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
   
+  const sitesPerRun = 5;
+  let sitesCreated = 0;
+  
   for (const entry of layout.swap.build) {
     // Skip if construction site already exists at this position
     const existingSite = sites.find(s => 
@@ -82,7 +85,10 @@ function createConstructionSites(room: Room): void {
     
     // Create construction site
     const result = room.createConstructionSite(entry.pos, entry.structureType);
-    if (result === OK) break; // Only create one site per run
+    if (result === OK) {
+      sitesCreated++;
+      if (sitesCreated >= sitesPerRun) break;
+    }
   }
 }
 
@@ -124,7 +130,6 @@ function recheckLayout(room: Room): void {
     const newSwapPlan = planSwap(room, newLayout);
     room.memory.layout = { bunker: newLayout, swap: newSwapPlan, lastUpdated: Game.time };
   }
-}
 }
 
 export const loop = (): void => {

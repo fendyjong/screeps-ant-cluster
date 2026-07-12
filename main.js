@@ -366,56 +366,43 @@ function harvestEnergy(creep) {
 function run$1(creep, goal) {
     const layout = creep.room.memory.layout;
     const swapPlan = layout?.swap;
-    let stateChanged = false;
     if (swapPlan && swapPlan.destroy.length > 0) {
-        if (swapPlan.state !== 'destroying') {
-            swapPlan.state = 'destroying';
-            stateChanged = true;
+        swapPlan.state = 'destroying';
+        let demolishCount = 0;
+        const toRemove = [];
+        for (let i = 0; i < swapPlan.destroy.length && demolishCount < MAX_DEMOLISH_PER_TICK; i++) {
+            const structureId = swapPlan.destroy[i];
+            const structure = Game.getObjectById(structureId);
+            if (!structure) {
+                toRemove.push(i);
+                continue;
+            }
+            const success = dismantleStructure(creep, structureId);
+            if (success) {
+                toRemove.push(i);
+                demolishCount++;
+            }
         }
-        if (!stateChanged) {
-            let demolishCount = 0;
-            const toRemove = [];
-            for (let i = 0; i < swapPlan.destroy.length && demolishCount < MAX_DEMOLISH_PER_TICK; i++) {
-                const structureId = swapPlan.destroy[i];
-                const structure = Game.getObjectById(structureId);
-                if (!structure) {
-                    toRemove.push(i);
-                    continue;
-                }
-                const success = dismantleStructure(creep, structureId);
-                if (success) {
-                    toRemove.push(i);
-                    demolishCount++;
-                }
-            }
-            for (let i = toRemove.length - 1; i >= 0; i--) {
-                swapPlan.destroy.splice(toRemove[i], 1);
-            }
+        for (let i = toRemove.length - 1; i >= 0; i--) {
+            swapPlan.destroy.splice(toRemove[i], 1);
         }
         return;
     }
     if (swapPlan && swapPlan.build.length > 0) {
-        if (swapPlan.state !== 'building') {
-            swapPlan.state = 'building';
-            stateChanged = true;
+        swapPlan.state = 'building';
+        if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+            const built = buildFromSwapPlan(creep);
+            if (!built) {
+                buildStructures(creep);
+            }
         }
-        if (!stateChanged) {
-            if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
-                const built = buildFromSwapPlan(creep);
-                if (!built) {
-                    buildStructures(creep);
-                }
-            }
-            else {
-                harvestEnergy(creep);
-            }
+        else {
+            harvestEnergy(creep);
         }
         return;
     }
     if (swapPlan) {
-        if (swapPlan.state !== 'idle') {
-            swapPlan.state = 'idle';
-        }
+        swapPlan.state = 'idle';
     }
     if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
         switch (goal) {
@@ -882,6 +869,8 @@ function createConstructionSites(room) {
         return;
     // Check energy availability
     const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
+    const sitesPerRun = 5;
+    let sitesCreated = 0;
     for (const entry of layout.swap.build) {
         // Skip if construction site already exists at this position
         const existingSite = sites.find(s => s.pos.isEqualTo(entry.pos) && s.structureType === entry.structureType);
@@ -898,8 +887,11 @@ function createConstructionSites(room) {
             continue;
         // Create construction site
         const result = room.createConstructionSite(entry.pos, entry.structureType);
-        if (result === OK)
-            break; // Only create one site per run
+        if (result === OK) {
+            sitesCreated++;
+            if (sitesCreated >= sitesPerRun)
+                break;
+        }
     }
 }
 function recheckLayout(room) {
