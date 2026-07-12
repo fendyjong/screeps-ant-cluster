@@ -20,13 +20,7 @@ function findEnergy(creep: Creep): Resource | null {
   });
 
   if (containers.length > 0) {
-    const container = creep.pos.findClosestByPath(containers);
-    if (container) {
-      // Withdraw from container
-      if (creep.withdraw(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-        moveTo(creep, container);
-      }
-    }
+    return creep.pos.findClosestByPath(containers);
   }
 
   return null;
@@ -65,8 +59,14 @@ function haulEnergy(creep: Creep): void {
   if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
     const energy = findEnergy(creep);
     if (energy) {
-      if (creep.pickup(energy) === ERR_NOT_IN_RANGE) {
-        moveTo(creep, energy);
+      if (energy instanceof Structure) {
+        if (creep.withdraw(energy, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+          moveTo(creep, energy);
+        }
+      } else {
+        if (creep.pickup(energy) === ERR_NOT_IN_RANGE) {
+          moveTo(creep, energy);
+        }
       }
     }
   } else {

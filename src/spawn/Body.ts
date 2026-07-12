@@ -1,7 +1,7 @@
 import { BodyPartConstant } from 'screeps';
 
 export function forRole(role: string, room: Room): BodyPartConstant[] {
-  const energy = room.energyAvailable;
+  const energy = room.energyCapacityAvailable;
 
   switch (role) {
     case 'harvester':

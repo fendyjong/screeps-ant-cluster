@@ -84,7 +84,9 @@ export function run(creep: Creep, goal: Goal): void {
       harvestAndTransfer(creep);
       break;
     case Goal.DEFEND:
-      repairNearby(creep);
+      if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+        repairNearby(creep);
+      }
       break;
     case Goal.RECOVER:
       harvestAndTransfer(creep);

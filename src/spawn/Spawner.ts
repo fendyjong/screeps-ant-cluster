@@ -50,7 +50,7 @@ export function tick(room: Room, goal: Goal): void {
       const body = Body.forRole(role, room);
       const bodyCost = Body.cost(body);
       
-      if (room.energyAvailable >= bodyCost) {
+      if (room.energyCapacityAvailable >= bodyCost) {
         const name = `${role}_${room.name}_${Game.time}`;
         const result = spawn.spawnCreep(body, name, {
           memory: { role, roomName: room.name }
