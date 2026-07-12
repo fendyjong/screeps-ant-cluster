@@ -21,7 +21,7 @@ function tick$1(room) {
 }
 
 function forRole(role, room) {
-    const energy = room.energyAvailable;
+    const energy = room.energyCapacityAvailable;
     switch (role) {
         case 'harvester':
             if (energy >= 300)
@@ -104,7 +104,7 @@ function tick(room, goal) {
         if (current < target) {
             const body = forRole(role, room);
             const bodyCost = cost(body);
-            if (room.energyAvailable >= bodyCost) {
+            if (room.energyCapacityAvailable >= bodyCost) {
                 const name = `${role}_${room.name}_${Game.time}`;
                 const result = spawn.spawnCreep(body, name, {
                     memory: { role, roomName: room.name }
@@ -193,7 +193,9 @@ function run$3(creep, goal) {
             harvestAndTransfer(creep);
             break;
         case Goal.DEFEND:
-            repairNearby(creep);
+            if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
+                repairNearby(creep);
+            }
             break;
         case Goal.RECOVER:
             harvestAndTransfer(creep);
@@ -215,13 +217,7 @@ function findEnergy(creep) {
             s.store[RESOURCE_ENERGY] > 0)
     });
     if (containers.length > 0) {
-        const container = creep.pos.findClosestByPath(containers);
-        if (container) {
-            // Withdraw from container
-            if (creep.withdraw(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-                moveTo(creep, container);
-            }
-        }
+        return creep.pos.findClosestByPath(containers);
     }
     return null;
 }
@@ -249,8 +245,15 @@ function haulEnergy(creep) {
     if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
         const energy = findEnergy(creep);
         if (energy) {
-            if (creep.pickup(energy) === ERR_NOT_IN_RANGE) {
-                moveTo(creep, energy);
+            if (energy instanceof Structure) {
+                if (creep.withdraw(energy, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                    moveTo(creep, energy);
+                }
+            }
+            else {
+                if (creep.pickup(energy) === ERR_NOT_IN_RANGE) {
+                    moveTo(creep, energy);
+                }
             }
         }
     }

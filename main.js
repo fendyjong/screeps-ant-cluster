@@ -602,28 +602,8 @@ function findRampartPositions(roomName, layout) {
     }
     return ramparts.slice(0, 10); // Limit to 10 ramparts
 }
-function findWallPositions(roomName, layout) {
-    const matrix = getTerrainMatrix(roomName);
-    const walls = [];
-    // Find positions to block enemy paths
-    for (let y = 1; y < 49; y++) {
-        for (let x = 1; x < 49; x++) {
-            if (!isWalkable(matrix, x, y))
-                continue;
-            // Check if this is a chokepoint
-            const neighbors = [
-                isWalkable(matrix, x - 1, y),
-                isWalkable(matrix, x + 1, y),
-                isWalkable(matrix, x, y - 1),
-                isWalkable(matrix, x, y + 1),
-            ];
-            const walkableCount = neighbors.filter(Boolean).length;
-            if (walkableCount <= 2) {
-                walls.push(new RoomPosition(x, y, roomName));
-            }
-        }
-    }
-    return walls.slice(0, 20); // Limit to 20 walls
+function findWallPositions(roomName, _layout) {
+    return findChokepoints(roomName).slice(0, 20);
 }
 function planLayout(room) {
     const spawnPos = findSpawnPosition(room.name);
@@ -719,16 +699,13 @@ const loop = () => {
             continue;
         ensureRoomMemory(room);
         tick$1(room);
-        // Terrain and layout planning
+        // Terrain and layout planning — cache every 100 ticks
         getTerrainMatrix(room.name);
-        const layout = planLayout(room);
-        const swapPlan = planSwap(room, layout);
-        if (!room.memory.layout) {
-            room.memory.layout = {};
+        if (Game.time % 100 === 0 || !room.memory.layout || !room.memory.layout.lastUpdated) {
+            const layout = planLayout(room);
+            const swapPlan = planSwap(room, layout);
+            room.memory.layout = { bunker: layout, swap: swapPlan, lastUpdated: Game.time };
         }
-        room.memory.layout.bunker = layout;
-        room.memory.layout.swap = swapPlan;
-        room.memory.layout.lastUpdated = Game.time;
         tick(room, room.memory.goal);
         runCreeps(room, room.memory.goal);
     }
