@@ -2,12 +2,14 @@
 
 import { Goal } from '../types';
 import { moveTo } from '../lib/Pathing';
+import { BUILD_PRIORITIES } from '../colony/Architect';
+
+const MAX_DEMOLISH_PER_TICK = 3;
 
 function findConstructionSite(creep: Creep): ConstructionSite | null {
   const sites = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
   if (sites.length === 0) return null;
   
-  // Prioritize by progress ratio
   return creep.pos.findClosestByPath(sites);
 }
 
@@ -39,7 +41,105 @@ function repairStructures(creep: Creep): void {
   }
 }
 
+function dismantleStructure(creep: Creep, structureId: string): boolean {
+  const structure = Game.getObjectById(structureId) as Structure | null;
+  if (!structure) return false;
+  
+  const result = creep.dismantle(structure);
+  if (result === ERR_NOT_IN_RANGE) {
+    moveTo(creep, structure);
+  }
+  return result === OK;
+}
+
+function buildFromSwapPlan(creep: Creep): boolean {
+  const layout = creep.room.memory.layout;
+  if (!layout || !layout.swap || layout.swap.build.length === 0) return false;
+  
+  // Find first construction site that matches build list
+  const sites = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
+  for (const entry of layout.swap.build) {
+    const site = sites.find(s => 
+      s.pos.isEqualTo(entry.pos) && s.structureType === entry.structureType
+    );
+    if (site) {
+      if (creep.build(site) === ERR_NOT_IN_RANGE) {
+        moveTo(creep, site);
+      }
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 export function run(creep: Creep, goal: Goal): void {
+  // Get swap plan
+  const layout = creep.room.memory.layout;
+  const swapPlan = layout?.swap;
+  
+  // Phase 1: Demolish misplaced structures
+  if (swapPlan && swapPlan.destroy.length > 0) {
+    swapPlan.state = 'destroying';
+    
+    // Limit demolitions per tick
+    let demolishCount = 0;
+    const toRemove: number[] = [];
+    
+    for (let i = 0; i < swapPlan.destroy.length && demolishCount < MAX_DEMOLISH_PER_TICK; i++) {
+      const structureId = swapPlan.destroy[i];
+      const structure = Game.getObjectById(structureId) as Structure | null;
+      
+      if (!structure) {
+        // Structure already destroyed, remove from list
+        toRemove.push(i);
+        continue;
+      }
+      
+      const success = dismantleStructure(creep, structureId);
+      if (success) {
+        toRemove.push(i);
+        demolishCount++;
+      }
+    }
+    
+    // Remove demolished structures from list (reverse order to maintain indices)
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      swapPlan.destroy.splice(toRemove[i], 1);
+    }
+    
+    return;
+  }
+  
+  // Phase 2: Build new structures
+  if (swapPlan && swapPlan.build.length > 0) {
+    swapPlan.state = 'building';
+    
+    if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+      const built = buildFromSwapPlan(creep);
+      if (!built) {
+        // No matching construction site, fall back to regular building
+        buildStructures(creep);
+      }
+    } else {
+      // Find energy
+      const sources = creep.room.find(FIND_SOURCES);
+      if (sources.length > 0) {
+        const source = sources[0];
+        if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
+          moveTo(creep, source);
+        }
+      }
+    }
+    
+    return;
+  }
+  
+  // Phase 3: Idle - fall back to regular behavior
+  if (swapPlan) {
+    swapPlan.state = 'idle';
+  }
+  
   if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
     switch (goal) {
       case Goal.ECONOMY:
