@@ -69,3 +69,13 @@ export function getBudget(room: Room): { spawnBudget: number; buildBudget: numbe
 	const buildBudget = Math.max(0, storageEnergy - spawnRate * BUILD_RATE_WINDOW);
 	return { spawnBudget, buildBudget, reserve };
 }
+
+export function getCpuBudgets(): { soft: number; hard: number } {
+	const limit = Game.cpu.limit;
+	const bucket = Game.cpu.bucket;
+	const safeCapacity = limit * 0.85;
+	return {
+		soft: Math.min(safeCapacity, Math.max(limit * 0.3, bucket * 0.05)),
+		hard: Math.min(safeCapacity, Math.max(limit * 0.5, bucket * 0.1)),
+	};
+}
