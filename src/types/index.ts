@@ -12,6 +12,9 @@ export interface CreepMemory {
 	role: string
 	roomName: string
 	task?: TaskMemory
+	_stuckTicks?: number
+	_lastPos?: { x: number; y: number; roomName: string }
+	_path?: string
 }
 
 export interface LayoutMemory {
@@ -27,10 +30,14 @@ export interface RoomMemory {
 export interface TerrainCache {
 	matrix: number[];
 	tick: number;
+	version: number;
 }
 
 export interface PathingMemory {
 	terrain: Record<string, TerrainCache>;
+	structureCache: Record<string, { matrix: number[]; structSig: number }>;
+	traffic: Record<string, Record<string, number>>;
+	pendingRoads: { roomName: string; x: number; y: number }[];
 }
 
 export interface SpawnRequestData {
@@ -73,7 +80,13 @@ declare global {
 			hatchery: HatcheryMemory
 			cashflow?: Record<string, CashflowMemory>
 			events?: GameEvents
+			pathing?: PathingMemory
+			hud?: {
+				cpuTick: Record<string, number>
+				lastThreat: Record<string, number>
+			}
+			_prevTotalEnergy?: Record<string, number>
+			_prevProgress?: Record<string, number>
 		}
-		pathing?: PathingMemory
 	}
 }

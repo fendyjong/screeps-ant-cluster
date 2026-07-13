@@ -23,9 +23,9 @@ export function ensureCreepMemory(creep: Creep): void {
 }
 
 export function ensureMemoryNs(): void {
-  if (!Memory[CURRENT_NS]) {
-    Memory[CURRENT_NS] = {};
-  }
+	if (!Memory.v1) {
+		Memory.v1 = {} as Memory['v1'];
+	}
 }
 
 export function cleanLegacyMemory(): void {

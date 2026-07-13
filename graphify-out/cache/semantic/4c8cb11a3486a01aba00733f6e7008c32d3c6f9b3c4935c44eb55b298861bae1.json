@@ -1,0 +1,1 @@
+{"nodes": [{"id": "hud_design_spec", "label": "HUD Design Spec", "file_type": "document", "source_file": "docs/superpowers/specs/2026-07-13-hud-design.md"}], "edges": [{"source": "hud_design_spec", "target": "hud", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "docs/superpowers/specs/2026-07-13-hud-design.md"}], "hyperedges": []}

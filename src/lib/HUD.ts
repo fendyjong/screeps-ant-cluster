@@ -48,7 +48,7 @@ function drawTopLeft(vis: RoomVisual, room: Room): void {
   const myCreeps = Object.values(Game.creeps).filter((c: Creep) => c.memory.roomName === room.name);
   const idle = myCreeps.filter((c: Creep) => (c.memory._stuckTicks || 0) > 5).length;
 
-  const cpuAtStart = (Memory.v1 as any).hud?.cpuTick?.[room.name] || 0;
+  const cpuAtStart = Memory.v1.hud?.cpuTick?.[room.name] || 0;
   const cpuUsed = ((Game.cpu.getUsed() - cpuAtStart) / 25).toFixed(1);
 
   drawPanel(vis, 0.5, 0.5, [
@@ -101,7 +101,7 @@ function drawBottomLeft(vis: RoomVisual, room: Room): void {
     : 0;
 
   const hostiles = room.find(FIND_HOSTILE_CREEPS).length;
-  const lastThreat = (Memory.v1 as any).hud?.lastThreat?.[room.name] || 0;
+  const lastThreat = Memory.v1.hud?.lastThreat?.[room.name] || 0;
   const threatAgo = lastThreat > 0 ? (Game.time - lastThreat).toLocaleString() + ' ticks ago' : 'never';
 
   drawPanel(vis, 0.5, 35, [
@@ -116,7 +116,7 @@ function drawBottomRight(vis: RoomVisual, room: Room): void {
   const swap = room.memory.layout?.swap;
   const swapState = swap?.state || 'none';
   const sites = room.find(FIND_MY_CONSTRUCTION_SITES).length;
-  const pendingRoads = ((Memory.v1 as any).pathing?.pendingRoads || [])
+  const pendingRoads = (Memory.v1.pathing?.pendingRoads || [])
     .filter((r: any) => r.roomName === room.name).length;
   const nextReplan = 100 - (Game.time % 100);
 
@@ -173,9 +173,9 @@ export function run(room: Room): void {
     drawCreepLabels(vis, creep);
   }
 
-  if (!(Memory.v1 as any).hud) (Memory.v1 as any).hud = {};
-  if (!(Memory.v1 as any).hud.cpuTick) (Memory.v1 as any).hud.cpuTick = {};
-  (Memory.v1 as any).hud.cpuTick[room.name] = Game.cpu.getUsed();
+  if (!Memory.v1.hud) Memory.v1.hud = {};
+  if (!Memory.v1.hud.cpuTick) Memory.v1.hud.cpuTick = {};
+  Memory.v1.hud.cpuTick[room.name] = Game.cpu.getUsed();
 
   drawTopLeft(vis, room);
   drawTopRight(vis, room);
@@ -183,7 +183,7 @@ export function run(room: Room): void {
   drawBottomRight(vis, room);
 
   if (room.find(FIND_HOSTILE_CREEPS).length > 0) {
-    if (!(Memory.v1 as any).hud.lastThreat) (Memory.v1 as any).hud.lastThreat = {};
-    (Memory.v1 as any).hud.lastThreat[room.name] = Game.time;
+    if (!Memory.v1.hud.lastThreat) Memory.v1.hud.lastThreat = {};
+    Memory.v1.hud.lastThreat[room.name] = Game.time;
   }
 }

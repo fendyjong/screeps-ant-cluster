@@ -1,7 +1,5 @@
 import { getBudget } from '../lib/Cashflow';
 
-const ENERGY_BUDGET = 'construction';
-
 export function shouldRecheck(room: Room, offset = 0): boolean {
 	const rcl = room.controller?.level || 1;
 	const interval = Math.max(5, Math.floor(100 / (rcl + 1)));
@@ -30,8 +28,8 @@ export function demolishMisplaced(room: Room, plan: { destroy: string[]; build: 
 				filter: s => s.structureType === STRUCTURE_SPAWN && s.id !== id
 			});
 			if (otherSpawns.length === 0) {
-				const budget = getBudget(room, ENERGY_BUDGET);
-				if (budget < 15000) continue;
+				const { buildBudget } = getBudget(room);
+			if (buildBudget < 15000) continue;
 				let workerCapacity = 0;
 				for (const name in Game.creeps) {
 					const c = Game.creeps[name];

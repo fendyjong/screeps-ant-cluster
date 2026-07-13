@@ -1,7 +1,5 @@
 'use strict';
 
-var screeps = require('screeps');
-
 const PART_COST = {
     [WORK]: 100,
     [CARRY]: 50,
@@ -257,10 +255,6 @@ const ROLE_PRIORITIES = {
     builder: Priority.NORMAL,
     upgrader: Priority.NORMAL,
     defender: Priority.HIGH,
-    scout: Priority.LOW,
-    claimer: Priority.LOW,
-    attacker: Priority.IDLE,
-    healer: Priority.IDLE,
 };
 const DEFAULT_BODIES = {
     harvester: {
@@ -282,22 +276,6 @@ const DEFAULT_BODIES = {
     defender: {
         min: [TOUGH, ATTACK, ATTACK, MOVE],
         ideal: [TOUGH, TOUGH, ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE],
-    },
-    scout: {
-        min: [MOVE],
-        ideal: [MOVE, MOVE],
-    },
-    claimer: {
-        min: [CLAIM, MOVE],
-        ideal: [CLAIM, MOVE],
-    },
-    attacker: {
-        min: [ATTACK, MOVE],
-        ideal: [ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE],
-    },
-    healer: {
-        min: [HEAL, MOVE],
-        ideal: [HEAL, HEAL, MOVE, MOVE],
     },
 };
 function getPhaseConfig(room) {
@@ -398,49 +376,57 @@ function scanCreeps(room) {
     }
     return { live, soonDead, deathWatch };
 }
-function maybeRequestRoomExpansion(room) {
-    const rcl = room.controller?.level || 1;
-    if (rcl >= 4 && room.energyCapacityAvailable >= 5000 && room.storage) {
-        const stored = room.storage.store[RESOURCE_ENERGY] || 0;
-        if (stored > 500000) {
-            const exits = Game.map.describeExits(room.name);
-            for (const exitKey in exits) {
-                const exitRoom = exits[exitKey];
-                if (!Game.rooms[exitRoom] || !Game.rooms[exitRoom].controller?.my) {
-                    const claimReq = {
-                        role: 'claimer',
-                        priority: Priority.LOW,
-                        body: DEFAULT_BODIES.claimer,
-                        count: 1,
-                        memory: { targetRoom: exitRoom, claim: true },
-                        createdAt: Game.time,
-                        roomName: room.name,
-                    };
-                    request(claimReq);
-                    const remoteHarvester = {
-                        role: 'harvester',
-                        priority: Priority.LOW,
-                        body: DEFAULT_BODIES.harvester,
-                        count: 2,
-                        memory: { remoteRoom: exitRoom },
-                        createdAt: Game.time,
-                        roomName: room.name,
-                    };
-                    request(remoteHarvester);
-                    const remoteHauler = {
-                        role: 'hauler',
-                        priority: Priority.LOW,
-                        body: DEFAULT_BODIES.hauler,
-                        count: 1,
-                        memory: { remoteRoom: exitRoom },
-                        createdAt: Game.time,
-                        roomName: room.name,
-                    };
-                    request(remoteHauler);
-                    continue;
-                }
-            }
-        }
+function processEvents(room) {
+    const events = Memory.v1.events;
+    if (!events)
+        return;
+    if (events.hostile?.[room.name]) {
+        const bodyDef = DEFAULT_BODIES.defender;
+        const spawnReq = {
+            role: 'defender',
+            priority: Priority.CRITICAL,
+            body: bodyDef,
+            count: 1,
+            memory: {},
+            createdAt: Game.time,
+            roomName: room.name,
+        };
+        request(spawnReq);
+        delete events.hostile[room.name];
+    }
+    if (events.expansion?.[room.name]) {
+        const ev = events.expansion[room.name];
+        const claimReq = {
+            role: 'claimer',
+            priority: Priority.LOW,
+            body: { min: [CLAIM, MOVE], ideal: [CLAIM, MOVE] },
+            count: 1,
+            memory: { targetRoom: ev.targetRoom, claim: true },
+            createdAt: Game.time,
+            roomName: room.name,
+        };
+        request(claimReq);
+        const remoteHarvester = {
+            role: 'harvester',
+            priority: Priority.LOW,
+            body: DEFAULT_BODIES.harvester,
+            count: 2,
+            memory: { remoteRoom: ev.targetRoom },
+            createdAt: Game.time,
+            roomName: room.name,
+        };
+        request(remoteHarvester);
+        const remoteHauler = {
+            role: 'hauler',
+            priority: Priority.LOW,
+            body: DEFAULT_BODIES.hauler,
+            count: 1,
+            memory: { remoteRoom: ev.targetRoom },
+            createdAt: Game.time,
+            roomName: room.name,
+        };
+        request(remoteHauler);
+        delete events.expansion[room.name];
     }
 }
 function tick(room) {
@@ -450,11 +436,13 @@ function tick(room) {
         Memory.v1.hatchery = { queue: {}, deathWatch: {} };
     if (!Memory.v1.hatchery.deathWatch[room.name])
         Memory.v1.hatchery.deathWatch[room.name] = {};
+    if (!Memory.v1.events)
+        Memory.v1.events = {};
     const { live, soonDead, deathWatch } = scanCreeps(room);
     Memory.v1.hatchery.deathWatch[room.name] = deathWatch;
     const locked = isEconomyLocked(room);
     const targets = computeTargets(room, getHealth(room));
-    const roleOrder = ['harvester', 'hauler', 'builder', 'upgrader', 'defender', 'scout', 'claimer', 'attacker', 'healer'];
+    const roleOrder = ['harvester', 'hauler', 'builder', 'upgrader', 'defender'];
     for (const role of roleOrder) {
         const target = targets[role] || 0;
         if (locked && role !== 'harvester' && role !== 'hauler')
@@ -484,7 +472,7 @@ function tick(room) {
         };
         request(spawnReq);
     }
-    maybeRequestRoomExpansion(room);
+    processEvents(room);
 }
 
 // src/lib/Memory.ts
@@ -507,8 +495,8 @@ function ensureCreepMemory(creep) {
     }
 }
 function ensureMemoryNs() {
-    if (!Memory[CURRENT_NS]) {
-        Memory[CURRENT_NS] = {};
+    if (!Memory.v1) {
+        Memory.v1 = {};
     }
 }
 function cleanLegacyMemory() {
@@ -684,8 +672,11 @@ function findPath(origin, destination, opts = {}) {
     });
 }
 
+function hasPos(object) {
+    return typeof object === 'object' && object !== null && 'pos' in object;
+}
 function normalizePos(destination) {
-    if (screeps.hasPos(destination)) {
+    if (hasPos(destination)) {
         return destination.pos;
     }
     return destination;
@@ -1416,6 +1407,106 @@ function run$1(creep) {
     }
 }
 
+function shouldRecheck(room, offset = 0) {
+    const rcl = room.controller?.level || 1;
+    const interval = Math.max(5, Math.floor(100 / (rcl + 1)));
+    const hash = Math.abs(room.name.split('').reduce((a, c) => a + c.charCodeAt(0), 0));
+    return Game.time % interval === (hash + offset) % interval;
+}
+function demolishMisplaced(room, plan) {
+    const rcl = room.controller?.level || 1;
+    const toRemove = [];
+    const maxPerTick = 5;
+    let count = 0;
+    for (let i = 0; i < plan.destroy.length && count < maxPerTick; i++) {
+        const id = plan.destroy[i];
+        const structure = Game.getObjectById(id);
+        if (!structure) {
+            toRemove.push(i);
+            continue;
+        }
+        const type = structure.structureType;
+        if (type === STRUCTURE_SPAWN) {
+            const otherSpawns = room.find(FIND_MY_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_SPAWN && s.id !== id
+            });
+            if (otherSpawns.length === 0) {
+                const { buildBudget } = getBudget(room);
+                if (buildBudget < 15000)
+                    continue;
+                let workerCapacity = 0;
+                for (const name in Game.creeps) {
+                    const c = Game.creeps[name];
+                    if (c.memory.role === 'builder' && c.memory.roomName === room.name) {
+                        workerCapacity += c.getActiveBodyparts(WORK) * (c.ticksToLive || 0);
+                    }
+                }
+                if (workerCapacity < 15000)
+                    continue;
+            }
+        }
+        if (type === STRUCTURE_STORAGE) {
+            if (rcl < 4)
+                continue;
+            const hasReplacement = plan.build.some(e => e.structureType === STRUCTURE_STORAGE);
+            if (!hasReplacement)
+                continue;
+        }
+        if (type === STRUCTURE_TERMINAL) {
+            if (rcl < 4)
+                continue;
+            const storage = room.storage;
+            if (!storage)
+                continue;
+            const nonEnergy = Object.keys(storage.store).filter(r => r !== RESOURCE_ENERGY);
+            if (nonEnergy.some(r => (storage.store[r] || 0) > 1000))
+                continue;
+        }
+        if (type === STRUCTURE_RAMPART) {
+            continue;
+        }
+        const result = structure.destroy();
+        if (result === OK) {
+            count++;
+            toRemove.push(i);
+        }
+    }
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+        plan.destroy.splice(toRemove[i], 1);
+    }
+    if (count > 0)
+        plan.state = 'destroying';
+}
+function buildMissing(room, plan) {
+    const rcl = room.controller?.level || 1;
+    const maxPerTick = Math.min(25, 5 + rcl * 2);
+    const existingSites = room.find(FIND_MY_CONSTRUCTION_SITES);
+    const toRemove = [];
+    let count = 0;
+    for (let i = 0; i < plan.build.length && count < maxPerTick; i++) {
+        const entry = plan.build[i];
+        if (existingSites.some(s => s.pos.isEqualTo(entry.pos) && s.structureType === entry.structureType))
+            continue;
+        if (room.lookForAt(LOOK_STRUCTURES, entry.pos.x, entry.pos.y).some(s => s.structureType === entry.structureType)) {
+            toRemove.push(i);
+            continue;
+        }
+        const result = room.createConstructionSite(entry.pos, entry.structureType);
+        if (result === OK) {
+            count++;
+            toRemove.push(i);
+        }
+        else if (result === ERR_INVALID_TARGET) {
+            toRemove.push(i);
+        }
+    }
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+        plan.build.splice(toRemove[i], 1);
+    }
+    if (count > 0)
+        plan.state = 'building';
+}
+
 function findWalkablePositions(roomName) {
     const matrix = getTerrainMatrix(roomName);
     const positions = [];
@@ -1502,6 +1593,252 @@ function findOptimalTowerPositions(roomName, count) {
     return positions;
 }
 
+const BUNKER_RADIUS$1 = 6;
+function findBestAnchor(room) {
+    const roomName = room.name;
+    const matrix = getTerrainMatrix(roomName);
+    const dist = new Array(50).fill(0).map(() => new Array(50).fill(0));
+    const queue = [];
+    for (let y = 0; y < 50; y++) {
+        for (let x = 0; x < 50; x++) {
+            if (!isWalkable(matrix, x, y) || x === 0 || y === 0 || x === 49 || y === 49) {
+                dist[y][x] = 0;
+                queue.push({ x, y });
+            }
+            else {
+                dist[y][x] = Infinity;
+            }
+        }
+    }
+    let head = 0;
+    while (head < queue.length) {
+        const cur = queue[head++];
+        const d = dist[cur.y][cur.x] + 1;
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0)
+                    continue;
+                const nx = cur.x + dx;
+                const ny = cur.y + dy;
+                if (nx < 0 || nx > 49 || ny < 0 || ny > 49)
+                    continue;
+                if (d < dist[ny][nx]) {
+                    dist[ny][nx] = d;
+                    queue.push({ x: nx, y: ny });
+                }
+            }
+        }
+    }
+    const candidates = [];
+    const margin = BUNKER_RADIUS$1 + 1;
+    for (let y = margin; y < 50 - margin; y++) {
+        for (let x = margin; x < 50 - margin; x++) {
+            if (dist[y][x] >= BUNKER_RADIUS$1 + 1) {
+                candidates.push(new RoomPosition(x, y, roomName));
+            }
+        }
+    }
+    if (candidates.length === 0) {
+        let best = 0;
+        let bestPos = new RoomPosition(25, 25, roomName);
+        for (let y = 0; y < 50; y++) {
+            for (let x = 0; x < 50; x++) {
+                if (dist[y][x] > best) {
+                    best = dist[y][x];
+                    bestPos = new RoomPosition(x, y, roomName);
+                }
+            }
+        }
+        return bestPos;
+    }
+    const sample = candidates.length > 20
+        ? candidates.sort(() => Math.random() - 0.5).slice(0, 20)
+        : candidates;
+    const goals = [];
+    if (room.controller)
+        goals.push(room.controller.pos);
+    for (const source of room.find(FIND_SOURCES)) {
+        goals.push(source.pos);
+    }
+    let bestScore = Infinity;
+    let bestAnchor = sample[0];
+    for (const anchor of sample) {
+        let score = 0;
+        for (const goal of goals) {
+            const ret = findPath(anchor, goal, { maxRooms: 1, maxOps: 5000, terrainCosts: { plainCost: 1, swampCost: 1 } });
+            if (!ret.incomplete) {
+                score += ret.path.length;
+            }
+            else {
+                score += 1000;
+            }
+        }
+        if (score < bestScore) {
+            bestScore = score;
+            bestAnchor = anchor;
+        }
+    }
+    return bestAnchor;
+}
+
+const BUNKER_RADIUS = 6;
+class Dinic {
+    constructor(n) {
+        this.graph = new Array(n).fill(0).map(() => []);
+        this.level = new Array(n).fill(0);
+        this.it = new Array(n).fill(0);
+    }
+    addEdge(from, to, cap) {
+        this.graph[from].push({ to, rev: this.graph[to].length, cap });
+        this.graph[to].push({ to: from, rev: this.graph[from].length - 1, cap: 0 });
+    }
+    bfs(s, t) {
+        this.level.fill(-1);
+        const q = [s];
+        this.level[s] = 0;
+        while (q.length > 0) {
+            const v = q.shift();
+            for (const e of this.graph[v]) {
+                if (e.cap > 0 && this.level[e.to] < 0) {
+                    this.level[e.to] = this.level[v] + 1;
+                    q.push(e.to);
+                }
+            }
+        }
+        return this.level[t] >= 0;
+    }
+    dfs(v, t, f) {
+        if (v === t)
+            return f;
+        for (let i = this.it[v]; i < this.graph[v].length; i++) {
+            const e = this.graph[v][i];
+            if (e.cap > 0 && this.level[v] < this.level[e.to]) {
+                const d = this.dfs(e.to, t, Math.min(f, e.cap));
+                if (d > 0) {
+                    e.cap -= d;
+                    this.graph[e.to][e.rev].cap += d;
+                    return d;
+                }
+            }
+            this.it[v]++;
+        }
+        return 0;
+    }
+    maxFlow(s, t) {
+        let flow = 0;
+        const INF = 1e9;
+        while (this.bfs(s, t)) {
+            this.it.fill(0);
+            while (true) {
+                const f = this.dfs(s, t, INF);
+                if (f === 0)
+                    break;
+                flow += f;
+            }
+        }
+        return flow;
+    }
+    reachableFromSource(s) {
+        const visited = new Array(this.graph.length).fill(false);
+        const q = [s];
+        visited[s] = true;
+        while (q.length > 0) {
+            const v = q.shift();
+            for (const e of this.graph[v]) {
+                if (e.cap > 0 && !visited[e.to]) {
+                    visited[e.to] = true;
+                    q.push(e.to);
+                }
+            }
+        }
+        return visited;
+    }
+}
+function computeBarriers(room, anchor) {
+    const roomName = room.name;
+    const matrix = getTerrainMatrix(roomName);
+    const margin = 3;
+    const x1 = Math.max(anchor.x - BUNKER_RADIUS - margin, 0);
+    const x2 = Math.min(anchor.x + BUNKER_RADIUS + margin, 49);
+    const y1 = Math.max(anchor.y - BUNKER_RADIUS - margin, 0);
+    const y2 = Math.min(anchor.y + BUNKER_RADIUS + margin, 49);
+    const zoneWidth = x2 - x1 + 1;
+    const zoneHeight = y2 - y1 + 1;
+    const totalNodes = zoneWidth * zoneHeight + 2;
+    const SRC = totalNodes - 2;
+    const SNK = totalNodes - 1;
+    function zoneNodeId(x, y) {
+        return (y - y1) * zoneWidth + (x - x1);
+    }
+    const dinic = new Dinic(totalNodes);
+    const interiorRadius = BUNKER_RADIUS - 1;
+    for (let y = y1; y <= y2; y++) {
+        for (let x = x1; x <= x2; x++) {
+            const id = zoneNodeId(x, y);
+            const walkable = isWalkable(matrix, x, y);
+            const dist = Math.sqrt((x - anchor.x) ** 2 + (y - anchor.y) ** 2);
+            const isInterior = dist <= interiorRadius;
+            if (isInterior) {
+                dinic.addEdge(SRC, id, 1e9);
+            }
+            if (x < x2) {
+                const rightId = zoneNodeId(x + 1, y);
+                if (walkable && isWalkable(matrix, x + 1, y)) {
+                    dinic.addEdge(id, rightId, 1);
+                    dinic.addEdge(rightId, id, 1);
+                }
+            }
+            if (y < y2) {
+                const downId = zoneNodeId(x, y + 1);
+                if (walkable && isWalkable(matrix, x, y + 1)) {
+                    dinic.addEdge(id, downId, 1);
+                    dinic.addEdge(downId, id, 1);
+                }
+            }
+            const isEdge = x === 0 || y === 0 || x === 49 || y === 49;
+            if (isEdge || !walkable) {
+                dinic.addEdge(id, SNK, 1e9);
+            }
+        }
+    }
+    dinic.maxFlow(SRC, SNK);
+    const reachable = dinic.reachableFromSource(SRC);
+    const barriers = [];
+    for (let y = y1; y <= y2; y++) {
+        for (let x = x1; x <= x2; x++) {
+            const id = zoneNodeId(x, y);
+            if (!reachable[id])
+                continue;
+            const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+            for (const [dx, dy] of dirs) {
+                const nx = x + dx;
+                const ny = y + dy;
+                if (nx < x1 || nx > x2 || ny < y1 || ny > y2) {
+                    barriers.push(new RoomPosition(x, y, roomName));
+                    break;
+                }
+                const nid = zoneNodeId(nx, ny);
+                if (!reachable[nid]) {
+                    barriers.push(new RoomPosition(x, y, roomName));
+                    break;
+                }
+            }
+        }
+    }
+    const structures = room.find(FIND_MY_STRUCTURES, {
+        filter: s => s.structureType === STRUCTURE_SPAWN
+            || s.structureType === STRUCTURE_STORAGE
+            || s.structureType === STRUCTURE_TERMINAL
+            || s.structureType === STRUCTURE_TOWER
+    });
+    for (const s of structures) {
+        if (!barriers.some(b => b.isEqualTo(s.pos))) {
+            barriers.push(s.pos);
+        }
+    }
+    return barriers;
+}
+
 const REBUILD_COSTS = {
     [STRUCTURE_SPAWN]: 15000,
     [STRUCTURE_STORAGE]: 100000,
@@ -1581,23 +1918,6 @@ function sortByPriority(buildList) {
         const bIdx = BUILD_PRIORITIES.indexOf(b.structureType);
         return aIdx - bIdx;
     });
-}
-function findSpawnPosition(roomName) {
-    const matrix = getTerrainMatrix(roomName);
-    // Find central walkable position
-    for (let radius = 0; radius < 20; radius++) {
-        for (let dy = -radius; dy <= radius; dy++) {
-            for (let dx = -radius; dx <= radius; dx++) {
-                const x = 25 + dx;
-                const y = 25 + dy;
-                if (isWalkable(matrix, x, y)) {
-                    return new RoomPosition(x, y, roomName);
-                }
-            }
-        }
-    }
-    // Fallback to center
-    return new RoomPosition(25, 25, roomName);
 }
 function getAdjacentWalkable(matrix, pos) {
     const dirs = [
@@ -1727,38 +2047,6 @@ function placeTowers(room, matrix, extensions) {
     const towerCount = Math.min(6, CONTROLLER_STRUCTURES[STRUCTURE_TOWER][controllerLevel] || 0);
     return findOptimalTowerPositions(room.name, towerCount);
 }
-function computeRampartPositions(core, labs, extensions) {
-    const ramparts = [];
-    const corePositions = [
-        core.spawn, core.storage, core.terminal, core.factory,
-        core.powerSpawn, core.nuker, core.observer, core.linkSpawn
-    ];
-    for (const pos of corePositions) {
-        if (pos && isWalkablePos(pos))
-            ramparts.push(pos);
-    }
-    for (const pos of labs)
-        ramparts.push(pos);
-    for (const pos of core.towers) {
-        if (pos && isWalkablePos(pos))
-            ramparts.push(pos);
-    }
-    return ramparts;
-}
-function computeWallPositions(room, matrix, allStructureKeys) {
-    const walls = [];
-    const roomName = room.name;
-    for (const key of allStructureKeys) {
-        const [x, y] = key.split(',').map(Number);
-        for (const adj of getAdjacentWalkable(matrix, new RoomPosition(x, y, roomName))) {
-            const k = adj.x + ',' + adj.y;
-            if (!allStructureKeys.has(k)) {
-                walls.push(adj);
-            }
-        }
-    }
-    return walls.slice(0, 50);
-}
 function computeRoadPositions(room, matrix, core, extensions) {
     const roomName = room.name;
     const roads = new Map();
@@ -1796,7 +2084,7 @@ function computeRoadPositions(room, matrix, core, extensions) {
 }
 function planLayout(room) {
     const matrix = getTerrainMatrix(room.name);
-    const anchor = findSpawnPosition(room.name);
+    const anchor = findBestAnchor(room);
     // Phase 1: Core zone
     const core = carveCoreZone(room, anchor, matrix);
     // Collect core tile keys
@@ -1818,18 +2106,9 @@ function planLayout(room) {
     core.extensions = extensions;
     // Phase 4: Towers
     core.towers = placeTowers(room, matrix, extensions);
-    // Phase 5: Ramparts + walls
-    const allKeys = new Set();
-    for (const k of coreKeys)
-        allKeys.add(k);
-    for (const k of labKeys)
-        allKeys.add(k);
-    for (const ext of extensions)
-        allKeys.add(ext.x + ',' + ext.y);
-    for (const t of core.towers)
-        allKeys.add(t.x + ',' + t.y);
-    core.ramparts = computeRampartPositions(core, labs, extensions);
-    core.walls = computeWallPositions(room, matrix, allKeys);
+    // Phase 5: Barriers — min-cut rampart placement
+    core.ramparts = computeBarriers(room, core.anchor);
+    core.walls = [];
     // Phase 6: Roads
     core.roads = computeRoadPositions(room, matrix, core, extensions);
     // Controller link
@@ -2097,7 +2376,7 @@ function drawTopLeft(vis, room) {
     const sources = room.find(FIND_SOURCES);
     const harvesters = Object.values(Game.creeps).filter((c) => c.memory.roomName === room.name && c.memory.role === 'harvester');
     const sourceAssignments = sources.map((s) => {
-        const count = harvesters.filter((h) => h.memory.targetSourceId === s.id).length;
+        const count = harvesters.filter((h) => h.memory.task?.targetId === s.id).length;
         const fill = s.energy / s.energyCapacity;
         return 'S' + (sources.indexOf(s) + 1) + '(' + count + ')';
     }).join(' ');
@@ -2177,21 +2456,23 @@ function drawBottomRight(vis, room) {
 function drawCreepLabels(vis, creep) {
     let label = '';
     let color = '#ffffff';
+    const task = creep.memory.task;
+    const taskLabel = task ? task.type.slice(0, 4).toUpperCase() : 'IDLE';
     switch (creep.memory.role) {
         case 'harvester':
-            label = '[H' + (creep.memory.targetSourceId ? ' ->' + creep.memory.targetSourceId.slice(0, 4) : '') + ']';
+            label = '[H:' + taskLabel + ']';
             color = '#4caf50';
             break;
         case 'hauler':
-            label = '[HAUL]';
+            label = '[HAUL:' + taskLabel + ']';
             color = '#00bcd4';
             break;
         case 'builder':
-            label = '[BUILD]';
+            label = '[BLD:' + taskLabel + ']';
             color = '#ffeb3b';
             break;
         case 'upgrader':
-            label = '[UP]';
+            label = '[UP:' + taskLabel + ']';
             color = '#9c27b0';
             break;
     }
@@ -2229,76 +2510,89 @@ function run(room) {
 }
 
 // src/main.ts
+const ALWAYS_RUN_ROLES = new Set(['harvester', 'hauler']);
+const PRODUCTION_ROLES = new Set(['builder', 'upgrader']);
+function runCreep(creep, budgetHard) {
+    const role = creep.memory.role;
+    if (ALWAYS_RUN_ROLES.has(role)) {
+        // Tier 1: always run
+    }
+    else if (PRODUCTION_ROLES.has(role)) {
+        if (Game.cpu.getUsed() >= budgetHard)
+            return;
+    }
+    else {
+        if (Game.cpu.getUsed() >= budgetHard)
+            return;
+    }
+    switch (role) {
+        case 'harvester':
+            run$4(creep);
+            break;
+        case 'hauler':
+            run$3(creep);
+            break;
+        case 'builder':
+            run$2(creep);
+            break;
+        case 'upgrader':
+            run$1(creep);
+            break;
+    }
+}
 function runCreeps(room) {
+    const { hard: budgetHard } = getCpuBudgets();
     for (const name in Game.creeps) {
         const creep = Game.creeps[name];
         if (creep.memory.roomName !== room.name)
             continue;
         ensureCreepMemory(creep);
-        switch (creep.memory.role) {
-            case 'harvester':
-                run$4(creep);
-                break;
-            case 'hauler':
-                run$3(creep);
-                break;
-            case 'builder':
-                run$2(creep);
-                break;
-            case 'upgrader':
-                run$1(creep);
-                break;
-        }
+        runCreep(creep, budgetHard);
     }
 }
-const STRUCTURE_COSTS = {
-    [STRUCTURE_SPAWN]: 15000,
-    [STRUCTURE_STORAGE]: 100000,
-    [STRUCTURE_TOWER]: 5000,
-    [STRUCTURE_LINK]: 5000,
-    [STRUCTURE_TERMINAL]: 100000,
-    [STRUCTURE_LAB]: 50000,
-    [STRUCTURE_FACTORY]: 100000,
-    [STRUCTURE_OBSERVER]: 8000,
-    [STRUCTURE_NUKER]: 100000,
-    [STRUCTURE_POWER_SPAWN]: 200000,
-    [STRUCTURE_EXTRACTOR]: 5000,
-    [STRUCTURE_ROAD]: 300,
-    [STRUCTURE_WALL]: 10000,
-    [STRUCTURE_RAMPART]: 10000,
-    [STRUCTURE_CONTAINER]: 5000,
-    [STRUCTURE_EXTENSION]: 3000,
-};
-function createConstructionSites(room) {
-    const { buildBudget } = getBudget(room);
-    if (buildBudget <= 0)
+function hostileWatcher(room) {
+    const hostiles = room.find(FIND_HOSTILE_CREEPS);
+    if (hostiles.length === 0)
         return;
-    const layout = room.memory.layout;
-    if (!layout || !layout.swap || layout.swap.build.length === 0)
+    const events = Memory.v1.events;
+    if (!events)
         return;
-    // Only create sites every 100 ticks
-    if (Game.time % 100 !== 0)
+    if (events.hostile?.[room.name])
         return;
-    // Check energy availability
-    const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
-    const sitesPerRun = 5;
-    let sitesCreated = 0;
-    for (const entry of layout.swap.build) {
-        // Skip if construction site already exists at this position
-        const existingSite = sites.find(s => s.pos.isEqualTo(entry.pos) && s.structureType === entry.structureType);
-        if (existingSite)
-            continue;
-        // Skip if structure already exists at this position
-        const existingStructure = room.lookForAt(LOOK_STRUCTURES, entry.pos.x, entry.pos.y)
-            .find(s => s.structureType === entry.structureType);
-        if (existingStructure)
-            continue;
-        // Create construction site
-        const result = room.createConstructionSite(entry.pos, entry.structureType);
-        if (result === OK) {
-            sitesCreated++;
-            if (sitesCreated >= sitesPerRun)
-                break;
+    if (!events.hostile)
+        events.hostile = {};
+    events.hostile[room.name] = {
+        tick: Game.time,
+        room: room.name,
+        threat: hostiles.length > 3 ? 'swarm' : 'scout',
+    };
+}
+function expansionWatcher(room) {
+    const rcl = room.controller?.level || 1;
+    if (rcl < 4)
+        return;
+    const storage = room.storage;
+    if (!storage)
+        return;
+    if ((storage.store[RESOURCE_ENERGY] || 0) < 500000)
+        return;
+    const events = Memory.v1.events;
+    if (!events)
+        return;
+    if (events.expansion?.[room.name])
+        return;
+    const exits = Game.map.describeExits(room.name);
+    for (const exitKey in exits) {
+        const exitRoom = exits[exitKey];
+        if (!Game.rooms[exitRoom] || !Game.rooms[exitRoom].controller?.my) {
+            if (!events.expansion)
+                events.expansion = {};
+            events.expansion[room.name] = {
+                sourceRoom: room.name,
+                targetRoom: exitRoom,
+                tick: Game.time,
+            };
+            return;
         }
     }
 }
@@ -2322,15 +2616,12 @@ function drainPendingRoads(room) {
     }
 }
 function recheckLayout(room) {
-    // Only recheck every 200 ticks
     if (Game.time % 200 !== 0)
         return;
     const layout = room.memory.layout;
     if (!layout || !layout.bunker)
         return;
-    // Verify all planned positions are still valid
     let needsReplan = false;
-    // Check if planned structures still exist at correct positions
     for (const towerPos of layout.bunker.towers) {
         const tower = room.lookForAt(LOOK_STRUCTURES, towerPos.x, towerPos.y)
             .find(s => s.structureType === STRUCTURE_TOWER);
@@ -2339,7 +2630,6 @@ function recheckLayout(room) {
             break;
         }
     }
-    // Check if structures moved or were destroyed
     const existingSpawns = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_SPAWN
     });
@@ -2349,7 +2639,6 @@ function recheckLayout(room) {
             needsReplan = true;
         }
     }
-    // Re-plan if needed
     if (needsReplan) {
         const newLayout = planLayout(room);
         const newSwapPlan = planSwap(room, newLayout);
@@ -2357,32 +2646,25 @@ function recheckLayout(room) {
     }
 }
 const loop = () => {
-    // Migration: carry v1 → v2 (or whatever next version) when CURRENT_NS changes
     if (Memory.v1 && !Memory[CURRENT_NS]) {
         Memory[CURRENT_NS] = Memory.v1;
         delete Memory.v1;
     }
-    // Ensure current version namespace exists
     ensureMemoryNs();
-    // Clean up dead creep memory
     for (const name in Memory.creeps) {
         if (!Game.creeps[name]) {
             delete Memory.creeps[name];
         }
     }
-    // Prune legacy top-level Memory keys every 100 ticks
     if (Game.time % 100 === 0) {
         cleanLegacyMemory();
     }
-    // Process each owned room
     for (const roomName in Game.rooms) {
         const room = Game.rooms[roomName];
         if (!room.controller || !room.controller.my)
             continue;
         ensureRoomMemory(room);
-        // Queen evaluates colony needs and submits spawn requests
         tick(room);
-        // Track energy for cashflow
         const prevTotal = Memory.v1._prevTotalEnergy?.[roomName] ?? -1;
         const currentTotal = room.energyAvailable + (room.storage ? room.storage.store[RESOURCE_ENERGY] : 0);
         if (prevTotal >= 0) {
@@ -2391,7 +2673,6 @@ const loop = () => {
         if (!Memory.v1._prevTotalEnergy)
             Memory.v1._prevTotalEnergy = {};
         Memory.v1._prevTotalEnergy[roomName] = currentTotal;
-        // Terrain and layout planning — cache every 100 ticks
         getTerrainMatrix(room.name);
         if (Game.time % 100 === 0 || !room.memory.layout || !room.memory.layout.lastUpdated) {
             const health = getHealth(room);
@@ -2402,16 +2683,21 @@ const loop = () => {
             }
         }
         // Create construction sites from swap plan
-        createConstructionSites(room);
+        if (room.memory.layout && room.memory.layout.swap) {
+            if (shouldRecheck(room)) {
+                demolishMisplaced(room, room.memory.layout.swap);
+            }
+            else if (shouldRecheck(room, 1)) {
+                buildMissing(room, room.memory.layout.swap);
+            }
+        }
         // Drain pending roads from traffic heatmap (up to 5 per tick)
         drainPendingRoads(room);
-        // Periodic layout rechecking
         recheckLayout(room);
-        // Hatchery processes queue and spawns highest priority request
+        hostileWatcher(room);
+        expansionWatcher(room);
         process(room);
-        // Run existing creeps
         runCreeps(room);
-        // Track construction progress for build rate
         const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
         let progressDelta = 0;
         for (const site of sites) {

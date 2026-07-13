@@ -172,13 +172,13 @@ export const loop = (): void => {
 
     queenTick(room);
 
-    const prevTotal = (Memory.v1 as any)._prevTotalEnergy?.[roomName] ?? -1;
+    const prevTotal = Memory.v1._prevTotalEnergy?.[roomName] ?? -1;
     const currentTotal = room.energyAvailable + (room.storage ? room.storage.store[RESOURCE_ENERGY] : 0);
     if (prevTotal >= 0) {
       trackIncome(roomName, currentTotal, prevTotal);
     }
-    if (!(Memory.v1 as any)._prevTotalEnergy) (Memory.v1 as any)._prevTotalEnergy = {};
-    (Memory.v1 as any)._prevTotalEnergy[roomName] = currentTotal;
+    if (!Memory.v1._prevTotalEnergy) Memory.v1._prevTotalEnergy = {};
+    Memory.v1._prevTotalEnergy[roomName] = currentTotal;
 
     getTerrainMatrix(room.name);
     if (Game.time % 100 === 0 || !room.memory.layout || !room.memory.layout.lastUpdated) {
@@ -213,10 +213,10 @@ export const loop = (): void => {
     const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
     let progressDelta = 0;
     for (const site of sites) {
-      const prev = (Memory.v1 as any)._prevProgress?.[site.id] || site.progress;
+      const prev = Memory.v1._prevProgress?.[site.id] || site.progress;
       progressDelta += Math.max(0, site.progress - prev);
-      if (!(Memory.v1 as any)._prevProgress) (Memory.v1 as any)._prevProgress = {};
-      (Memory.v1 as any)._prevProgress[site.id] = site.progress;
+      if (!Memory.v1._prevProgress) Memory.v1._prevProgress = {};
+      Memory.v1._prevProgress[site.id] = site.progress;
     }
     if (progressDelta > 0) {
       trackBuild(roomName, progressDelta);

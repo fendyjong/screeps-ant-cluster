@@ -8,7 +8,7 @@ import { getBudget, trackSpawn } from '../lib/Cashflow';
 const QUEUE_TTL = 100;
 
 function ensureHatcheryMemory(roomName: string): void {
-	if (!Memory.v1) (Memory as any).v1 = {};
+	if (!Memory.v1) Memory.v1 = {} as Memory['v1'];
 	if (!Memory.v1.hatchery) Memory.v1.hatchery = { queue: {}, deathWatch: {} } as HatcheryMemory;
 	if (!Memory.v1.hatchery.queue[roomName]) Memory.v1.hatchery.queue[roomName] = [];
 }

@@ -1,0 +1,170 @@
+{
+  "/home/jin/.config/Screeps/scripts/rollup.config.mjs": {
+    "mtime": 1783933488.7922802,
+    "hash": "7273c0e893ca7e23b1d5e58483b20c3d"
+  },
+  "/home/jin/.config/Screeps/scripts/127_0_0_1___21025/default/main.js": {
+    "mtime": 1783933990.1827023,
+    "hash": "e1539d7c3aff29499d254abae78b4f55"
+  },
+  "/home/jin/.config/Screeps/scripts/screeps.com/default/main.js": {
+    "mtime": 1783933990.1827023,
+    "hash": "e1539d7c3aff29499d254abae78b4f55"
+  },
+  "/home/jin/.config/Screeps/scripts/screeps.com/tutorial-1/main.js": {
+    "mtime": 1783841847.007843,
+    "hash": "866cec531359f7c2c0165b9b76a22db0"
+  },
+  "/home/jin/.config/Screeps/scripts/src/main.ts": {
+    "mtime": 1783933984.2397683,
+    "hash": "6ae3e884cfd1b2a32f7b43026db031d9"
+  },
+  "/home/jin/.config/Screeps/scripts/src/types/index.ts": {
+    "mtime": 1783932517.1595073,
+    "hash": "75497880244e8c2021286ac1fccb307e"
+  },
+  "/home/jin/.config/Screeps/scripts/src/hatchery/Body.ts": {
+    "mtime": 1783932517.1595073,
+    "hash": "ebe69163316b114cddfcc78aca9f70cd"
+  },
+  "/home/jin/.config/Screeps/scripts/src/hatchery/Queen.ts": {
+    "mtime": 1783932517.1595073,
+    "hash": "704948e71d7852c0d3a94abda732f8c9"
+  },
+  "/home/jin/.config/Screeps/scripts/src/hatchery/Request.ts": {
+    "mtime": 1783932517.1595073,
+    "hash": "d749d7ffeeb40f61f4f8c8e6551a3891"
+  },
+  "/home/jin/.config/Screeps/scripts/src/hatchery/Hatchery.ts": {
+    "mtime": 1783932517.1595073,
+    "hash": "13975eddeb7f6fd426cd317cb1982728"
+  },
+  "/home/jin/.config/Screeps/scripts/src/roles/Builder.ts": {
+    "mtime": 1783899257.009006,
+    "hash": "8e0a2afe7f0845de3fdfd8cf77a7dd51"
+  },
+  "/home/jin/.config/Screeps/scripts/src/roles/Upgrader.ts": {
+    "mtime": 1783877052.837762,
+    "hash": "fee5644fa221077e6e16d567761e966b"
+  },
+  "/home/jin/.config/Screeps/scripts/src/roles/Harvester.ts": {
+    "mtime": 1783927624.07593,
+    "hash": "1d83e265ee47bf3b55ced32cd6673192"
+  },
+  "/home/jin/.config/Screeps/scripts/src/roles/Hauler.ts": {
+    "mtime": 1783877283.6496117,
+    "hash": "2fddfe4a2bd71ac99975a3833d7e153c"
+  },
+  "/home/jin/.config/Screeps/scripts/src/colony/Architect.ts": {
+    "mtime": 1783922827.626384,
+    "hash": "04fd2a768787f631859b52b80914581e"
+  },
+  "/home/jin/.config/Screeps/scripts/src/lib/Memory.ts": {
+    "mtime": 1783917400.9648826,
+    "hash": "64a175160a5dfe88921ba88804df7433"
+  },
+  "/home/jin/.config/Screeps/scripts/src/lib/HUD.ts": {
+    "mtime": 1783934096.3515258,
+    "hash": "b16d295a760928233cdffc89a6995040"
+  },
+  "/home/jin/.config/Screeps/scripts/src/lib/TerrainMatrix.ts": {
+    "mtime": 1783927624.07593,
+    "hash": "ebfca61fb0730862525df28dfb86b490"
+  },
+  "/home/jin/.config/Screeps/scripts/src/lib/Pathing.ts": {
+    "mtime": 1783927624.07593,
+    "hash": "6cff71f2a4e1465d852cf9d89a0b0a39"
+  },
+  "/home/jin/.config/Screeps/scripts/README.md": {
+    "mtime": 1783932517.1595073,
+    "hash": "a0b408fa384617f5ece3ed31626f01e3"
+  },
+  "/home/jin/.config/Screeps/scripts/DEBUGGUIDE.md": {
+    "mtime": 1783867320.548647,
+    "hash": "ebf83deb911db8dbcc3abda3bd09a2b0"
+  },
+  "/home/jin/.config/Screeps/scripts/AGENTS.md": {
+    "mtime": 1783932517.1595073,
+    "hash": "849e84bfcf99afe47e21b4657de3443c"
+  },
+  "/home/jin/.config/Screeps/scripts/PERFORMANCE_FIX_SUMMARY.md": {
+    "mtime": 1783867381.7860942,
+    "hash": "5557d36b39341e0d450781cc55d60794"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-13-legacy-memory-cleanup-design.md": {
+    "mtime": 1783916048.1531243,
+    "hash": "54742dc12afc60bc1d09a174ac3afb99"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-12-dynamic-spawn-balancing-design.md": {
+    "mtime": 1783870483.0312097,
+    "hash": "2850cbdc3e7458742714eba084e25d2d"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-13-pathing-fix-design.md": {
+    "mtime": 1783924813.8208144,
+    "hash": "a028335184434544de956e43f46bc128"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-13-layout-execution-design.md": {
+    "mtime": 1783879909.9803066,
+    "hash": "135ff252eabb7909d3e3578369a302ff"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-13-hud-design.md": {
+    "mtime": 1783929004.0042195,
+    "hash": "2fda3ccfb2c5f3b5d0e89a96151e8cb7"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-13-algorithmic-bunker-design.md": {
+    "mtime": 1783919925.665476,
+    "hash": "a07fe13681a75861feffcca0146dfa3e"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-13-hatchery-design.md": {
+    "mtime": 1783927279.9456484,
+    "hash": "df2bb103edff8a5262aabbed6a4de996"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-12-screeps-rebuild-mvp-design.md": {
+    "mtime": 1783875832.836899,
+    "hash": "a3477008b0a0f595aaf5b822b48d1575"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-13-terrain-layout-design.md": {
+    "mtime": 1783878764.5619102,
+    "hash": "58262864216968af7c1811738b6a2f07"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/specs/2026-07-12-ts-migration-design.md": {
+    "mtime": 1783873827.9429803,
+    "hash": "deb509343433214d20132bdeae521828"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/plans/2026-07-13-hud-plan.md": {
+    "mtime": 1783929291.981207,
+    "hash": "b012f10ca2758ac3d02438fc79241d72"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/plans/2026-07-12-hybrid-dynamic-spawn-balancing.md": {
+    "mtime": 1783871015.3266487,
+    "hash": "cb6c5bde24c5cc6cc8a90789792f3a39"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/plans/2026-07-13-terrain-layout-plan.md": {
+    "mtime": 1783878870.615263,
+    "hash": "ad79cd8d485bd70b6be220aa859055e2"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/plans/2026-07-13-hatchery-plan.md": {
+    "mtime": 1783928169.8867695,
+    "hash": "e6086ed450367afedf873fc85a225d86"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/plans/2026-07-12-screeps-rebuild-mvp-plan.md": {
+    "mtime": 1783876417.8667355,
+    "hash": "8cb7a316f66d2082bc4e2116debd38fa"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/plans/2026-07-13-pathing-fix-plan.md": {
+    "mtime": 1783927624.0749302,
+    "hash": "71d21a30720c84244ce90b0187e0bbe6"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/plans/2026-07-13-algorithmic-bunker-plan.md": {
+    "mtime": 1783921043.4124033,
+    "hash": "33c15c7e00510b6ec951ae1f788677c2"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/plans/2026-07-13-layout-execution-plan.md": {
+    "mtime": 1783880082.9841523,
+    "hash": "f8c41623d90b6af4fe53223f6ef086f5"
+  },
+  "/home/jin/.config/Screeps/scripts/docs/superpowers/plans/2026-07-13-legacy-memory-cleanup-plan.md": {
+    "mtime": 1783916507.3378391,
+    "hash": "cee51721e71911a1bc766ae3b7078e43"
+  }
+}

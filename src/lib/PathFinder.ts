@@ -20,7 +20,7 @@ export function isWalkable(matrix: CostMatrix, x: number, y: number): boolean {
 
 export function getTerrainMatrix(roomName: string): CostMatrix {
 	const ns = Memory[CURRENT_NS];
-	if (!ns) { (Memory as any)[CURRENT_NS] = {}; }
+	if (!ns) { Memory[CURRENT_NS] = {} as Memory['v1']; }
 	if (!ns.pathing) ns.pathing = {};
 	if (!ns.pathing.terrain) ns.pathing.terrain = {};
 

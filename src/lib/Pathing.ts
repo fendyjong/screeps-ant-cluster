@@ -97,7 +97,7 @@ function tryPush(creep: Creep, dir: DirectionConstant): boolean {
 function recordTraffic(creep: Creep): void {
 	const roomName = creep.room.name;
 	if (!Memory.v1) return;
-	const ns = Memory.v1 as any;
+	const ns = Memory.v1;
 	if (!ns.pathing) ns.pathing = {};
 	if (!ns.pathing.traffic) ns.pathing.traffic = {};
 	if (!ns.pathing.traffic[roomName]) ns.pathing.traffic[roomName] = {};
