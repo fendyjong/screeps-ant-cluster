@@ -61,7 +61,7 @@ interface PhaseConfig {
 	scaling: Record<string, { threshold: number; increment: number }>
 }
 
-function getPhase(room: Room): PhaseConfig {
+function getPhaseConfig(room: Room): PhaseConfig {
 	const rcl = room.controller?.level || 1;
 	const energyRatio = room.energyAvailable / Math.max(room.energyCapacityAvailable, 1);
 
@@ -127,7 +127,7 @@ function getPhase(room: Room): PhaseConfig {
 }
 
 function computeTargets(room: Room): Record<string, number> {
-	const phase = getPhase(room);
+	const phase = getPhaseConfig(room);
 	const targets: Record<string, number> = { ...phase.floor };
 
 	const stored = room.storage ? room.storage.store[RESOURCE_ENERGY] || 0 : 0;
@@ -154,33 +154,10 @@ function isEconomyLocked(room: Room): boolean {
 	return room.energyAvailable < 200 && harvesters.length === 0;
 }
 
-function updateDeathWatch(room: Room): void {
-	const dw: Record<string, DeathWatchEntry[]> = {};
-	for (const name in Game.creeps) {
-		const creep = Game.creeps[name];
-		if (creep.memory.roomName !== room.name) continue;
-		const ttl = creep.ticksToLive;
-		if (ttl !== undefined && ttl < 100) {
-			const role = creep.memory.role || 'unknown';
-			if (!dw[role]) dw[role] = [];
-			dw[role].push({ name, ttl });
-		}
-	}
-	Memory.v1.hatchery.deathWatch[room.name] = dw;
-}
-
-export function tick(room: Room): void {
-	if (!Memory.v1) (Memory as any).v1 = {};
-	if (!Memory.v1.hatchery) Memory.v1.hatchery = { queue: {}, deathWatch: {} } as any;
-	if (!Memory.v1.hatchery.deathWatch[room.name]) Memory.v1.hatchery.deathWatch[room.name] = {};
-
-	updateDeathWatch(room);
-
-	const locked = isEconomyLocked(room);
-	const targets = computeTargets(room);
-
+function scanCreeps(room: Room): { live: Record<string, number>; soonDead: Record<string, number>; deathWatch: Record<string, DeathWatchEntry[]> } {
 	const live: Record<string, number> = {};
 	const soonDead: Record<string, number> = {};
+	const deathWatch: Record<string, DeathWatchEntry[]> = {};
 	for (const name in Game.creeps) {
 		const creep = Game.creeps[name];
 		if (creep.memory.roomName !== room.name) continue;
@@ -189,47 +166,14 @@ export function tick(room: Room): void {
 		const ttl = creep.ticksToLive;
 		if (ttl !== undefined && ttl < 100) {
 			soonDead[role] = (soonDead[role] || 0) + 1;
+			if (!deathWatch[role]) deathWatch[role] = [];
+			deathWatch[role].push({ name, ttl });
 		}
 	}
+	return { live, soonDead, deathWatch };
+}
 
-	const roleOrder = ['harvester', 'hauler', 'builder', 'upgrader', 'defender', 'scout', 'claimer', 'attacker', 'healer'];
-
-	for (const role of roleOrder) {
-		const target = targets[role] || 0;
-
-		if (locked && role !== 'harvester' && role !== 'hauler') continue;
-
-		const alive = live[role] || 0;
-		const dying = soonDead[role] || 0;
-		const need = Math.max(0, target + dying - alive);
-
-		if (need <= 0) continue;
-
-		const basePrio = ROLE_PRIORITIES[role] || Priority.NORMAL;
-		let priority = basePrio;
-
-		const dw = Memory.v1.hatchery.deathWatch[room.name]?.[role] || [];
-		const minTtl = dw.length > 0 ? Math.min(...dw.map(e => e.ttl)) : 999;
-
-		if (minTtl < 20) priority = Math.min(priority, 50);
-		else if (minTtl < 100) priority = Math.min(priority, 150);
-
-		const bodyDef = DEFAULT_BODIES[role] || DEFAULT_BODIES.harvester;
-
-		const spawnReq: SpawnRequest = {
-			role,
-			priority,
-			body: bodyDef,
-			count: need,
-			memory: {},
-			createdAt: Game.time,
-			roomName: room.name,
-		};
-
-		request(spawnReq);
-	}
-
-	// Room expansion trigger
+function maybeRequestRoomExpansion(room: Room): void {
 	const rcl = room.controller?.level || 1;
 	if (rcl >= 4 && room.energyCapacityAvailable >= 5000 && room.storage) {
 		const stored = room.storage.store[RESOURCE_ENERGY] || 0;
@@ -271,9 +215,60 @@ export function tick(room: Room): void {
 					};
 					request(remoteHauler);
 
-					break;
+					continue;
 				}
 			}
 		}
 	}
+}
+
+export function tick(room: Room): void {
+	if (!Memory.v1) Memory.v1 = {} as Memory['v1'];
+	if (!Memory.v1.hatchery) Memory.v1.hatchery = { queue: {}, deathWatch: {} };
+	if (!Memory.v1.hatchery.deathWatch[room.name]) Memory.v1.hatchery.deathWatch[room.name] = {};
+
+	const { live, soonDead, deathWatch } = scanCreeps(room);
+	Memory.v1.hatchery.deathWatch[room.name] = deathWatch;
+
+	const locked = isEconomyLocked(room);
+	const targets = computeTargets(room);
+
+	const roleOrder = ['harvester', 'hauler', 'builder', 'upgrader', 'defender', 'scout', 'claimer', 'attacker', 'healer'];
+
+	for (const role of roleOrder) {
+		const target = targets[role] || 0;
+
+		if (locked && role !== 'harvester' && role !== 'hauler') continue;
+
+		const alive = live[role] || 0;
+		const dying = soonDead[role] || 0;
+		const need = Math.max(0, target + dying - alive);
+
+		if (need <= 0) continue;
+
+		const basePrio = ROLE_PRIORITIES[role] || Priority.NORMAL;
+		let priority = basePrio;
+
+		const dw = deathWatch[role] || [];
+		const minTtl = dw.length > 0 ? Math.min(...dw.map(e => e.ttl)) : 999;
+
+		if (minTtl < 20) priority = Math.min(priority, 50);
+		else if (minTtl < 100) priority = Math.min(priority, 150);
+
+		const bodyDef = DEFAULT_BODIES[role] || DEFAULT_BODIES.harvester;
+
+		const spawnReq: SpawnRequest = {
+			role,
+			priority,
+			body: bodyDef,
+			count: need,
+			memory: {},
+			createdAt: Game.time,
+			roomName: room.name,
+		};
+
+		request(spawnReq);
+	}
+
+	maybeRequestRoomExpansion(room);
 }
