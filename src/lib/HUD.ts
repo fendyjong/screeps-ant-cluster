@@ -1,3 +1,5 @@
+import { getHealth, computeEmergencyReserve } from './Cashflow';
+
 function drawPanel(vis: RoomVisual, x: number, y: number, rows: string[][], width: number): void {
   const rowH = 0.85;
   const h = rows.length * rowH + 0.3;
@@ -58,20 +60,23 @@ function drawTopLeft(vis: RoomVisual, room: Room): void {
 }
 
 function drawTopRight(vis: RoomVisual, room: Room): void {
-  const energy = room.energyAvailable.toLocaleString();
-  const energyCap = room.energyCapacityAvailable.toLocaleString();
-  const storage = room.storage ? room.storage.store[RESOURCE_ENERGY].toLocaleString() : '0';
+	const cf = Memory.v1.cashflow?.[room.name];
+	const income = cf?.incomeRate || 0;
+	const spawn = cf?.spawnRate || 0;
+	const build = cf?.buildRate || 0;
+	const net = income - spawn - build;
 
-  const hudMem = (Memory.v1 as any).hud || {};
-  const income = hudMem.income?.[room.name] || 0;
-  const spend = hudMem.spend?.[room.name] || 0;
+	const health = getHealth(room);
+	const reserve = computeEmergencyReserve(room);
 
-  drawPanel(vis, 35, 0.5, [
-    ['Energy', energy + ' / ' + energyCap],
-    ['Income', '+' + income.toFixed(1) + '/t'],
-    ['Spend', '-' + spend.toFixed(1) + '/t'],
-    ['Stockpile', storage],
-  ], 14);
+	drawPanel(vis, 35, 0.5, [
+		['Cashflow', ''],
+		['In: +' + income.toFixed(1) + '/t', ''],
+		['Spawn: -' + spawn.toFixed(1) + '/t', ''],
+		['Build: -' + build.toFixed(1) + '/t', ''],
+		['Net:', (net >= 0 ? '+' : '') + net.toFixed(1) + '/t'],
+		['Health: ' + health.toUpperCase(), 'Rsv: ' + reserve.toLocaleString()],
+	], 16);
 }
 
 function drawBottomLeft(vis: RoomVisual, room: Room): void {
@@ -164,8 +169,6 @@ export function run(room: Room): void {
     if (creep.memory.roomName !== room.name) continue;
     drawCreepLabels(vis, creep);
   }
-
-  if (Game.time % 25 !== 0) return;
 
   if (!(Memory.v1 as any).hud) (Memory.v1 as any).hud = {};
   if (!(Memory.v1 as any).hud.cpuTick) (Memory.v1 as any).hud.cpuTick = {};

@@ -1,5 +1,6 @@
 import { CostMatrix } from 'screeps';
 import { getTerrainMatrix, isWalkable, findOptimalTowerPositions } from '../lib/TerrainMatrix';
+import { getBudget } from '../lib/Cashflow';
 
 const REBUILD_COSTS: Record<StructureConstant, number> = {
   [STRUCTURE_SPAWN]: 15000,
@@ -29,7 +30,8 @@ function isSafeToDestroy(room: Room, structure: Structure): boolean {
       filter: (s) => s.structureType === STRUCTURE_SPAWN && s.id !== structure.id
     });
     if (otherSpawns.length > 0) return true;
-    return room.energyCapacityAvailable >= cost;
+    const { buildBudget } = getBudget(room);
+    return buildBudget >= cost;
   }
 
   // Don't destroy terminal/storage before RCL 4
@@ -323,13 +325,46 @@ function computeRoadPositions(
 	room: Room, matrix: CostMatrix,
 	core: BunkerLayout, extensions: RoomPosition[]
 ): RoomPosition[] {
-	const roads: RoomPosition[] = [];
+	const roomName = room.name;
+	const roads = new Map<string, RoomPosition>();
+	const claim = new Set<string>();
+
+	claim.add(core.spawn.x + ',' + core.spawn.y);
+	claim.add(core.storage.x + ',' + core.storage.y);
+	claim.add(core.terminal.x + ',' + core.terminal.y);
 
 	for (const ext of extensions) {
-		roads.push(ext);
+		claim.add(ext.x + ',' + ext.y);
 	}
 
-	return roads;
+	// BFS from core to controller
+	if (room.controller) {
+		const ctrl = room.controller.pos;
+		const queue: RoomPosition[] = [ctrl];
+		const visited = new Set<string>();
+		visited.add(ctrl.x + ',' + ctrl.y);
+
+		while (queue.length > 0) {
+			const cur = queue.shift()!;
+			const key = cur.x + ',' + cur.y;
+
+			if (claim.has(key)) break;
+
+			if (!roads.has(key) && isWalkable(matrix, cur.x, cur.y)) {
+				roads.set(key, cur);
+			}
+
+			for (const adj of getAdjacentWalkable(matrix, cur)) {
+				const k = adj.x + ',' + adj.y;
+				if (!visited.has(k)) {
+					visited.add(k);
+					queue.push(adj);
+				}
+			}
+		}
+	}
+
+	return Array.from(roads.values());
 }
 
 export function planLayout(room: Room): BunkerLayout {
@@ -531,31 +566,100 @@ export function planSwap(room: Room, layout: BunkerLayout): SwapPlan {
     }
   }
 
-  // Check extensions
-  const existingExtensions = room.find(FIND_MY_STRUCTURES, {
-    filter: (s) => s.structureType === STRUCTURE_EXTENSION
-  });
-  const extPosSet = new Set(layout.extensions.map(p => p.x + ',' + p.y + ',' + roomName));
-  for (const ext of existingExtensions) {
-    if (!extPosSet.has(ext.pos.x + ',' + ext.pos.y + ',' + roomName)) {
-      if (isSafeToDestroy(room, ext)) {
-        destroy.push(ext.id);
-      }
-    }
-  }
-  for (const extPos of layout.extensions) {
-    const exists = existingExtensions.some(e => e.pos.isEqualTo(extPos));
-    if (!exists) {
-      build.push({ pos: extPos, structureType: STRUCTURE_EXTENSION });
-    }
-  }
+	// Check extensions
+	const existingExtensions = room.find(FIND_MY_STRUCTURES, {
+		filter: (s) => s.structureType === STRUCTURE_EXTENSION
+	});
+	const extPosSet = new Set(layout.extensions.map(p => p.x + ',' + p.y + ',' + roomName));
+	for (const ext of existingExtensions) {
+		if (!extPosSet.has(ext.pos.x + ',' + ext.pos.y + ',' + roomName)) {
+			if (isSafeToDestroy(room, ext)) {
+				destroy.push(ext.id);
+			}
+		}
+	}
+	for (const extPos of layout.extensions) {
+		const exists = existingExtensions.some(e => e.pos.isEqualTo(extPos));
+		if (!exists) {
+			build.push({ pos: extPos, structureType: STRUCTURE_EXTENSION });
+		}
+	}
 
-  // Sort build list by priority
+	// Check roads
+	const existingRoads = room.find(FIND_MY_STRUCTURES, {
+		filter: (s) => s.structureType === STRUCTURE_ROAD
+	});
+	const roadPosSet = new Set(layout.roads.map(p => p.x + ',' + p.y + ',' + roomName));
+	for (const road of existingRoads) {
+		if (!roadPosSet.has(road.pos.x + ',' + road.pos.y + ',' + roomName)) {
+			if (isSafeToDestroy(room, road)) {
+				destroy.push(road.id);
+			}
+		}
+	}
+	for (const roadPos of layout.roads) {
+		const exists = existingRoads.some(r => r.pos.isEqualTo(roadPos));
+		if (!exists) {
+			build.push({ pos: roadPos, structureType: STRUCTURE_ROAD });
+		}
+	}
+
+	// Check ramparts
+	const existingRamparts = room.find(FIND_MY_STRUCTURES, {
+		filter: (s) => s.structureType === STRUCTURE_RAMPART
+	});
+	const rampartPosSet = new Set(layout.ramparts.map(p => p.x + ',' + p.y + ',' + roomName));
+	for (const r of existingRamparts) {
+		if (!rampartPosSet.has(r.pos.x + ',' + r.pos.y + ',' + roomName)) {
+			if (isSafeToDestroy(room, r)) {
+				destroy.push(r.id);
+			}
+		}
+	}
+	for (const rPos of layout.ramparts) {
+		const exists = existingRamparts.some(r => r.pos.isEqualTo(rPos));
+		if (!exists) {
+			build.push({ pos: rPos, structureType: STRUCTURE_RAMPART });
+		}
+	}
+
+	// Check walls
+	const existingWalls = room.find(FIND_MY_STRUCTURES, {
+		filter: (s) => s.structureType === STRUCTURE_WALL
+	});
+	const wallPosSet = new Set(layout.walls.map(p => p.x + ',' + p.y + ',' + roomName));
+	for (const w of existingWalls) {
+		if (!wallPosSet.has(w.pos.x + ',' + w.pos.y + ',' + roomName)) {
+			if (isSafeToDestroy(room, w)) {
+				destroy.push(w.id);
+			}
+		}
+	}
+	for (const wPos of layout.walls) {
+		const exists = existingWalls.some(w => w.pos.isEqualTo(wPos));
+		if (!exists) {
+			build.push({ pos: wPos, structureType: STRUCTURE_WALL });
+		}
+	}
+
+	// Sort build list by priority
   const sortedBuild = sortByPriority(build);
+  
+  // Filter to items affordable within buildBudget
+  const { buildBudget } = getBudget(room);
+  let totalCost = 0;
+  const affordable = sortedBuild.filter(entry => {
+    const cost = REBUILD_COSTS[entry.structureType] || 0;
+    if (totalCost + cost <= buildBudget) {
+      totalCost += cost;
+      return true;
+    }
+    return false;
+  });
   
   return {
     destroy,
-    build: sortedBuild,
+    build: affordable,
     state: 'idle',
   };
 }

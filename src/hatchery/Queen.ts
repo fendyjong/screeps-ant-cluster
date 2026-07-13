@@ -3,7 +3,8 @@
 import { BodyPartConstant } from 'screeps';
 import { Priority, SpawnRequest } from './Request';
 import { request } from './Hatchery';
-import { DeathWatchEntry } from '../types';
+import { DeathWatchEntry, CashflowHealth } from '../types';
+import { getHealth } from '../lib/Cashflow';
 
 const ROLE_PRIORITIES: Record<string, number> = {
 	harvester: Priority.HIGH,
@@ -126,7 +127,7 @@ function getPhaseConfig(room: Room): PhaseConfig {
 	};
 }
 
-function computeTargets(room: Room): Record<string, number> {
+function computeTargets(room: Room, health: CashflowHealth): Record<string, number> {
 	const phase = getPhaseConfig(room);
 	const targets: Record<string, number> = { ...phase.floor };
 
@@ -136,10 +137,11 @@ function computeTargets(room: Room): Record<string, number> {
 
 	for (const [role, cfg] of Object.entries(phase.scaling)) {
 		let extra = 0;
+		const threshold = health === 'red' ? cfg.threshold * 2 : cfg.threshold;
 		if (role === 'builder') {
-			extra = Math.floor(backlog / cfg.threshold) * cfg.increment;
+			extra = Math.floor(backlog / threshold) * cfg.increment;
 		} else {
-			extra = Math.floor(stored / cfg.threshold) * cfg.increment;
+			extra = Math.floor(stored / threshold) * cfg.increment;
 		}
 		targets[role] = (targets[role] || 0) + extra;
 	}
@@ -231,7 +233,7 @@ export function tick(room: Room): void {
 	Memory.v1.hatchery.deathWatch[room.name] = deathWatch;
 
 	const locked = isEconomyLocked(room);
-	const targets = computeTargets(room);
+	const targets = computeTargets(room, getHealth(room));
 
 	const roleOrder = ['harvester', 'hauler', 'builder', 'upgrader', 'defender', 'scout', 'claimer', 'attacker', 'healer'];
 
