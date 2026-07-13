@@ -15,7 +15,6 @@ const REBUILD_COSTS: Record<StructureConstant, number> = {
   [STRUCTURE_ROAD]: 300,
   [STRUCTURE_WALL]: 10000,
   [STRUCTURE_RAMPART]: 10000,
-  [STRUCTURE_CONTAINER]: 5000,
   [STRUCTURE_EXTENSION]: 3000,
 };
 
@@ -190,18 +189,30 @@ export function planLayout(room: Room): BunkerLayout {
   const spawnPos = findSpawnPosition(room.name);
   const storagePos = findStoragePosition(room.name, spawnPos);
   const towerPositions = findOptimalTowerPositions(room.name, 3);
-  
+
   const partialLayout: BunkerLayout = {
+    anchor: spawnPos,
     spawn: spawnPos,
-    towers: towerPositions,
     storage: storagePos,
+    terminal: storagePos,
+    factory: storagePos,
+    powerSpawn: storagePos,
+    nuker: storagePos,
+    observer: storagePos,
+    labs: [],
+    extensions: [],
+    towers: towerPositions,
+    linkSpawn: storagePos,
+    linkController: storagePos,
+    linkLab: storagePos,
     ramparts: [],
     walls: [],
+    roads: [],
   };
-  
+
   partialLayout.ramparts = findRampartPositions(room.name, partialLayout);
   partialLayout.walls = findWallPositions(room.name, partialLayout);
-  
+
   return partialLayout;
 }
 
@@ -245,7 +256,7 @@ export function planSwap(room: Room, layout: BunkerLayout): SwapPlan {
     }
   }
   
-for (const towerPos of layout.towers) {
+	for (const towerPos of layout.towers) {
     const exists = existingTowers.some(t => t.pos.isEqualTo(towerPos));
     if (!exists) {
       build.push({ pos: towerPos, structureType: STRUCTURE_TOWER });
@@ -307,13 +318,15 @@ for (const towerPos of layout.towers) {
     }
   }
 
+  const roomName = room.name;
+
   // Check labs
   const existingLabs = room.find(FIND_MY_STRUCTURES, {
     filter: (s) => s.structureType === STRUCTURE_LAB
   });
-  const labPosSet = new Set(layout.labs.map(p => p.x + ',' + p.y));
+  const labPosSet = new Set(layout.labs.map(p => p.x + ',' + p.y + ',' + roomName));
   for (const lab of existingLabs) {
-    if (!labPosSet.has(lab.pos.x + ',' + lab.pos.y)) {
+    if (!labPosSet.has(lab.pos.x + ',' + lab.pos.y + ',' + roomName)) {
       if (isSafeToDestroy(room, lab)) {
         destroy.push(lab.id);
       }
@@ -331,9 +344,9 @@ for (const towerPos of layout.towers) {
     filter: (s) => s.structureType === STRUCTURE_LINK
   });
   const linkPositions = [layout.linkSpawn, layout.linkController, layout.linkLab].filter(isWalkablePos);
-  const linkPosSet = new Set(linkPositions.map(p => p.x + ',' + p.y));
+  const linkPosSet = new Set(linkPositions.map(p => p.x + ',' + p.y + ',' + roomName));
   for (const link of existingLinks) {
-    if (!linkPosSet.has(link.pos.x + ',' + link.pos.y)) {
+    if (!linkPosSet.has(link.pos.x + ',' + link.pos.y + ',' + roomName)) {
       if (isSafeToDestroy(room, link)) {
         destroy.push(link.id);
       }
@@ -350,9 +363,9 @@ for (const towerPos of layout.towers) {
   const existingExtensions = room.find(FIND_MY_STRUCTURES, {
     filter: (s) => s.structureType === STRUCTURE_EXTENSION
   });
-  const extPosSet = new Set(layout.extensions.map(p => p.x + ',' + p.y));
+  const extPosSet = new Set(layout.extensions.map(p => p.x + ',' + p.y + ',' + roomName));
   for (const ext of existingExtensions) {
-    if (!extPosSet.has(ext.pos.x + ',' + ext.pos.y)) {
+    if (!extPosSet.has(ext.pos.x + ',' + ext.pos.y + ',' + roomName)) {
       if (isSafeToDestroy(room, ext)) {
         destroy.push(ext.id);
       }
