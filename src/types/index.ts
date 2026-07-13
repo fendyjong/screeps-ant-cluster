@@ -62,10 +62,19 @@ export interface HatcheryMemory {
 	deathWatch: Record<string, Record<string, DeathWatchEntry[]>>
 }
 
+export type CashflowHealth = 'green' | 'yellow' | 'red';
+
+export interface CashflowMemory {
+	incomeRate: number
+	spawnRate: number
+	buildRate: number
+}
+
 declare global {
 	interface Memory {
 		v1: {
 			hatchery: HatcheryMemory
+			cashflow?: Record<string, CashflowMemory>
 		}
 		pathing?: PathingMemory
 	}
