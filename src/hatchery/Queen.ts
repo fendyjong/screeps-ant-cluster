@@ -110,7 +110,7 @@ function getPhase(room: Room): PhaseConfig {
 		};
 	}
 
-	if (hasSites) {
+	if (hasSites && rcl >= 5) {
 		return {
 			floor: { harvester: 2, hauler: 1, builder: 1, upgrader: 1 },
 			scaling: {
@@ -130,9 +130,17 @@ function computeTargets(room: Room): Record<string, number> {
 	const phase = getPhase(room);
 	const targets: Record<string, number> = { ...phase.floor };
 
+	const stored = room.storage ? room.storage.store[RESOURCE_ENERGY] || 0 : 0;
+	const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
+	const backlog = sites.reduce((sum, s) => sum + (s.progressTotal - s.progress), 0);
+
 	for (const [role, cfg] of Object.entries(phase.scaling)) {
-		const stored = room.storage ? room.storage.store[RESOURCE_ENERGY] || 0 : 0;
-		const extra = Math.floor(stored / cfg.threshold) * cfg.increment;
+		let extra = 0;
+		if (role === 'builder') {
+			extra = Math.floor(backlog / cfg.threshold) * cfg.increment;
+		} else {
+			extra = Math.floor(stored / cfg.threshold) * cfg.increment;
+		}
 		targets[role] = (targets[role] || 0) + extra;
 	}
 
