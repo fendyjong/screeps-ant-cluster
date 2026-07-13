@@ -13,7 +13,7 @@ export interface SpawnRequest {
 	priority: number
 	body: { min: BodyPartConstant[]; ideal: BodyPartConstant[] }
 	count: number
-	memory: Record<string, any>
+	memory: Record<string, unknown>
 	createdAt: number
 	roomName: string
 }

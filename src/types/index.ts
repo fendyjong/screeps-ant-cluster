@@ -4,37 +4,37 @@ import { BunkerLayout, SwapPlan } from '../colony/Architect';
 import { SpawnRequest } from '../hatchery/Request';
 
 export enum Goal {
-  ECONOMY = 'economy',
-  DEFEND = 'defend',
-  RECOVER = 'recover',
+	ECONOMY = 'economy',
+	DEFEND = 'defend',
+	RECOVER = 'recover',
 }
 
 export interface RoleTargets {
-  harvester: number;
-  hauler: number;
-  builder: number;
-  upgrader: number;
+	harvester: number;
+	hauler: number;
+	builder: number;
+	upgrader: number;
 }
 
 export interface CreepMemory {
-  role: string;
-  roomName: string;
+	role: string;
+	roomName: string;
 }
 
 export interface LayoutMemory {
-  bunker?: BunkerLayout;
-  swap?: SwapPlan;
-  lastUpdated?: number;
+	bunker?: BunkerLayout;
+	swap?: SwapPlan;
+	lastUpdated?: number;
 }
 
 export interface RoomMemory {
-  goal: Goal;
-  layout?: LayoutMemory;
+	goal: Goal;
+	layout?: LayoutMemory;
 }
 
 export interface TerrainCache {
-  matrix: number[];
-  tick: number;
+	matrix: number[];
+	tick: number;
 }
 
 export interface PathingMemory {
@@ -47,14 +47,14 @@ export interface SpawnRequestData {
 	bodyMin: number[]
 	bodyIdeal: number[]
 	count: number
-	memory: Record<string, any>
+	memory: Record<string, unknown>
 	createdAt: number
 	roomName: string
 }
 
 export interface DeathWatchEntry {
 	name: string
-	ttl: number
+	ttl: number // ticks remaining
 }
 
 export interface HatcheryMemory {
