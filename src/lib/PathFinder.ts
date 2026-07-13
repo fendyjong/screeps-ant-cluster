@@ -1,4 +1,3 @@
-import { CostMatrix } from 'screeps';
 import { CURRENT_NS } from './Memory';
 
 export const TERRAIN_VERSION = 1;

@@ -1,4 +1,10 @@
-import { hasPos } from 'screeps';
+interface HasPos {
+	pos: RoomPosition;
+}
+
+function hasPos(object: any): object is HasPos {
+	return typeof object === 'object' && object !== null && 'pos' in object;
+}
 
 export function normalizePos(destination: HasPos | RoomPosition): RoomPosition {
 	if (hasPos(destination)) {

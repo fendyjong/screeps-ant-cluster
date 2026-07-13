@@ -1,5 +1,3 @@
-import { BodyPartConstant } from 'screeps';
-
 const PART_COST: Record<string, number> = {
 	[WORK]: 100,
 	[CARRY]: 50,

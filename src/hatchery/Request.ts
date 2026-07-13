@@ -1,5 +1,3 @@
-import { BodyPartConstant } from 'screeps';
-
 export enum Priority {
 	CRITICAL = 0,
 	HIGH = 100,

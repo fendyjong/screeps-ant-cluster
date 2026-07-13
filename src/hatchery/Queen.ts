@@ -1,6 +1,5 @@
 // src/hatchery/Queen.ts
 
-import { BodyPartConstant } from 'screeps';
 import { Priority, SpawnRequest } from './Request';
 import { request } from './Hatchery';
 import { DeathWatchEntry, CashflowHealth } from '../types';

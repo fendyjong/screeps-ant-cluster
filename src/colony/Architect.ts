@@ -1,4 +1,3 @@
-import { CostMatrix } from 'screeps';
 import { getTerrainMatrix, isWalkable } from '../lib/PathFinder';
 import { findOptimalTowerPositions } from '../lib/TerrainMatrix';
 import { getBudget } from '../lib/Cashflow';
