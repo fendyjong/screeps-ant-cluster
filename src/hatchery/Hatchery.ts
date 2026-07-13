@@ -1,8 +1,9 @@
 // src/hatchery/Hatchery.ts
 
 import { SpawnRequest, requestToMemory, requestFromMemory } from './Request';
-import { scaleBody, serializeBody } from './Body';
+import { scaleBody, bodyCost, serializeBody } from './Body';
 import { HatcheryMemory, SpawnRequestData } from '../types';
+import { getBudget, trackSpawn } from '../lib/Cashflow';
 
 const QUEUE_TTL = 100;
 
@@ -35,6 +36,7 @@ export function request(req: SpawnRequest): void {
 export function process(room: Room): void {
 	ensureHatcheryMemory(room.name);
 	const queue = Memory.v1.hatchery.queue[room.name];
+	const { spawnBudget } = getBudget(room);
 
 	// Filter out invalid entries
 	const valid: SpawnRequestData[] = queue.filter(r => r && typeof r.role === 'string' && r.count > 0);
@@ -64,6 +66,7 @@ export function process(room: Room): void {
 		const req = requestFromMemory(entry);
 		const body = scaleBody(req.body.min, req.body.ideal, room.energyAvailable);
 		if (!body) continue; // can't afford min, keep for next tick
+		if (bodyCost(body) > spawnBudget) continue; // above priority budget, keep for next tick
 
 		const name = `${req.role}_${room.name}_${Game.time}`;
 		const result = spawn.spawnCreep(body, name, {
@@ -71,6 +74,7 @@ export function process(room: Room): void {
 		});
 
 		if (result === OK) {
+			trackSpawn(room.name, bodyCost(body));
 			entry.count--;
 			if (entry.count <= 0) toRemove.push(i);
 			spawned = true;
