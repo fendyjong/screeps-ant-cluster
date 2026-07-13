@@ -373,14 +373,24 @@ function moveTo(creep, target, opts) {
 // src/roles/Harvester.ts
 function findSource(creep) {
     const sources = creep.room.find(FIND_SOURCES);
-    if (sources.length === 0)
-        return null;
-    // Prefer source with energy
-    for (const source of sources) {
-        if (source.energy > 0)
-            return source;
+    const active = sources.filter(s => s.energy > 0);
+    if (active.length === 0)
+        return sources[0] || null;
+    const harvesters = creep.room.find(FIND_MY_CREEPS, {
+        filter: (c) => c.memory.role === 'harvester'
+    });
+    let best = null;
+    let bestScore = Infinity;
+    for (const source of active) {
+        const dist = creep.pos.getRangeTo(source);
+        const harvesterCount = harvesters.filter((h) => h.memory.targetSourceId === source.id).length;
+        const score = dist * 10 + harvesterCount;
+        if (score < bestScore) {
+            bestScore = score;
+            best = source;
+        }
     }
-    return sources[0];
+    return best;
 }
 function findDropOff$1(creep) {
     // Prefer containers and storage
@@ -406,10 +416,22 @@ function findDropOff$1(creep) {
 function harvestAndTransfer(creep) {
     if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
         const source = findSource(creep);
-        if (source) {
-            if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
-                moveTo(creep, source);
+        if (!source)
+            return;
+        creep.memory.targetSourceId = source.id;
+        const totalAdj = [...getAdjacentWalkable$1(getTerrainMatrix(creep.room.name), source.pos)].length;
+        const busyAdj = source.pos.findInRange(FIND_MY_CREEPS, 1)
+            .filter((c) => c.pos.getRangeTo(source) === 1).length;
+        if (busyAdj >= totalAdj && totalAdj > 0 && creep.pos.getRangeTo(source) <= 1) {
+            const waitPos = creep.pos.findClosestByPath(source.pos.findInRange(FIND_STRUCTURES, 3)
+                .filter((s) => s.structureType !== STRUCTURE_WALL));
+            if (waitPos) {
+                moveTo(creep, waitPos);
+                return;
             }
+        }
+        if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
+            moveTo(creep, source);
         }
     }
     else {
@@ -433,6 +455,24 @@ function repairNearby(creep) {
             }
         }
     }
+}
+function getAdjacentWalkable$1(matrix, pos) {
+    const dirs = [
+        { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+        { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+        { dx: -1, dy: -1 }, { dx: 1, dy: -1 },
+        { dx: -1, dy: 1 }, { dx: 1, dy: 1 },
+    ];
+    const result = [];
+    for (const d of dirs) {
+        const x = pos.x + d.dx;
+        const y = pos.y + d.dy;
+        const matrixCost = matrix.get(x, y);
+        if (x >= 0 && x < 50 && y >= 0 && y < 50 && matrixCost < 255) {
+            result.push(new RoomPosition(x, y, pos.roomName));
+        }
+    }
+    return result;
 }
 function run$3(creep, goal) {
     switch (goal) {
