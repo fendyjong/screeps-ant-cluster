@@ -1,6 +1,7 @@
 // src/types/index.ts
 
-import { BunkerLayout, SwapPlan } from '../colony/Architect';
+import { BunkerLayout } from '../colony/LayoutPlanner';
+import { SwapPlan } from '../colony/SwapPlanner';
 import { SpawnRequest } from '../hatchery/Request';
 
 export interface TaskMemory {

@@ -1593,6 +1593,8 @@ function findOptimalTowerPositions(roomName, count) {
     return positions;
 }
 
+// Stub — full implementation in Task 3
+
 const BUNKER_RADIUS$1 = 6;
 function findBestAnchor(room) {
     const roomName = room.name;
@@ -1839,86 +1841,6 @@ function computeBarriers(room, anchor) {
     return barriers;
 }
 
-const REBUILD_COSTS = {
-    [STRUCTURE_SPAWN]: 15000,
-    [STRUCTURE_STORAGE]: 100000,
-    [STRUCTURE_TOWER]: 5000,
-    [STRUCTURE_LINK]: 5000,
-    [STRUCTURE_TERMINAL]: 100000,
-    [STRUCTURE_LAB]: 50000,
-    [STRUCTURE_FACTORY]: 100000,
-    [STRUCTURE_OBSERVER]: 8000,
-    [STRUCTURE_NUKER]: 100000,
-    [STRUCTURE_POWER_SPAWN]: 200000,
-    [STRUCTURE_EXTRACTOR]: 5000,
-    [STRUCTURE_ROAD]: 300,
-    [STRUCTURE_WALL]: 10000,
-    [STRUCTURE_RAMPART]: 10000,
-    [STRUCTURE_EXTENSION]: 3000,
-};
-function isSafeToDestroy(room, structure) {
-    const type = structure.structureType;
-    const cost = REBUILD_COSTS[type] || 0;
-    // Don't destroy spawn unless we have energy to rebuild or another spawn exists
-    if (type === STRUCTURE_SPAWN) {
-        const otherSpawns = room.find(FIND_MY_STRUCTURES, {
-            filter: (s) => s.structureType === STRUCTURE_SPAWN && s.id !== structure.id
-        });
-        if (otherSpawns.length > 0)
-            return true;
-        const { buildBudget } = getBudget(room);
-        return buildBudget >= cost;
-    }
-    // Don't destroy terminal/storage before RCL 4
-    if (type === STRUCTURE_TERMINAL || type === STRUCTURE_STORAGE) {
-        if (room.controller && room.controller.level < 4)
-            return false;
-    }
-    // Don't destroy terminal until storage exists
-    if (type === STRUCTURE_TERMINAL) {
-        const storage = room.find(FIND_MY_STRUCTURES, {
-            filter: (s) => s.structureType === STRUCTURE_STORAGE
-        })[0];
-        if (!storage)
-            return false;
-    }
-    // Don't destroy storage until terminal has no non-energy resources
-    if (type === STRUCTURE_STORAGE) {
-        const terminal = room.find(FIND_MY_STRUCTURES, {
-            filter: (s) => s.structureType === STRUCTURE_TERMINAL
-        })[0];
-        if (terminal) {
-            const nonEnergy = Object.keys(terminal.store).filter(r => r !== RESOURCE_ENERGY);
-            if (nonEnergy.some(r => (terminal.store[r] || 0) > 1000))
-                return false;
-        }
-    }
-    return true;
-}
-const BUILD_PRIORITIES = [
-    STRUCTURE_SPAWN,
-    STRUCTURE_STORAGE,
-    STRUCTURE_TOWER,
-    STRUCTURE_LINK,
-    STRUCTURE_TERMINAL,
-    STRUCTURE_LAB,
-    STRUCTURE_FACTORY,
-    STRUCTURE_OBSERVER,
-    STRUCTURE_NUKER,
-    STRUCTURE_POWER_SPAWN,
-    STRUCTURE_EXTRACTOR,
-    STRUCTURE_EXTENSION,
-    STRUCTURE_ROAD,
-    STRUCTURE_RAMPART,
-    STRUCTURE_WALL,
-];
-function sortByPriority(buildList) {
-    return buildList.sort((a, b) => {
-        const aIdx = BUILD_PRIORITIES.indexOf(a.structureType);
-        const bIdx = BUILD_PRIORITIES.indexOf(b.structureType);
-        return aIdx - bIdx;
-    });
-}
 function getAdjacentWalkable(matrix, pos) {
     const dirs = [
         { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
@@ -1955,7 +1877,6 @@ function carveCoreZone(room, anchor, matrix) {
     }
     const sortedTiles = Array.from(coreTiles.values())
         .sort((a, b) => a.getRangeTo(anchor) - b.getRangeTo(anchor));
-    // Fallback to anchor (spawn) if not enough walkable tiles
     const getTile = (i) => sortedTiles[i] || anchor;
     layout.storage = getTile(1);
     layout.terminal = getTile(2);
@@ -2057,7 +1978,6 @@ function computeRoadPositions(room, matrix, core, extensions) {
     for (const ext of extensions) {
         claim.add(ext.x + ',' + ext.y);
     }
-    // BFS from core to controller
     if (room.controller) {
         const ctrl = room.controller.pos;
         const queue = [ctrl];
@@ -2085,9 +2005,7 @@ function computeRoadPositions(room, matrix, core, extensions) {
 function planLayout(room) {
     const matrix = getTerrainMatrix(room.name);
     const anchor = findBestAnchor(room);
-    // Phase 1: Core zone
     const core = carveCoreZone(room, anchor, matrix);
-    // Collect core tile keys
     const coreKeys = new Set();
     coreKeys.add(core.spawn.x + ',' + core.spawn.y);
     coreKeys.add(core.storage.x + ',' + core.storage.y);
@@ -2097,21 +2015,15 @@ function planLayout(room) {
     coreKeys.add(core.nuker.x + ',' + core.nuker.y);
     coreKeys.add(core.observer.x + ',' + core.observer.y);
     coreKeys.add(core.linkSpawn.x + ',' + core.linkSpawn.y);
-    // Phase 2: Lab zone
     const labs = carveLabZone(room, matrix, coreKeys);
     core.labs = labs;
     const labKeys = new Set(labs.map(p => p.x + ',' + p.y));
-    // Phase 3: Extensions
     const extensions = carveExtensions(room, matrix, coreKeys, labKeys);
     core.extensions = extensions;
-    // Phase 4: Towers
     core.towers = placeTowers(room, matrix, extensions);
-    // Phase 5: Barriers — min-cut rampart placement
     core.ramparts = computeBarriers(room, core.anchor);
     core.walls = [];
-    // Phase 6: Roads
     core.roads = computeRoadPositions(room, matrix, core, extensions);
-    // Controller link
     if (room.controller) {
         core.linkController = new RoomPosition(room.controller.pos.x + 1, room.controller.pos.y, room.name);
         if (!isWalkable(matrix, core.linkController.x, core.linkController.y)) {
@@ -2121,10 +2033,88 @@ function planLayout(room) {
     core.linkLab = labs.length > 0 ? labs[Math.floor(labs.length / 2)] : core.linkSpawn;
     return core;
 }
+
+const REBUILD_COSTS = {
+    [STRUCTURE_SPAWN]: 15000,
+    [STRUCTURE_STORAGE]: 100000,
+    [STRUCTURE_TOWER]: 5000,
+    [STRUCTURE_LINK]: 5000,
+    [STRUCTURE_TERMINAL]: 100000,
+    [STRUCTURE_LAB]: 50000,
+    [STRUCTURE_OBSERVER]: 8000,
+    [STRUCTURE_NUKER]: 100000,
+    [STRUCTURE_POWER_SPAWN]: 200000,
+    [STRUCTURE_EXTRACTOR]: 5000,
+    [STRUCTURE_ROAD]: 300,
+    [STRUCTURE_WALL]: 10000,
+    [STRUCTURE_RAMPART]: 10000,
+    [STRUCTURE_EXTENSION]: 3000,
+};
+const BUILD_PRIORITIES = [
+    STRUCTURE_SPAWN,
+    STRUCTURE_STORAGE,
+    STRUCTURE_TOWER,
+    STRUCTURE_LINK,
+    STRUCTURE_TERMINAL,
+    STRUCTURE_LAB,
+    STRUCTURE_OBSERVER,
+    STRUCTURE_NUKER,
+    STRUCTURE_POWER_SPAWN,
+    STRUCTURE_EXTRACTOR,
+    STRUCTURE_EXTENSION,
+    STRUCTURE_ROAD,
+    STRUCTURE_RAMPART,
+    STRUCTURE_WALL,
+];
+function sortByPriority(buildList) {
+    return buildList.sort((a, b) => {
+        const aIdx = BUILD_PRIORITIES.indexOf(a.structureType);
+        const bIdx = BUILD_PRIORITIES.indexOf(b.structureType);
+        return aIdx - bIdx;
+    });
+}
+function isSafeToDestroy(room, structure) {
+    const type = structure.structureType;
+    const cost = REBUILD_COSTS[type] || 0;
+    if (type === STRUCTURE_SPAWN) {
+        const otherSpawns = room.find(FIND_MY_STRUCTURES, {
+            filter: (s) => s.structureType === STRUCTURE_SPAWN && s.id !== structure.id
+        });
+        if (otherSpawns.length > 0)
+            return true;
+        const { buildBudget } = getBudget(room);
+        return buildBudget >= cost;
+    }
+    if (type === STRUCTURE_TERMINAL || type === STRUCTURE_STORAGE) {
+        if (room.controller && room.controller.level < 4)
+            return false;
+    }
+    if (type === STRUCTURE_TERMINAL) {
+        const storage = room.find(FIND_MY_STRUCTURES, {
+            filter: (s) => s.structureType === STRUCTURE_STORAGE
+        })[0];
+        if (!storage)
+            return false;
+    }
+    if (type === STRUCTURE_STORAGE) {
+        const terminal = room.find(FIND_MY_STRUCTURES, {
+            filter: (s) => s.structureType === STRUCTURE_TERMINAL
+        })[0];
+        if (terminal) {
+            const nonEnergy = Object.keys(terminal.store).filter(r => r !== RESOURCE_ENERGY);
+            if (nonEnergy.some(r => (terminal.store[r] || 0) > 1000))
+                return false;
+        }
+    }
+    return true;
+}
+
+function isWalkablePos(pos) {
+    return pos !== undefined && pos.x >= 0 && pos.x < 50 && pos.y >= 0 && pos.y < 50;
+}
 function planSwap(room, layout) {
     const destroy = [];
     const build = [];
-    // Check spawn
     const existingSpawn = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_SPAWN
     })[0];
@@ -2134,7 +2124,6 @@ function planSwap(room, layout) {
             build.push({ pos: layout.spawn, structureType: STRUCTURE_SPAWN });
         }
     }
-    // Check storage
     const existingStorage = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_STORAGE
     })[0];
@@ -2144,7 +2133,6 @@ function planSwap(room, layout) {
             build.push({ pos: layout.storage, structureType: STRUCTURE_STORAGE });
         }
     }
-    // Check towers
     const existingTowers = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_TOWER
     });
@@ -2160,7 +2148,6 @@ function planSwap(room, layout) {
             build.push({ pos: towerPos, structureType: STRUCTURE_TOWER });
         }
     }
-    // Check terminal
     const existingTerminal = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_TERMINAL
     })[0];
@@ -2170,7 +2157,6 @@ function planSwap(room, layout) {
             build.push({ pos: layout.terminal, structureType: STRUCTURE_TERMINAL });
         }
     }
-    // Check factory
     const existingFactory = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_FACTORY
     })[0];
@@ -2180,7 +2166,6 @@ function planSwap(room, layout) {
             build.push({ pos: layout.factory, structureType: STRUCTURE_FACTORY });
         }
     }
-    // Check power spawn
     const existingPowerSpawn = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_POWER_SPAWN
     })[0];
@@ -2190,7 +2175,6 @@ function planSwap(room, layout) {
             build.push({ pos: layout.powerSpawn, structureType: STRUCTURE_POWER_SPAWN });
         }
     }
-    // Check nuker
     const existingNuker = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_NUKER
     })[0];
@@ -2200,7 +2184,6 @@ function planSwap(room, layout) {
             build.push({ pos: layout.nuker, structureType: STRUCTURE_NUKER });
         }
     }
-    // Check observer
     const existingObserver = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_OBSERVER
     })[0];
@@ -2211,7 +2194,6 @@ function planSwap(room, layout) {
         }
     }
     const roomName = room.name;
-    // Check labs
     const existingLabs = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_LAB
     });
@@ -2229,7 +2211,6 @@ function planSwap(room, layout) {
             build.push({ pos: labPos, structureType: STRUCTURE_LAB });
         }
     }
-    // Check links
     const existingLinks = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_LINK
     });
@@ -2248,7 +2229,6 @@ function planSwap(room, layout) {
             build.push({ pos: linkPos, structureType: STRUCTURE_LINK });
         }
     }
-    // Check extensions
     const existingExtensions = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_EXTENSION
     });
@@ -2266,7 +2246,6 @@ function planSwap(room, layout) {
             build.push({ pos: extPos, structureType: STRUCTURE_EXTENSION });
         }
     }
-    // Check roads
     const existingRoads = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_ROAD
     });
@@ -2284,7 +2263,6 @@ function planSwap(room, layout) {
             build.push({ pos: roadPos, structureType: STRUCTURE_ROAD });
         }
     }
-    // Check ramparts
     const existingRamparts = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_RAMPART
     });
@@ -2302,7 +2280,6 @@ function planSwap(room, layout) {
             build.push({ pos: rPos, structureType: STRUCTURE_RAMPART });
         }
     }
-    // Check walls
     const existingWalls = room.find(FIND_MY_STRUCTURES, {
         filter: (s) => s.structureType === STRUCTURE_WALL
     });
@@ -2320,9 +2297,7 @@ function planSwap(room, layout) {
             build.push({ pos: wPos, structureType: STRUCTURE_WALL });
         }
     }
-    // Sort build list by priority
     const sortedBuild = sortByPriority(build);
-    // Filter to items affordable within buildBudget
     const { buildBudget } = getBudget(room);
     let totalCost = 0;
     const affordable = sortedBuild.filter(entry => {
@@ -2338,9 +2313,6 @@ function planSwap(room, layout) {
         build: affordable,
         state: 'idle',
     };
-}
-function isWalkablePos(pos) {
-    return pos !== undefined && pos.x >= 0 && pos.x < 50 && pos.y >= 0 && pos.y < 50;
 }
 
 function drawPanel(vis, x, y, rows, width) {

@@ -9,7 +9,8 @@ import * as Upgrader from './roles/Upgrader';
 import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory, CURRENT_NS } from './lib/Memory';
 import { getTerrainMatrix } from './lib/PathFinder';
 import { shouldRecheck, demolishMisplaced, buildMissing } from './colony/Lifecycle';
-import { planLayout, planSwap } from './colony/Architect';
+import { planLayout } from './colony/LayoutPlanner';
+import { planSwap } from './colony/SwapPlanner';
 import * as HUD from './lib/HUD';
 import { trackIncome, getBudget, getHealth, trackBuild, getCpuBudgets } from './lib/Cashflow';
 
