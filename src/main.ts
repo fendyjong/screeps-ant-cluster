@@ -1,7 +1,7 @@
 // src/main.ts
 
-import { tick as colonyTick } from './colony/Colony';
-import { tick as spawnerTick } from './spawn/Spawner';
+import { tick as queenTick } from './hatchery/Queen';
+import { process as hatcheryProcess } from './hatchery/Hatchery';
 import * as Harvester from './roles/Harvester';
 import * as Hauler from './roles/Hauler';
 import * as Builder from './roles/Builder';
@@ -182,7 +182,9 @@ export const loop = (): void => {
     if (!room.controller || !room.controller.my) continue;
 
     ensureRoomMemory(room);
-    colonyTick(room);
+
+    // Queen evaluates colony needs and submits spawn requests
+    queenTick(room);
 
     // Track energy for HUD income/spend
     const prevEnergy = (Memory.v1 as any)?.hud?.prevEnergy?.[roomName];
@@ -220,7 +222,10 @@ export const loop = (): void => {
     // Periodic layout rechecking
     recheckLayout(room);
 
-    spawnerTick(room, room.memory.goal);
+    // Hatchery processes queue and spawns highest priority request
+    hatcheryProcess(room);
+
+    // Run existing creeps
     runCreeps(room, room.memory.goal);
 
     HUD.run(room);

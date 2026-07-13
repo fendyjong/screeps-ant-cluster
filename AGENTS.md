@@ -13,34 +13,20 @@ the Screeps client; "deploy" = save the file (the client pushes it).
 Node, no `fs`, no `process`. Each tick the engine calls `module.exports.loop`
 in `main.js` once.
 
-## Module contract
+## Design philosophy
 
-- `main.js` is the entry point and only loop. It does NOT spawn, fight, or
-  build directly — it dispatches per-room and per-creep.
-- Every other file is loaded via `require('<filename-without-.js>')`, e.g.
-  `require('role.harvester')`. Module name MUST match the file basename
-  exactly (dot included: `role.ranged_escort`, not `roleRangedEscort`).
-- `main.js` wraps all `require()`s in `safeRequireRole`/`safeRequireModule`.
-  A failed/invalid module degrades to `noopRun` and is logged every 50 ticks
-  via `moduleHealth` — it does NOT crash the loop. This is intentional: keep
-  it; a broken module should never wedge the bot.
-- Role modules export `module.exports = { run: function (creep) { ... } }`.
-  Non-role modules export `{ run }` or a named-method object (see
-  `strategy.map`/`war.room`/`debug.report` exports lists).
-- Roles must not spawn, build construction sites, or run towers — those are
-  owned by `auto.spawn`, `auto.construct_site`, and `runTowers` in `main.js`.
+This bot uses an **adaptive ant colony** architecture. See README.md for
+full strategy documentation.
 
-## Critical naming gotcha
+## Build & Deploy
 
-| File / require name        | `creep.memory.role` value |
-|----------------------------|---------------------------|
-| `role.ranged_escort`       | `'rangedEscort'`          |
+TypeScript source in `src/`, compiled to `main.js` via Rollup:
 
-`main.js`'s dispatch table switches on `creep.memory.role`. A creep with an
-unknown role is force-reassigned to `'harvester'` and run as one (see bottom
-of the loop). If you add a role, update BOTH the filename and every
-`creep.memory.role` the spawner writes, or the creep silently becomes a
-harvester.
+```bash
+npm run build
+```
+
+The Screeps client syncs `main.js` to the game server.
 
 ## CPU budget gating (in `main.js`)
 
