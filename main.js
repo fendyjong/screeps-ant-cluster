@@ -545,7 +545,7 @@ function getAdjacentWalkable$1(matrix, pos) {
     }
     return result;
 }
-function run$3(creep, goal) {
+function run$4(creep, goal) {
     switch (goal) {
         case Goal.ECONOMY:
             harvestAndTransfer(creep);
@@ -638,7 +638,7 @@ function deliverToTowers(creep) {
         }
     }
 }
-function run$2(creep, goal) {
+function run$3(creep, goal) {
     switch (goal) {
         case Goal.ECONOMY:
             haulEnergy(creep);
@@ -721,7 +721,7 @@ function harvestEnergy(creep) {
         }
     }
 }
-function run$1(creep, goal) {
+function run$2(creep, goal) {
     const layout = creep.room.memory.layout;
     const swapPlan = layout?.swap;
     if (swapPlan && swapPlan.destroy.length > 0) {
@@ -796,7 +796,7 @@ function parkNearSpawn(creep) {
         }
     }
 }
-function run(creep, goal) {
+function run$1(creep, goal) {
     if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
         switch (goal) {
             case Goal.ECONOMY:
@@ -1290,6 +1290,169 @@ function isWalkablePos(pos) {
     return pos !== undefined && pos.x >= 0 && pos.x < 50 && pos.y >= 0 && pos.y < 50;
 }
 
+function drawPanel(vis, x, y, rows, width) {
+    const rowH = 0.85;
+    const h = rows.length * rowH + 0.3;
+    vis.rect(x - 0.2, y - 0.2, width, h, {
+        fill: '#000000',
+        opacity: 0.4,
+        stroke: '#444444',
+        strokeWidth: 0.05,
+    });
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowY = y + i * rowH;
+        if (row[0]) {
+            vis.text(row[0], x, rowY, {
+                align: 'left',
+                font: '7px monospace',
+                color: '#888888',
+            });
+        }
+        if (row[1]) {
+            vis.text(row[1], x + width - 0.5, rowY, {
+                align: 'right',
+                font: '7px monospace',
+                color: '#ffffff',
+            });
+        }
+    }
+}
+function drawTopLeft(vis, room) {
+    const rcl = room.controller ? room.controller.level : 0;
+    const sources = room.find(FIND_SOURCES);
+    const harvesters = Object.values(Game.creeps).filter((c) => c.memory.roomName === room.name && c.memory.role === 'harvester');
+    const sourceAssignments = sources.map((s) => {
+        const count = harvesters.filter((h) => h.memory.targetSourceId === s.id).length;
+        const fill = s.energy / s.energyCapacity;
+        return 'S' + (sources.indexOf(s) + 1) + '(' + count + ')';
+    }).join(' ');
+    const avgFill = sources.length > 0
+        ? Math.round(sources.reduce((sum, s) => sum + s.energy / s.energyCapacity, 0) / sources.length * 100)
+        : 0;
+    const myCreeps = Object.values(Game.creeps).filter((c) => c.memory.roomName === room.name);
+    const idle = myCreeps.filter((c) => (c.memory._stuckTicks || 0) > 5).length;
+    const cpuAtStart = Memory.v1.hud?.cpuTick?.[room.name] || 0;
+    const cpuUsed = ((Game.cpu.getUsed() - cpuAtStart) * 100).toFixed(1);
+    drawPanel(vis, 0.5, 0.5, [
+        [room.name + '  RCL ' + rcl, ''],
+        ['Sources: ' + sourceAssignments, avgFill + '%'],
+        ['Creeps: ' + myCreeps.length + '  idle: ' + idle, idle > 0 ? Math.round(idle / myCreeps.length * 100) + '%' : ''],
+        ['CPU: ' + cpuUsed + 'ms', ''],
+    ], 13);
+}
+function drawTopRight(vis, room) {
+    const energy = room.energyAvailable.toLocaleString();
+    const energyCap = room.energyCapacityAvailable.toLocaleString();
+    const storage = room.storage ? room.storage.store[RESOURCE_ENERGY].toLocaleString() : '0';
+    const hudMem = Memory.v1.hud || {};
+    const income = hudMem.income?.[room.name] || 0;
+    const spend = hudMem.spend?.[room.name] || 0;
+    drawPanel(vis, 35, 0.5, [
+        ['Energy', energy + ' / ' + energyCap],
+        ['Income', '+' + income.toFixed(1) + '/t'],
+        ['Spend', '-' + spend.toFixed(1) + '/t'],
+        ['Stockpile', storage],
+    ], 14);
+}
+function drawBottomLeft(vis, room) {
+    const towers = room.find(FIND_MY_STRUCTURES, {
+        filter: (s) => s.structureType === STRUCTURE_TOWER
+    });
+    const towersOnline = towers.filter((t) => t.store[RESOURCE_ENERGY] > 0).length;
+    const towerBar = towers.map((_t, i) => i < towersOnline ? '■' : '□').join('');
+    const walls = room.find(FIND_STRUCTURES, {
+        filter: (s) => s.structureType === STRUCTURE_WALL
+    });
+    const wallHealth = walls.length > 0
+        ? Math.round(walls.reduce((sum, w) => sum + w.hits / w.hitsMax, 0) / walls.length * 100)
+        : 0;
+    const ramparts = room.find(FIND_STRUCTURES, {
+        filter: (s) => s.structureType === STRUCTURE_RAMPART
+    });
+    const rampartHealth = ramparts.length > 0
+        ? Math.round(ramparts.reduce((sum, r) => sum + r.hits / r.hitsMax, 0) / ramparts.length * 100)
+        : 0;
+    const hostiles = room.find(FIND_HOSTILE_CREEPS).length;
+    const lastThreat = Memory.v1.hud?.lastThreat?.[room.name] || 0;
+    const threatAgo = lastThreat > 0 ? (Game.time - lastThreat).toLocaleString() + ' ticks ago' : 'never';
+    drawPanel(vis, 0.5, 35, [
+        ['Towers: ' + towerBar, towersOnline + '/' + towers.length + ' online'],
+        ['Walls: ' + wallHealth + '%', 'Ramparts: ' + rampartHealth + '%'],
+        ['Hostiles: ' + hostiles, hostiles > 0 ? 'IN ROOM' : 'clear'],
+        ['Last threat', threatAgo],
+    ], 13);
+}
+function drawBottomRight(vis, room) {
+    const swap = room.memory.layout?.swap;
+    const swapState = swap?.state || 'none';
+    const sites = room.find(FIND_MY_CONSTRUCTION_SITES).length;
+    const pendingRoads = (Memory.v1.pathing?.pendingRoads || [])
+        .filter((r) => r.roomName === room.name).length;
+    const nextReplan = 100 - (Game.time % 100);
+    drawPanel(vis, 35, 35, [
+        ['Swap', swapState],
+        ['Sites', sites + ' pending'],
+        ['Roads pending', pendingRoads.toString()],
+        ['Next replan', nextReplan + ' ticks'],
+    ], 14);
+}
+function drawCreepLabels(vis, creep) {
+    let label = '';
+    let color = '#ffffff';
+    switch (creep.memory.role) {
+        case 'harvester':
+            label = '[H' + (creep.memory.targetSourceId ? ' ->' + creep.memory.targetSourceId.slice(0, 4) : '') + ']';
+            color = '#4caf50';
+            break;
+        case 'hauler':
+            label = '[HAUL]';
+            color = '#00bcd4';
+            break;
+        case 'builder':
+            label = '[BUILD]';
+            color = '#ffeb3b';
+            break;
+        case 'upgrader':
+            label = '[UP]';
+            color = '#9c27b0';
+            break;
+    }
+    if (label) {
+        vis.text(label, creep.pos.x, creep.pos.y - 0.5, {
+            font: '5px monospace',
+            color: color,
+            stroke: '#000000',
+            strokeWidth: 0.15,
+        });
+    }
+}
+function run(room) {
+    const vis = new RoomVisual(room.name);
+    for (const name in Game.creeps) {
+        const creep = Game.creeps[name];
+        if (creep.memory.roomName !== room.name)
+            continue;
+        drawCreepLabels(vis, creep);
+    }
+    if (Game.time % 25 !== 0)
+        return;
+    if (!Memory.v1.hud)
+        Memory.v1.hud = {};
+    if (!Memory.v1.hud.cpuTick)
+        Memory.v1.hud.cpuTick = {};
+    Memory.v1.hud.cpuTick[room.name] = Game.cpu.getUsed();
+    drawTopLeft(vis, room);
+    drawTopRight(vis, room);
+    drawBottomLeft(vis, room);
+    drawBottomRight(vis, room);
+    if (room.find(FIND_HOSTILE_CREEPS).length > 0) {
+        if (!Memory.v1.hud.lastThreat)
+            Memory.v1.hud.lastThreat = {};
+        Memory.v1.hud.lastThreat[room.name] = Game.time;
+    }
+}
+
 // src/main.ts
 function runCreeps(room, goal) {
     for (const name in Game.creeps) {
@@ -1299,16 +1462,16 @@ function runCreeps(room, goal) {
         ensureCreepMemory(creep);
         switch (creep.memory.role) {
             case 'harvester':
-                run$3(creep, goal);
+                run$4(creep, goal);
                 break;
             case 'hauler':
-                run$2(creep, goal);
+                run$3(creep, goal);
                 break;
             case 'builder':
-                run$1(creep, goal);
+                run$2(creep, goal);
                 break;
             case 'upgrader':
-                run(creep, goal);
+                run$1(creep, goal);
                 break;
         }
     }
@@ -1444,6 +1607,29 @@ const loop = () => {
             continue;
         ensureRoomMemory(room);
         tick$1(room);
+        // Track energy for HUD income/spend
+        const prevEnergy = Memory.v1?.hud?.prevEnergy?.[roomName];
+        const currentEnergy = room.energyAvailable + (room.storage ? room.storage.store[RESOURCE_ENERGY] : 0);
+        if (prevEnergy !== undefined) {
+            const delta = currentEnergy - prevEnergy;
+            if (!Memory.v1.hud)
+                Memory.v1.hud = {};
+            if (!Memory.v1.hud.income)
+                Memory.v1.hud.income = {};
+            if (!Memory.v1.hud.spend)
+                Memory.v1.hud.spend = {};
+            if (delta > 0) {
+                Memory.v1.hud.income[roomName] = Memory.v1.hud.income[roomName] || 0;
+                Memory.v1.hud.income[roomName] = Memory.v1.hud.income[roomName] * 0.9 + delta * 0.1;
+            }
+            else {
+                Memory.v1.hud.spend[roomName] = Memory.v1.hud.spend[roomName] || 0;
+                Memory.v1.hud.spend[roomName] = Memory.v1.hud.spend[roomName] * 0.9 + Math.abs(delta) * 0.1;
+            }
+        }
+        if (!Memory.v1.hud.prevEnergy)
+            Memory.v1.hud.prevEnergy = {};
+        Memory.v1.hud.prevEnergy[roomName] = currentEnergy;
         // Terrain and layout planning — cache every 100 ticks
         getTerrainMatrix(room.name);
         if (Game.time % 100 === 0 || !room.memory.layout || !room.memory.layout.lastUpdated) {
@@ -1459,6 +1645,7 @@ const loop = () => {
         recheckLayout(room);
         tick(room, room.memory.goal);
         runCreeps(room, room.memory.goal);
+        run(room);
     }
 };
 

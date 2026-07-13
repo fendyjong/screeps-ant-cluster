@@ -123,9 +123,49 @@ function drawBottomRight(vis: RoomVisual, room: Room): void {
   ], 14);
 }
 
+function drawCreepLabels(vis: RoomVisual, creep: Creep): void {
+  let label = '';
+  let color = '#ffffff';
+
+  switch (creep.memory.role) {
+    case 'harvester':
+      label = '[H' + (creep.memory.targetSourceId ? ' ->' + creep.memory.targetSourceId.slice(0, 4) : '') + ']';
+      color = '#4caf50';
+      break;
+    case 'hauler':
+      label = '[HAUL]';
+      color = '#00bcd4';
+      break;
+    case 'builder':
+      label = '[BUILD]';
+      color = '#ffeb3b';
+      break;
+    case 'upgrader':
+      label = '[UP]';
+      color = '#9c27b0';
+      break;
+  }
+
+  if (label) {
+    vis.text(label, creep.pos.x, creep.pos.y - 0.5, {
+      font: '5px monospace',
+      color: color,
+      stroke: '#000000',
+      strokeWidth: 0.15,
+    });
+  }
+}
+
 export function run(room: Room): void {
-  if (Game.time % 25 !== 0) return;
   const vis = new RoomVisual(room.name);
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.memory.roomName !== room.name) continue;
+    drawCreepLabels(vis, creep);
+  }
+
+  if (Game.time % 25 !== 0) return;
 
   if (!(Memory.v1 as any).hud) (Memory.v1 as any).hud = {};
   if (!(Memory.v1 as any).hud.cpuTick) (Memory.v1 as any).hud.cpuTick = {};

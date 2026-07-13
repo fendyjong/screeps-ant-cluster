@@ -10,6 +10,7 @@ import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory,
 import { getTerrainMatrix } from './lib/TerrainMatrix';
 import { planLayout, planSwap } from './colony/Architect';
 import { Goal } from './types';
+import * as HUD from './lib/HUD';
 
 function runCreeps(room: Room, goal: Goal): void {
   for (const name in Game.creeps) {
@@ -183,6 +184,25 @@ export const loop = (): void => {
     ensureRoomMemory(room);
     colonyTick(room);
 
+    // Track energy for HUD income/spend
+    const prevEnergy = (Memory.v1 as any)?.hud?.prevEnergy?.[roomName];
+    const currentEnergy = room.energyAvailable + (room.storage ? room.storage.store[RESOURCE_ENERGY] : 0);
+    if (prevEnergy !== undefined) {
+      const delta = currentEnergy - prevEnergy;
+      if (!(Memory.v1 as any).hud) (Memory.v1 as any).hud = {};
+      if (!(Memory.v1 as any).hud.income) (Memory.v1 as any).hud.income = {};
+      if (!(Memory.v1 as any).hud.spend) (Memory.v1 as any).hud.spend = {};
+      if (delta > 0) {
+        (Memory.v1 as any).hud.income[roomName] = (Memory.v1 as any).hud.income[roomName] || 0;
+        (Memory.v1 as any).hud.income[roomName] = (Memory.v1 as any).hud.income[roomName] * 0.9 + delta * 0.1;
+      } else {
+        (Memory.v1 as any).hud.spend[roomName] = (Memory.v1 as any).hud.spend[roomName] || 0;
+        (Memory.v1 as any).hud.spend[roomName] = (Memory.v1 as any).hud.spend[roomName] * 0.9 + Math.abs(delta) * 0.1;
+      }
+    }
+    if (!(Memory.v1 as any).hud.prevEnergy) (Memory.v1 as any).hud.prevEnergy = {};
+    (Memory.v1 as any).hud.prevEnergy[roomName] = currentEnergy;
+
     // Terrain and layout planning — cache every 100 ticks
     getTerrainMatrix(room.name);
     if (Game.time % 100 === 0 || !room.memory.layout || !room.memory.layout.lastUpdated) {
@@ -202,5 +222,7 @@ export const loop = (): void => {
 
     spawnerTick(room, room.memory.goal);
     runCreeps(room, room.memory.goal);
+
+    HUD.run(room);
   }
 };
