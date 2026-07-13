@@ -44,7 +44,7 @@ export interface SpawnRequest {
 
 - [ ] **Step 2: Update src/types/index.ts with HatcheryMemory types**
 
-Add to existing types file:
+Append to the existing types file (before the existing `declare global` block):
 
 ```ts
 import { SpawnRequest } from '../hatchery/Request';
@@ -72,17 +72,20 @@ export interface HatcheryMemory {
   deathWatch: Record<string, Record<string, DeathWatchEntry[]>>
 }
 
-// Extend global Memory
+// Extend the existing declare global block
 declare global {
   interface Memory {
     v1: {
       hatchery: HatcheryMemory
     }
+    pathing?: PathingMemory
   }
 }
 ```
 
-The `SpawnRequestData` type uses serialized `number[]` for body parts (CostMatrix-style) instead of `BodyPartConstant[]` for reliable Memory serialization. Hatchery converts between them.
+Note: the existing file already has a `declare global { interface Memory { pathing?: PathingMemory } }` block. The two declarations will merge in TypeScript. Replace the old `declare global` with the new one above that includes both `v1` and `pathing`.
+
+The `SpawnRequestData` type uses serialized `number[]` for body parts instead of `BodyPartConstant[]` for reliable Memory serialization. Hatchery converts between them.
 
 - [ ] **Step 3: Build to verify**
 
@@ -669,16 +672,27 @@ git commit -m "feat: add Queen with phase detection, death watch, expansion trig
 
 ### Task 5: Wire into main.ts + delete old files
 
+**Context:** Dead v1 code is already deleted. These old files still exist in `src/` and
+must be replaced by the hatchery modules:
+- `src/spawn/Spawner.ts` → replaced by `src/hatchery/Hatchery.ts`
+- `src/spawn/Body.ts` → replaced by `src/hatchery/Body.ts`
+- `src/colony/Colony.ts` → replaced by `src/hatchery/Queen.ts`
+- `src/colony/Goal.ts` → inlined into Queen (Goal enum stays in types/index.ts for runCreeps)
+
+Current `src/main.ts` has these extra features that must be preserved in the rewrite:
+- `drainPendingRoads()` (traffic heatmap road building)
+- `ensureRoomMemory()` before colonyTick
+
 **Files:**
 - Modify: `src/main.ts`
 - Delete: `src/spawn/Spawner.ts`, `src/spawn/Body.ts`, `src/colony/Colony.ts`, `src/colony/Goal.ts`
 
-- [ ] **Step 1: Update main.ts**
+- [ ] **Step 1: Update main.ts imports**
 
-Replace imports and loop body:
+Replace the current top imports:
 
 ```ts
-// src/main.ts — replace top imports
+// src/main.ts
 
 import { tick as queenTick } from './hatchery/Queen';
 import { process as hatcheryProcess } from './hatchery/Hatchery';
@@ -686,12 +700,22 @@ import * as Harvester from './roles/Harvester';
 import * as Hauler from './roles/Hauler';
 import * as Builder from './roles/Builder';
 import * as Upgrader from './roles/Upgrader';
-import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory } from './lib/Memory';
+import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory, CURRENT_NS } from './lib/Memory';
 import { getTerrainMatrix } from './lib/TerrainMatrix';
 import { planLayout, planSwap } from './colony/Architect';
+import { Goal } from './types';
 ```
 
-Replace the room loop inside `loop()`:
+Remove these two lines:
+```ts
+import { tick as colonyTick } from './colony/Colony';
+import { tick as spawnerTick } from './spawn/Spawner';
+```
+
+- [ ] **Step 2: Update the room loop inside loop()**
+
+The current loop body (lines 178-205) calls `colonyTick(room)` then `spawnerTick(room, goal)`.
+Replace those two calls with Queen + Hatchery:
 
 ```ts
   // Process each owned room
@@ -715,6 +739,9 @@ Replace the room loop inside `loop()`:
     // Create construction sites from swap plan
     createConstructionSites(room);
 
+    // Drain pending roads from traffic heatmap (up to 5 per tick)
+    drainPendingRoads(room);
+
     // Periodic layout rechecking
     recheckLayout(room);
 
@@ -726,17 +753,13 @@ Replace the room loop inside `loop()`:
   }
 ```
 
-Remove the `import { tick as colonyTick } from './colony/Colony';` and `import { tick as spawnerTick } from './spawn/Spawner';` lines.
-
-Remove the `Goal` import if no longer used directly (it may still be used in runCreeps signature). Check if `Goal` type is still referenced — if so, keep the import from types.
-
-- [ ] **Step 2: Delete old files**
+- [ ] **Step 3: Delete old files**
 
 ```bash
 rm src/spawn/Spawner.ts src/spawn/Body.ts src/colony/Colony.ts src/colony/Goal.ts
 ```
 
-- [ ] **Step 3: Build to verify**
+- [ ] **Step 4: Build to verify**
 
 ```bash
 npm run build
@@ -744,7 +767,7 @@ npm run build
 
 Expected: Compiles without errors.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add src/main.ts src/spawn/ src/colony/

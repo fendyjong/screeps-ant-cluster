@@ -2,6 +2,11 @@ import typescript from "@rollup/plugin-typescript";
 import resolve from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
 
+const SERVER_DIRS = [
+  "screeps.com/default",
+  "127_0_0_1___21025/default",
+];
+
 export default {
   input: "src/main.ts",
   plugins: [
@@ -10,9 +15,9 @@ export default {
     commonjs(),
   ],
   treeshake: false,
-  output: {
-    file: "main.js",
+  output: SERVER_DIRS.map(dir => ({
+    file: dir + "/main.js",
     format: "cjs",
-    sourcemap: false
-  }
+    sourcemap: false,
+  })),
 };

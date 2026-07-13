@@ -1,2 +1,4 @@
-.worktrees/
-.gitignore
+/node_modules/
+/.worktrees/
+/screeps.com/
+/127_0_0_1___21025/
