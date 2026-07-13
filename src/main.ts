@@ -7,7 +7,7 @@ import * as Hauler from './roles/Hauler';
 import * as Builder from './roles/Builder';
 import * as Upgrader from './roles/Upgrader';
 import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory, CURRENT_NS } from './lib/Memory';
-import { getTerrainMatrix } from './lib/TerrainMatrix';
+import { getTerrainMatrix } from './lib/PathFinder';
 import { planLayout, planSwap } from './colony/Architect';
 import { Goal } from './types';
 import * as HUD from './lib/HUD';
