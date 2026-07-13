@@ -71,11 +71,10 @@ export const BUILD_PRIORITIES: StructureConstant[] = [
   STRUCTURE_NUKER,
   STRUCTURE_POWER_SPAWN,
   STRUCTURE_EXTRACTOR,
-  STRUCTURE_ROAD,
-  STRUCTURE_WALL,
-  STRUCTURE_RAMPART,
-  STRUCTURE_CONTAINER,
   STRUCTURE_EXTENSION,
+  STRUCTURE_ROAD,
+  STRUCTURE_RAMPART,
+  STRUCTURE_WALL,
 ];
 
 export function sortByPriority(buildList: { pos: RoomPosition; structureType: StructureConstant }[]): { pos: RoomPosition; structureType: StructureConstant }[] {
@@ -87,11 +86,23 @@ export function sortByPriority(buildList: { pos: RoomPosition; structureType: St
 }
 
 export interface BunkerLayout {
+  anchor: RoomPosition;
   spawn: RoomPosition;
-  towers: RoomPosition[];
   storage: RoomPosition;
+  terminal: RoomPosition;
+  factory: RoomPosition;
+  powerSpawn: RoomPosition;
+  nuker: RoomPosition;
+  observer: RoomPosition;
+  labs: RoomPosition[];
+  extensions: RoomPosition[];
+  towers: RoomPosition[];
+  linkSpawn: RoomPosition;
+  linkController: RoomPosition;
+  linkLab: RoomPosition;
   ramparts: RoomPosition[];
   walls: RoomPosition[];
+  roads: RoomPosition[];
 }
 
 export interface SwapPlan {
@@ -234,13 +245,126 @@ export function planSwap(room: Room, layout: BunkerLayout): SwapPlan {
     }
   }
   
-  for (const towerPos of layout.towers) {
+for (const towerPos of layout.towers) {
     const exists = existingTowers.some(t => t.pos.isEqualTo(towerPos));
     if (!exists) {
       build.push({ pos: towerPos, structureType: STRUCTURE_TOWER });
     }
   }
-  
+
+  // Check terminal
+  const existingTerminal = room.find(FIND_MY_STRUCTURES, {
+    filter: (s) => s.structureType === STRUCTURE_TERMINAL
+  })[0];
+  if (existingTerminal && !existingTerminal.pos.isEqualTo(layout.terminal)) {
+    if (isSafeToDestroy(room, existingTerminal)) {
+      destroy.push(existingTerminal.id);
+      build.push({ pos: layout.terminal, structureType: STRUCTURE_TERMINAL });
+    }
+  }
+
+  // Check factory
+  const existingFactory = room.find(FIND_MY_STRUCTURES, {
+    filter: (s) => s.structureType === STRUCTURE_FACTORY
+  })[0];
+  if (existingFactory && !existingFactory.pos.isEqualTo(layout.factory)) {
+    if (isSafeToDestroy(room, existingFactory)) {
+      destroy.push(existingFactory.id);
+      build.push({ pos: layout.factory, structureType: STRUCTURE_FACTORY });
+    }
+  }
+
+  // Check power spawn
+  const existingPowerSpawn = room.find(FIND_MY_STRUCTURES, {
+    filter: (s) => s.structureType === STRUCTURE_POWER_SPAWN
+  })[0];
+  if (existingPowerSpawn && !existingPowerSpawn.pos.isEqualTo(layout.powerSpawn)) {
+    if (isSafeToDestroy(room, existingPowerSpawn)) {
+      destroy.push(existingPowerSpawn.id);
+      build.push({ pos: layout.powerSpawn, structureType: STRUCTURE_POWER_SPAWN });
+    }
+  }
+
+  // Check nuker
+  const existingNuker = room.find(FIND_MY_STRUCTURES, {
+    filter: (s) => s.structureType === STRUCTURE_NUKER
+  })[0];
+  if (existingNuker && !existingNuker.pos.isEqualTo(layout.nuker)) {
+    if (isSafeToDestroy(room, existingNuker)) {
+      destroy.push(existingNuker.id);
+      build.push({ pos: layout.nuker, structureType: STRUCTURE_NUKER });
+    }
+  }
+
+  // Check observer
+  const existingObserver = room.find(FIND_MY_STRUCTURES, {
+    filter: (s) => s.structureType === STRUCTURE_OBSERVER
+  })[0];
+  if (existingObserver && !existingObserver.pos.isEqualTo(layout.observer)) {
+    if (isSafeToDestroy(room, existingObserver)) {
+      destroy.push(existingObserver.id);
+      build.push({ pos: layout.observer, structureType: STRUCTURE_OBSERVER });
+    }
+  }
+
+  // Check labs
+  const existingLabs = room.find(FIND_MY_STRUCTURES, {
+    filter: (s) => s.structureType === STRUCTURE_LAB
+  });
+  const labPosSet = new Set(layout.labs.map(p => p.x + ',' + p.y));
+  for (const lab of existingLabs) {
+    if (!labPosSet.has(lab.pos.x + ',' + lab.pos.y)) {
+      if (isSafeToDestroy(room, lab)) {
+        destroy.push(lab.id);
+      }
+    }
+  }
+  for (const labPos of layout.labs) {
+    const exists = existingLabs.some(l => l.pos.isEqualTo(labPos));
+    if (!exists) {
+      build.push({ pos: labPos, structureType: STRUCTURE_LAB });
+    }
+  }
+
+  // Check links
+  const existingLinks = room.find(FIND_MY_STRUCTURES, {
+    filter: (s) => s.structureType === STRUCTURE_LINK
+  });
+  const linkPositions = [layout.linkSpawn, layout.linkController, layout.linkLab].filter(isWalkablePos);
+  const linkPosSet = new Set(linkPositions.map(p => p.x + ',' + p.y));
+  for (const link of existingLinks) {
+    if (!linkPosSet.has(link.pos.x + ',' + link.pos.y)) {
+      if (isSafeToDestroy(room, link)) {
+        destroy.push(link.id);
+      }
+    }
+  }
+  for (const linkPos of linkPositions) {
+    const exists = existingLinks.some(l => l.pos.isEqualTo(linkPos));
+    if (!exists) {
+      build.push({ pos: linkPos, structureType: STRUCTURE_LINK });
+    }
+  }
+
+  // Check extensions
+  const existingExtensions = room.find(FIND_MY_STRUCTURES, {
+    filter: (s) => s.structureType === STRUCTURE_EXTENSION
+  });
+  const extPosSet = new Set(layout.extensions.map(p => p.x + ',' + p.y));
+  for (const ext of existingExtensions) {
+    if (!extPosSet.has(ext.pos.x + ',' + ext.pos.y)) {
+      if (isSafeToDestroy(room, ext)) {
+        destroy.push(ext.id);
+      }
+    }
+  }
+  for (const extPos of layout.extensions) {
+    const exists = existingExtensions.some(e => e.pos.isEqualTo(extPos));
+    if (!exists) {
+      build.push({ pos: extPos, structureType: STRUCTURE_EXTENSION });
+    }
+  }
+
   // Sort build list by priority
   const sortedBuild = sortByPriority(build);
   
@@ -249,4 +373,8 @@ export function planSwap(room: Room, layout: BunkerLayout): SwapPlan {
     build: sortedBuild,
     state: 'idle',
   };
+}
+
+function isWalkablePos(pos: RoomPosition): boolean {
+  return pos !== undefined && pos.x >= 0 && pos.y >= 0;
 }
