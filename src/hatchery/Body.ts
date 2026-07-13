@@ -20,6 +20,7 @@ export function scaleBody(
 	ideal: BodyPartConstant[],
 	availableEnergy: number
 ): BodyPartConstant[] | null {
+	if (min.length > 50) return null;
 	const minCost = bodyCost(min);
 	if (minCost > availableEnergy) return null;
 
