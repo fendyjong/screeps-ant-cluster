@@ -2,133 +2,137 @@
 
 import { moveTo } from '../lib/Pathing';
 import { getTerrainMatrix } from '../lib/PathFinder';
+import { getTask, setTask, clearTask, isValidTask, executeTask } from '../lib/TaskManager';
 
 function findSource(creep: Creep): Source | null {
-  const sources = creep.room.find(FIND_SOURCES_ACTIVE);
-  if (sources.length === 0) {
-    const allSources = creep.room.find(FIND_SOURCES);
-    return allSources[0] || null;
-  }
+	const sources = creep.room.find(FIND_SOURCES_ACTIVE);
+	if (sources.length === 0) {
+		const allSources = creep.room.find(FIND_SOURCES);
+		return allSources[0] || null;
+	}
 
-  const harvesters = creep.room.find(FIND_MY_CREEPS, {
-    filter: (c: Creep) => c.memory.role === 'harvester' && c.name !== creep.name
-  });
+	const harvesters = creep.room.find(FIND_MY_CREEPS, {
+		filter: (c: Creep) => c.memory.role === 'harvester' && c.name !== creep.name
+	});
 
-  let best: Source | null = null;
-  let bestScore = Infinity;
+	let best: Source | null = null;
+	let bestScore = Infinity;
 
-  for (const source of sources) {
-    const dist = creep.pos.getRangeTo(source);
-    const harvesterCount = harvesters.filter((h: Creep) =>
-      h.memory.targetSourceId === source.id
-    ).length;
-    const score = dist * 10 + harvesterCount;
-    if (score < bestScore) {
-      bestScore = score;
-      best = source;
-    }
-  }
+	for (const source of sources) {
+		const dist = creep.pos.getRangeTo(source);
+		const harvesterCount = harvesters.filter((h: Creep) =>
+			h.memory.task?.targetId === source.id
+		).length;
+		const score = dist * 10 + harvesterCount;
+		if (score < bestScore) {
+			bestScore = score;
+			best = source;
+		}
+	}
 
-  return best;
+	return best;
 }
 
 function findDropOff(creep: Creep): Structure | null {
-  // Prefer containers and storage
-  const targets = creep.room.find(FIND_STRUCTURES, {
-    filter: (s) => (
-      (s.structureType === STRUCTURE_CONTAINER ||
-       s.structureType === STRUCTURE_STORAGE) &&
-      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-    )
-  });
-  
-  if (targets.length > 0) {
-    return creep.pos.findClosestByPath(targets);
-  }
-  
-  // Fallback to spawn and extensions
-  const spawnTargets = creep.room.find(FIND_MY_STRUCTURES, {
-    filter: (s) => (
-      (s.structureType === STRUCTURE_SPAWN ||
-       s.structureType === STRUCTURE_EXTENSION) &&
-      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-    )
-  });
-  
-  if (spawnTargets.length > 0) {
-    return creep.pos.findClosestByPath(spawnTargets);
-  }
-  
-  return null;
+	const targets = creep.room.find(FIND_STRUCTURES, {
+		filter: (s) => (
+			(s.structureType === STRUCTURE_CONTAINER ||
+			 s.structureType === STRUCTURE_STORAGE) &&
+			s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+		)
+	});
+
+	if (targets.length > 0) {
+		return creep.pos.findClosestByPath(targets);
+	}
+
+	const spawnTargets = creep.room.find(FIND_MY_STRUCTURES, {
+		filter: (s) => (
+			(s.structureType === STRUCTURE_SPAWN ||
+			 s.structureType === STRUCTURE_EXTENSION) &&
+			s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+		)
+	});
+
+	if (spawnTargets.length > 0) {
+		return creep.pos.findClosestByPath(spawnTargets);
+	}
+
+	return null;
 }
 
-function harvestAndTransfer(creep: Creep): void {
-  if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
-    const source = findSource(creep);
-    if (!source) return;
+function actionHarvest(creep: Creep): boolean {
+	if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) return false;
 
-    creep.memory.targetSourceId = source.id;
+	let task = getTask(creep);
+	if (task && task.type === 'harvest' && isValidTask(creep)) return true;
 
-    const totalAdj = [...getAdjacentWalkable(getTerrainMatrix(creep.room.name), source.pos)].length;
-    const busyAdj = source.pos.findInRange(FIND_MY_CREEPS, 1)
-      .filter((c: Creep) => c.pos.getRangeTo(source) === 1).length;
+	const source = findSource(creep);
+	if (!source) return false;
+	setTask(creep, 'harvest', source.id);
 
-    if (busyAdj >= totalAdj && totalAdj > 0 && creep.pos.getRangeTo(source) <= 1) {
-      const freeSpots = getAdjacentWalkable(getTerrainMatrix(creep.room.name), source.pos)
-        .filter((p: RoomPosition) => creep.room.lookForAt(LOOK_CREEPS, p.x, p.y).length === 0);
-      if (freeSpots.length > 0) {
-        moveTo(creep, freeSpots[0]);
-        return;
-      }
-    }
+	const totalAdj = [
+		{ dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+		{ dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+		{ dx: -1, dy: -1 }, { dx: 1, dy: -1 },
+		{ dx: -1, dy: 1 }, { dx: 1, dy: 1 },
+	].filter(d => {
+		const x = source.pos.x + d.dx, y = source.pos.y + d.dy;
+		if (x < 0 || x >= 50 || y < 0 || y >= 50) return false;
+		return getTerrainMatrix(creep.room.name).get(x, y) < 255;
+	}).length;
 
-    if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
-      moveTo(creep, source);
-    }
-  } else {
-    const dropOff = findDropOff(creep);
-    if (dropOff) {
-      if (creep.transfer(dropOff, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-        moveTo(creep, dropOff);
-      }
-    }
-  }
+	const busyAdj = source.pos.findInRange(FIND_MY_CREEPS, 1)
+		.filter((c: Creep) => c.pos.getRangeTo(source) === 1).length;
+
+	if (busyAdj >= totalAdj && totalAdj > 0 && creep.pos.getRangeTo(source) <= 1) {
+		const freeSpots = [
+			{ dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+			{ dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+			{ dx: -1, dy: -1 }, { dx: 1, dy: -1 },
+			{ dx: -1, dy: 1 }, { dx: 1, dy: 1 },
+		]
+			.map(d => new RoomPosition(source.pos.x + d.dx, source.pos.y + d.dy, creep.room.name))
+			.filter(p => {
+				if (p.x < 0 || p.x >= 50 || p.y < 0 || p.y >= 50) return false;
+				return getTerrainMatrix(creep.room.name).get(p.x, p.y) < 255
+					&& creep.room.lookForAt(LOOK_CREEPS, p.x, p.y).length === 0;
+			});
+		if (freeSpots.length > 0) {
+			moveTo(creep, freeSpots[0]);
+			return true;
+		}
+	}
+
+	return true;
 }
 
-function repairNearby(creep: Creep): void {
-  const damagedStructures = creep.room.find(FIND_STRUCTURES, {
-    filter: (s) => s.hits < s.hitsMax && s.structureType !== STRUCTURE_WALL
-  });
-  
-  if (damagedStructures.length > 0) {
-    const target = creep.pos.findClosestByPath(damagedStructures);
-    if (target) {
-      if (creep.repair(target) === ERR_NOT_IN_RANGE) {
-        moveTo(creep, target);
-      }
-    }
-  }
+function actionTransfer(creep: Creep): boolean {
+	if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) return false;
+
+	let task = getTask(creep);
+	if (task && task.type === 'transfer' && isValidTask(creep)) return true;
+
+	const dropOff = findDropOff(creep);
+	if (!dropOff) return false;
+	setTask(creep, 'transfer', dropOff.id);
+	return true;
 }
 
-function getAdjacentWalkable(matrix: CostMatrix, pos: RoomPosition): RoomPosition[] {
-  const dirs = [
-    { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
-    { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
-    { dx: -1, dy: -1 }, { dx: 1, dy: -1 },
-    { dx: -1, dy: 1 }, { dx: 1, dy: 1 },
-  ];
-  const result: RoomPosition[] = [];
-  for (const d of dirs) {
-    const x = pos.x + d.dx;
-    const y = pos.y + d.dy;
-    const matrixCost = matrix.get(x, y);
-    if (x >= 0 && x < 50 && y >= 0 && y < 50 && matrixCost < 255) {
-      result.push(new RoomPosition(x, y, pos.roomName));
-    }
-  }
-  return result;
-}
+export const PRIORITY: ((creep: Creep) => boolean)[] = [
+	actionHarvest,
+	actionTransfer,
+];
 
 export function run(creep: Creep): void {
-  harvestAndTransfer(creep);
+	if (isValidTask(creep)) {
+		const result = executeTask(creep);
+		if (result !== 'invalid') return;
+	}
+	for (const action of PRIORITY) {
+		if (action(creep)) {
+			executeTask(creep);
+			return;
+		}
+	}
 }
