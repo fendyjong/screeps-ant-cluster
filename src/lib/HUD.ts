@@ -13,17 +13,15 @@ function drawPanel(vis: RoomVisual, x: number, y: number, rows: string[][], widt
     if (row[0]) {
       vis.text(row[0], x, rowY, {
         align: 'left',
-        fontSize: 7,
+        font: '7px monospace',
         color: '#888888',
-        font: 'monospace',
       });
     }
     if (row[1]) {
       vis.text(row[1], x + width - 0.5, rowY, {
         align: 'right',
-        fontSize: 7,
+        font: '7px monospace',
         color: '#ffffff',
-        font: 'monospace',
       });
     }
   }
@@ -32,7 +30,7 @@ function drawPanel(vis: RoomVisual, x: number, y: number, rows: string[][], widt
 function drawTopLeft(vis: RoomVisual, room: Room): void {
   const rcl = room.controller ? room.controller.level : 0;
   const sources = room.find(FIND_SOURCES);
-  const harvesters = _.filter(Game.creeps, (c: Creep) =>
+  const harvesters = Object.values(Game.creeps).filter((c: Creep) =>
     c.memory.roomName === room.name && c.memory.role === 'harvester'
   );
   const sourceAssignments = sources.map((s: Source) => {
@@ -45,7 +43,7 @@ function drawTopLeft(vis: RoomVisual, room: Room): void {
     ? Math.round(sources.reduce((sum: number, s: Source) => sum + s.energy / s.energyCapacity, 0) / sources.length * 100)
     : 0;
 
-  const myCreeps = _.filter(Game.creeps, (c: Creep) => c.memory.roomName === room.name);
+  const myCreeps = Object.values(Game.creeps).filter((c: Creep) => c.memory.roomName === room.name);
   const idle = myCreeps.filter((c: Creep) => (c.memory._stuckTicks || 0) > 5).length;
 
   const cpuAtStart = (Memory.v1 as any).hud?.cpuTick?.[room.name] || 0;
