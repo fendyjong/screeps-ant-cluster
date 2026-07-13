@@ -464,6 +464,13 @@ function run(creep, goal) {
     }
 }
 
+const CURRENT_NS = 'v1';
+const ENGINE_KEYS = {
+    creeps: true,
+    rooms: true,
+    flags: true,
+    powerCreeps: true,
+};
 function ensureRoomMemory(room) {
     if (!room.memory.goal) {
         room.memory.goal = Goal.ECONOMY;
@@ -477,6 +484,20 @@ function ensureCreepMemory(creep) {
         creep.memory.roomName = creep.room.name;
     }
 }
+function ensureMemoryNs() {
+    if (!Memory[CURRENT_NS]) {
+        Memory[CURRENT_NS] = {};
+    }
+}
+function cleanLegacyMemory() {
+    for (const key in Memory) {
+        if (key === CURRENT_NS)
+            continue;
+        if (ENGINE_KEYS[key])
+            continue;
+        delete Memory[key];
+    }
+}
 
 const TERRAIN_COSTS = {
     plain: 1,
@@ -484,11 +505,13 @@ const TERRAIN_COSTS = {
     wall: 255,
 };
 function ensurePathingMemory() {
-    if (!Memory.pathing) {
-        Memory.pathing = {};
+    ensureMemoryNs();
+    const ns = Memory[CURRENT_NS];
+    if (!ns.pathing) {
+        ns.pathing = {};
     }
-    if (!Memory.pathing.terrain) {
-        Memory.pathing.terrain = {};
+    if (!ns.pathing.terrain) {
+        ns.pathing.terrain = {};
     }
 }
 function generateTerrainMatrix(roomName) {
@@ -512,12 +535,13 @@ function generateTerrainMatrix(roomName) {
 }
 function getTerrainMatrix(roomName) {
     ensurePathingMemory();
-    const cached = Memory.pathing.terrain[roomName];
+    const ns = Memory[CURRENT_NS];
+    const cached = ns.pathing.terrain[roomName];
     if (cached) {
         return PathFinder.CostMatrix.deserialize(cached.matrix);
     }
     const matrix = generateTerrainMatrix(roomName);
-    Memory.pathing.terrain[roomName] = {
+    ns.pathing.terrain[roomName] = {
         matrix: matrix.serialize(),
         tick: Game.time,
     };
@@ -930,11 +954,22 @@ function recheckLayout(room) {
     }
 }
 const loop = () => {
+    // Migration: carry v1 → v2 (or whatever next version) when CURRENT_NS changes
+    if (Memory.v1 && !Memory[CURRENT_NS]) {
+        Memory[CURRENT_NS] = Memory.v1;
+        delete Memory.v1;
+    }
+    // Ensure current version namespace exists
+    ensureMemoryNs();
     // Clean up dead creep memory
     for (const name in Memory.creeps) {
         if (!Game.creeps[name]) {
             delete Memory.creeps[name];
         }
+    }
+    // Prune legacy top-level Memory keys every 100 ticks
+    if (Game.time % 100 === 0) {
+        cleanLegacyMemory();
     }
     // Process each owned room
     for (const roomName in Game.rooms) {

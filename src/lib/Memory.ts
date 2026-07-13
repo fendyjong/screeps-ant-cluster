@@ -5,6 +5,8 @@ export const CURRENT_NS = 'v1';
 const ENGINE_KEYS: Record<string, true> = {
   creeps: true,
   rooms: true,
+  flags: true,
+  powerCreeps: true,
 };
 
 export function ensureRoomMemory(room: Room): void {
