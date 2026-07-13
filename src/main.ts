@@ -12,7 +12,7 @@ import { shouldRecheck, demolishMisplaced, buildMissing } from './colony/SwapExe
 import { planLayout } from './colony/LayoutPlanner';
 import { planSwap } from './colony/SwapPlanner';
 import * as HUD from './lib/HUD';
-import { trackIncome, getBudget, getHealth, trackBuild, getCpuBudgets } from './lib/Cashflow';
+import { trackIncome, getHealth, trackBuild, getCpuBudgets } from './lib/Cashflow';
 import { hostileWatcher, expansionWatcher } from './colony/Watchers';
 import { drainPendingRoads } from './colony/RoadDrainer';
 import { recheckLayout } from './colony/LayoutWatcher';
