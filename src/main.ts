@@ -57,37 +57,58 @@ const STRUCTURE_COSTS: Record<string, number> = {
 function createConstructionSites(room: Room): void {
   const layout = room.memory.layout;
   if (!layout || !layout.swap || layout.swap.build.length === 0) return;
-  
+
   // Only create sites every 100 ticks
   if (Game.time % 100 !== 0) return;
-  
+
   // Check energy availability
   const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
-  
+
   const sitesPerRun = 5;
   let sitesCreated = 0;
-  
+
   for (const entry of layout.swap.build) {
     // Skip if construction site already exists at this position
     const existingSite = sites.find(s => 
       s.pos.isEqualTo(entry.pos) && s.structureType === entry.structureType
     );
     if (existingSite) continue;
-    
+
     // Skip if structure already exists at this position
     const existingStructure = room.lookForAt(LOOK_STRUCTURES, entry.pos.x, entry.pos.y)
       .find(s => s.structureType === entry.structureType);
     if (existingStructure) continue;
-    
+
     // Check energy availability (50% of structure cost)
     const cost = STRUCTURE_COSTS[entry.structureType] || 0;
     if (cost > 0 && room.energyAvailable < cost * 0.5) continue;
-    
+
     // Create construction site
     const result = room.createConstructionSite(entry.pos, entry.structureType);
     if (result === OK) {
       sitesCreated++;
       if (sitesCreated >= sitesPerRun) break;
+    }
+  }
+}
+
+const MAX_ROADS_PER_TICK = 5;
+
+function drainPendingRoads(room: Room): void {
+  const ns = Memory[CURRENT_NS];
+  if (!ns.pathing || !ns.pathing.pendingRoads) return;
+
+  const pending = ns.pathing.pendingRoads;
+  let placed = 0;
+
+  for (let i = pending.length - 1; i >= 0 && placed < MAX_ROADS_PER_TICK; i--) {
+    const entry = pending[i];
+    if (entry.roomName !== room.name) continue;
+
+    const result = room.createConstructionSite(entry.x, entry.y, STRUCTURE_ROAD);
+    if (result === OK || result === ERR_INVALID_TARGET) {
+      pending.splice(i, 1);
+      if (result === OK) placed++;
     }
   }
 }
@@ -172,6 +193,9 @@ export const loop = (): void => {
 
     // Create construction sites from swap plan
     createConstructionSites(room);
+
+    // Drain pending roads from traffic heatmap (up to 5 per tick)
+    drainPendingRoads(room);
 
     // Periodic layout rechecking
     recheckLayout(room);

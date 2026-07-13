@@ -366,6 +366,8 @@ function getOrBuildCostMatrix(room) {
 function recordTraffic(creep) {
     const roomName = creep.room.name;
     const ns = Memory[CURRENT_NS];
+    if (!ns.pathing)
+        ns.pathing = {};
     if (!ns.pathing.traffic)
         ns.pathing.traffic = {};
     if (!ns.pathing.traffic[roomName])
@@ -375,7 +377,9 @@ function recordTraffic(creep) {
     const heatmap = ns.pathing.traffic[roomName];
     heatmap[key] = (heatmap[key] || 0) + 1;
     if (heatmap[key] >= TRAFFIC_THRESHOLD) {
-        creep.room.createConstructionSite(pos.x, pos.y, STRUCTURE_ROAD);
+        if (!ns.pathing.pendingRoads)
+            ns.pathing.pendingRoads = [];
+        ns.pathing.pendingRoads.push({ roomName, x: pos.x, y: pos.y });
         heatmap[key] = 0;
     }
 }
@@ -1361,6 +1365,25 @@ function createConstructionSites(room) {
         }
     }
 }
+const MAX_ROADS_PER_TICK = 5;
+function drainPendingRoads(room) {
+    const ns = Memory[CURRENT_NS];
+    if (!ns.pathing || !ns.pathing.pendingRoads)
+        return;
+    const pending = ns.pathing.pendingRoads;
+    let placed = 0;
+    for (let i = pending.length - 1; i >= 0 && placed < MAX_ROADS_PER_TICK; i--) {
+        const entry = pending[i];
+        if (entry.roomName !== room.name)
+            continue;
+        const result = room.createConstructionSite(entry.x, entry.y, STRUCTURE_ROAD);
+        if (result === OK || result === ERR_INVALID_TARGET) {
+            pending.splice(i, 1);
+            if (result === OK)
+                placed++;
+        }
+    }
+}
 function recheckLayout(room) {
     // Only recheck every 200 ticks
     if (Game.time % 200 !== 0)
@@ -1430,6 +1453,8 @@ const loop = () => {
         }
         // Create construction sites from swap plan
         createConstructionSites(room);
+        // Drain pending roads from traffic heatmap (up to 5 per tick)
+        drainPendingRoads(room);
         // Periodic layout rechecking
         recheckLayout(room);
         tick(room, room.memory.goal);

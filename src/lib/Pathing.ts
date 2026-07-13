@@ -88,6 +88,7 @@ function getOrBuildCostMatrix(room: Room): CostMatrix {
 function recordTraffic(creep: Creep): void {
 	const roomName = creep.room.name;
 	const ns = Memory[CURRENT_NS];
+	if (!ns.pathing) ns.pathing = {};
 	if (!ns.pathing.traffic) ns.pathing.traffic = {};
 	if (!ns.pathing.traffic[roomName]) ns.pathing.traffic[roomName] = {};
 
@@ -97,7 +98,8 @@ function recordTraffic(creep: Creep): void {
 	heatmap[key] = (heatmap[key] || 0) + 1;
 
 	if (heatmap[key] >= TRAFFIC_THRESHOLD) {
-		creep.room.createConstructionSite(pos.x, pos.y, STRUCTURE_ROAD);
+		if (!ns.pathing.pendingRoads) ns.pathing.pendingRoads = [];
+		ns.pathing.pendingRoads.push({ roomName, x: pos.x, y: pos.y });
 		heatmap[key] = 0;
 	}
 }
