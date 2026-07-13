@@ -1,3 +1,4 @@
+import { CostMatrix } from 'screeps';
 import { getTerrainMatrix, isWalkable, findOptimalTowerPositions, findChokepoints } from '../lib/TerrainMatrix';
 
 const REBUILD_COSTS: Record<StructureConstant, number> = {
@@ -182,38 +183,261 @@ function findRampartPositions(roomName: string, layout: BunkerLayout): RoomPosit
 }
 
 function findWallPositions(roomName: string, _layout: BunkerLayout): RoomPosition[] {
-  return findChokepoints(roomName).slice(0, 20);
+	return findChokepoints(roomName).slice(0, 20);
+}
+
+function getAdjacentWalkable(matrix: CostMatrix, pos: RoomPosition): RoomPosition[] {
+	const dirs = [
+		{ dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+		{ dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+		{ dx: -1, dy: -1 }, { dx: 1, dy: -1 },
+		{ dx: -1, dy: 1 }, { dx: 1, dy: 1 },
+	];
+	const result: RoomPosition[] = [];
+	for (const d of dirs) {
+		const x = pos.x + d.dx;
+		const y = pos.y + d.dy;
+		if (isWalkable(matrix, x, y)) {
+			result.push(new RoomPosition(x, y, pos.roomName));
+		}
+	}
+	return result;
+}
+
+function carveCoreZone(room: Room, anchor: RoomPosition, matrix: CostMatrix): BunkerLayout {
+	const layout = {} as BunkerLayout;
+	layout.anchor = anchor;
+	layout.spawn = anchor;
+
+	const coreTiles = new Map<string, RoomPosition>();
+	coreTiles.set(anchor.x + ',' + anchor.y, anchor);
+
+	const queue = [anchor];
+	while (queue.length > 0 && coreTiles.size < 25) {
+		const current = queue.shift()!;
+		for (const adj of getAdjacentWalkable(matrix, current)) {
+			const key = adj.x + ',' + adj.y;
+			if (!coreTiles.has(key)) {
+				coreTiles.set(key, adj);
+				queue.push(adj);
+			}
+		}
+	}
+
+	const sortedTiles = Array.from(coreTiles.values())
+		.sort((a, b) => a.getRangeTo(anchor) - b.getRangeTo(anchor));
+
+	const adjToSpawn = sortedTiles.filter(t => t.getRangeTo(anchor) === 1);
+	layout.storage = adjToSpawn[0] || sortedTiles[1];
+	layout.terminal = adjToSpawn[1] || sortedTiles[2];
+	layout.factory = adjToSpawn[2] || sortedTiles[3];
+	layout.powerSpawn = adjToSpawn[3] || sortedTiles[4];
+	layout.nuker = sortedTiles[5] || sortedTiles[6];
+	layout.observer = sortedTiles[6] || sortedTiles[7];
+	layout.linkSpawn = sortedTiles[8] || sortedTiles[7];
+
+	layout.labs = [];
+	layout.extensions = [];
+	layout.towers = [];
+	layout.ramparts = [];
+	layout.walls = [];
+	layout.roads = [];
+	layout.linkController = layout.linkSpawn;
+	layout.linkLab = layout.linkSpawn;
+
+	return layout;
+}
+
+function carveLabZone(room: Room, matrix: CostMatrix, coreKeys: Set<string>): RoomPosition[] {
+	const roomName = room.name;
+	const labs: RoomPosition[] = [];
+	const claimed = new Set(coreKeys);
+
+	const queue: RoomPosition[] = [];
+	for (const key of coreKeys) {
+		const [x, y] = key.split(',').map(Number);
+		queue.push(new RoomPosition(x, y, roomName));
+	}
+
+	const candidates: RoomPosition[] = [];
+	const visited = new Set<string>();
+	while (queue.length > 0 && candidates.length < 30) {
+		const current = queue.shift()!;
+		for (const adj of getAdjacentWalkable(matrix, current)) {
+			const key = adj.x + ',' + adj.y;
+			if (claimed.has(key) || visited.has(key)) continue;
+			visited.add(key);
+			candidates.push(adj);
+			queue.push(adj);
+		}
+	}
+
+	candidates.sort((a, b) => {
+		const distA = a.getRangeTo(new RoomPosition(25, 25, roomName));
+		const distB = b.getRangeTo(new RoomPosition(25, 25, roomName));
+		return distA - distB;
+	});
+
+	const labCount = Math.min(15, candidates.length);
+	for (let i = 0; i < labCount; i++) {
+		labs.push(candidates[i]);
+		claimed.add(candidates[i].x + ',' + candidates[i].y);
+	}
+
+	return labs;
+}
+
+function carveExtensions(
+	room: Room, matrix: CostMatrix,
+	coreKeys: Set<string>, labKeys: Set<string>
+): RoomPosition[] {
+	const roomName = room.name;
+	const claimed = new Set<string>();
+	for (const k of coreKeys) claimed.add(k);
+	for (const k of labKeys) claimed.add(k);
+
+	const extensions: RoomPosition[] = [];
+	const controllerLevel = room.controller ? room.controller.level : 1;
+	const maxExtensions = Math.min(60, CONTROLLER_STRUCTURES[STRUCTURE_EXTENSION][controllerLevel] || 0);
+
+	const queue: RoomPosition[] = [];
+	for (const key of claimed) {
+		const [x, y] = key.split(',').map(Number);
+		for (const adj of getAdjacentWalkable(matrix, new RoomPosition(x, y, roomName))) {
+			const k = adj.x + ',' + adj.y;
+			if (!claimed.has(k)) {
+				queue.push(adj);
+				claimed.add(k);
+			}
+		}
+	}
+
+	while (queue.length > 0 && extensions.length < maxExtensions) {
+		const pos = queue.shift()!;
+		extensions.push(pos);
+		for (const adj of getAdjacentWalkable(matrix, pos)) {
+			const k = adj.x + ',' + adj.y;
+			if (!claimed.has(k)) {
+				queue.push(adj);
+				claimed.add(k);
+			}
+		}
+	}
+
+	return extensions;
+}
+
+function placeTowers(room: Room, matrix: CostMatrix, extensions: RoomPosition[]): RoomPosition[] {
+	const controllerLevel = room.controller ? room.controller.level : 1;
+	const towerCount = Math.min(6, CONTROLLER_STRUCTURES[STRUCTURE_TOWER][controllerLevel] || 0);
+	return findOptimalTowerPositions(room.name, towerCount);
+}
+
+function computeRampartPositions(
+	core: BunkerLayout, labs: RoomPosition[], extensions: RoomPosition[]
+): RoomPosition[] {
+	const ramparts: RoomPosition[] = [];
+
+	const corePositions = [
+		core.spawn, core.storage, core.terminal, core.factory,
+		core.powerSpawn, core.nuker, core.observer, core.linkSpawn
+	];
+	for (const pos of corePositions) {
+		if (pos && isWalkablePos(pos)) ramparts.push(pos);
+	}
+
+	for (const pos of labs) ramparts.push(pos);
+	for (const pos of core.towers) {
+		if (pos && isWalkablePos(pos)) ramparts.push(pos);
+	}
+
+	return ramparts;
+}
+
+function computeWallPositions(room: Room, matrix: CostMatrix, allStructureKeys: Set<string>): RoomPosition[] {
+	const walls: RoomPosition[] = [];
+	const roomName = room.name;
+
+	for (const key of allStructureKeys) {
+		const [x, y] = key.split(',').map(Number);
+		for (const adj of getAdjacentWalkable(matrix, new RoomPosition(x, y, roomName))) {
+			const k = adj.x + ',' + adj.y;
+			if (!allStructureKeys.has(k)) {
+				walls.push(adj);
+			}
+		}
+	}
+
+	return walls.slice(0, 50);
+}
+
+function computeRoadPositions(
+	room: Room, matrix: CostMatrix,
+	core: BunkerLayout, extensions: RoomPosition[]
+): RoomPosition[] {
+	const roads: RoomPosition[] = [];
+
+	for (const ext of extensions) {
+		roads.push(ext);
+	}
+
+	return roads;
 }
 
 export function planLayout(room: Room): BunkerLayout {
-  const spawnPos = findSpawnPosition(room.name);
-  const storagePos = findStoragePosition(room.name, spawnPos);
-  const towerPositions = findOptimalTowerPositions(room.name, 3);
+	const matrix = getTerrainMatrix(room.name);
+	const anchor = findSpawnPosition(room.name);
 
-  const partialLayout: BunkerLayout = {
-    anchor: spawnPos,
-    spawn: spawnPos,
-    storage: storagePos,
-    terminal: storagePos,
-    factory: storagePos,
-    powerSpawn: storagePos,
-    nuker: storagePos,
-    observer: storagePos,
-    labs: [],
-    extensions: [],
-    towers: towerPositions,
-    linkSpawn: storagePos,
-    linkController: storagePos,
-    linkLab: storagePos,
-    ramparts: [],
-    walls: [],
-    roads: [],
-  };
+	// Phase 1: Core zone
+	const core = carveCoreZone(room, anchor, matrix);
 
-  partialLayout.ramparts = findRampartPositions(room.name, partialLayout);
-  partialLayout.walls = findWallPositions(room.name, partialLayout);
+	// Collect core tile keys
+	const coreKeys = new Set<string>();
+	coreKeys.add(core.spawn.x + ',' + core.spawn.y);
+	coreKeys.add(core.storage.x + ',' + core.storage.y);
+	coreKeys.add(core.terminal.x + ',' + core.terminal.y);
+	coreKeys.add(core.factory.x + ',' + core.factory.y);
+	coreKeys.add(core.powerSpawn.x + ',' + core.powerSpawn.y);
+	coreKeys.add(core.nuker.x + ',' + core.nuker.y);
+	coreKeys.add(core.observer.x + ',' + core.observer.y);
+	coreKeys.add(core.linkSpawn.x + ',' + core.linkSpawn.y);
 
-  return partialLayout;
+	// Phase 2: Lab zone
+	const labs = carveLabZone(room, matrix, coreKeys);
+	core.labs = labs;
+
+	const labKeys = new Set(labs.map(p => p.x + ',' + p.y));
+
+	// Phase 3: Extensions
+	const extensions = carveExtensions(room, matrix, coreKeys, labKeys);
+	core.extensions = extensions;
+
+	// Phase 4: Towers
+	core.towers = placeTowers(room, matrix, extensions);
+
+	// Phase 5: Ramparts + walls
+	const allKeys = new Set<string>();
+	for (const k of coreKeys) allKeys.add(k);
+	for (const k of labKeys) allKeys.add(k);
+	for (const ext of extensions) allKeys.add(ext.x + ',' + ext.y);
+	for (const t of core.towers) allKeys.add(t.x + ',' + t.y);
+
+	core.ramparts = computeRampartPositions(core, labs, extensions);
+	core.walls = computeWallPositions(room, matrix, allKeys);
+
+	// Phase 6: Roads
+	core.roads = computeRoadPositions(room, matrix, core, extensions);
+
+	// Controller link
+	if (room.controller) {
+		core.linkController = new RoomPosition(room.controller.pos.x + 1, room.controller.pos.y, room.name);
+		if (!isWalkable(matrix, core.linkController.x, core.linkController.y)) {
+			core.linkController = new RoomPosition(room.controller.pos.x, room.controller.pos.y + 1, room.name);
+		}
+	}
+	core.linkLab = labs.length > 0 ? labs[Math.floor(labs.length / 2)] : core.linkSpawn;
+
+	return core;
 }
 
 export function planSwap(room: Room, layout: BunkerLayout): SwapPlan {
