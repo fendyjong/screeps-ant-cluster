@@ -116,10 +116,255 @@ function tick(room, goal) {
     }
 }
 
+const CURRENT_NS = 'v1';
+const ENGINE_KEYS = {
+    creeps: true,
+    rooms: true,
+    flags: true,
+    powerCreeps: true,
+};
+function ensureRoomMemory(room) {
+    if (!room.memory.goal) {
+        room.memory.goal = Goal.ECONOMY;
+    }
+}
+function ensureCreepMemory(creep) {
+    if (!creep.memory.role) {
+        creep.memory.role = 'harvester';
+    }
+    if (!creep.memory.roomName) {
+        creep.memory.roomName = creep.room.name;
+    }
+}
+function ensureMemoryNs() {
+    if (!Memory[CURRENT_NS]) {
+        Memory[CURRENT_NS] = {};
+    }
+}
+function cleanLegacyMemory() {
+    for (const key in Memory) {
+        if (key === CURRENT_NS)
+            continue;
+        if (ENGINE_KEYS[key])
+            continue;
+        delete Memory[key];
+    }
+}
+
+const TERRAIN_COSTS = {
+    plain: 1,
+    swamp: 5,
+    wall: 255,
+};
+function ensurePathingMemory() {
+    ensureMemoryNs();
+    const ns = Memory[CURRENT_NS];
+    if (!ns.pathing) {
+        ns.pathing = {};
+    }
+    if (!ns.pathing.terrain) {
+        ns.pathing.terrain = {};
+    }
+}
+function generateTerrainMatrix(roomName) {
+    const matrix = new PathFinder.CostMatrix();
+    const terrain = Game.map.getRoomTerrain(roomName);
+    for (let y = 0; y < 50; y++) {
+        for (let x = 0; x < 50; x++) {
+            const terrainType = terrain.get(x, y);
+            if (terrainType === TERRAIN_MASK_WALL) {
+                matrix.set(x, y, TERRAIN_COSTS.wall);
+            }
+            else if (terrainType === TERRAIN_MASK_SWAMP) {
+                matrix.set(x, y, TERRAIN_COSTS.swamp);
+            }
+            else {
+                matrix.set(x, y, TERRAIN_COSTS.plain);
+            }
+        }
+    }
+    return matrix;
+}
+function getTerrainMatrix(roomName) {
+    ensurePathingMemory();
+    const ns = Memory[CURRENT_NS];
+    const cached = ns.pathing.terrain[roomName];
+    if (cached) {
+        return PathFinder.CostMatrix.deserialize(cached.matrix);
+    }
+    const matrix = generateTerrainMatrix(roomName);
+    ns.pathing.terrain[roomName] = {
+        matrix: matrix.serialize(),
+        tick: Game.time,
+    };
+    return matrix;
+}
+function isWalkable(terrainMatrix, x, y) {
+    if (x < 0 || x > 49 || y < 0 || y > 49)
+        return false;
+    return terrainMatrix.get(x, y) < 255;
+}
+function findWalkablePositions(roomName) {
+    const matrix = getTerrainMatrix(roomName);
+    const positions = [];
+    for (let y = 0; y < 50; y++) {
+        for (let x = 0; x < 50; x++) {
+            if (isWalkable(matrix, x, y)) {
+                positions.push(new RoomPosition(x, y, roomName));
+            }
+        }
+    }
+    return positions;
+}
+function findChokepoints(roomName) {
+    const matrix = getTerrainMatrix(roomName);
+    const chokepoints = [];
+    for (let y = 1; y < 49; y++) {
+        for (let x = 1; x < 49; x++) {
+            if (!isWalkable(matrix, x, y))
+                continue;
+            const neighbors = [
+                isWalkable(matrix, x - 1, y),
+                isWalkable(matrix, x + 1, y),
+                isWalkable(matrix, x, y - 1),
+                isWalkable(matrix, x, y + 1),
+            ];
+            const walkableCount = neighbors.filter(Boolean).length;
+            if (walkableCount <= 2) {
+                chokepoints.push(new RoomPosition(x, y, roomName));
+            }
+        }
+    }
+    return chokepoints;
+}
+function findPerimeterPositions(roomName) {
+    const matrix = getTerrainMatrix(roomName);
+    const perimeter = [];
+    for (let i = 0; i < 50; i++) {
+        if (isWalkable(matrix, i, 1))
+            perimeter.push(new RoomPosition(i, 1, roomName));
+        if (isWalkable(matrix, i, 48))
+            perimeter.push(new RoomPosition(i, 48, roomName));
+        if (isWalkable(matrix, 1, i))
+            perimeter.push(new RoomPosition(1, i, roomName));
+        if (isWalkable(matrix, 48, i))
+            perimeter.push(new RoomPosition(48, i, roomName));
+    }
+    return perimeter;
+}
+function calculateCoverage(pos, range, roomName) {
+    let count = 0;
+    for (let dy = -range; dy <= range; dy++) {
+        for (let dx = -range; dx <= range; dx++) {
+            const x = pos.x + dx;
+            const y = pos.y + dy;
+            if (x >= 0 && x <= 49 && y >= 0 && y <= 49) {
+                const distance = Math.max(Math.abs(dx), Math.abs(dy));
+                if (distance <= range) {
+                    count++;
+                }
+            }
+        }
+    }
+    return count;
+}
+function findOptimalTowerPositions(roomName, count) {
+    const matrix = getTerrainMatrix(roomName);
+    const positions = [];
+    const candidates = [];
+    for (let y = 5; y < 45; y++) {
+        for (let x = 5; x < 45; x++) {
+            if (!isWalkable(matrix, x, y))
+                continue;
+            const pos = new RoomPosition(x, y, roomName);
+            const coverage = calculateCoverage(pos, 10, roomName);
+            const edgeDistance = Math.min(x, y, 49 - x, 49 - y);
+            const score = coverage + edgeDistance * 2;
+            candidates.push({ pos, score });
+        }
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    for (let i = 0; i < Math.min(count, candidates.length); i++) {
+        positions.push(candidates[i].pos);
+    }
+    return positions;
+}
+
+const pathCache = {};
+let cacheTick = -1;
+function clearCache() {
+    if (cacheTick !== Game.time) {
+        for (const key in pathCache)
+            delete pathCache[key];
+        cacheTick = Game.time;
+    }
+}
+function isCreepStuck(creep) {
+    if (!creep.memory._lastPos) {
+        creep.memory._lastPos = { x: creep.pos.x, y: creep.pos.y, roomName: creep.room.name };
+        return false;
+    }
+    const last = creep.memory._lastPos;
+    if (creep.pos.x === last.x && creep.pos.y === last.y && creep.room.name === last.roomName) {
+        creep.memory._stuckTicks = (creep.memory._stuckTicks || 0) + 1;
+    }
+    else {
+        creep.memory._stuckTicks = 0;
+    }
+    creep.memory._lastPos = { x: creep.pos.x, y: creep.pos.y, roomName: creep.room.name };
+    return (creep.memory._stuckTicks || 0) > 1;
+}
+function buildCostMatrix(room) {
+    clearCache();
+    if (pathCache[room.name])
+        return pathCache[room.name];
+    const base = getTerrainMatrix(room.name);
+    const costs = new PathFinder.CostMatrix();
+    for (let y = 0; y < 50; y++) {
+        for (let x = 0; x < 50; x++) {
+            costs.set(x, y, base.get(x, y));
+        }
+    }
+    const structures = room.find(FIND_STRUCTURES);
+    for (let i = 0; i < structures.length; i++) {
+        const s = structures[i];
+        const x = s.pos.x;
+        const y = s.pos.y;
+        if (s.structureType === STRUCTURE_ROAD) {
+            costs.set(x, y, 1);
+        }
+        else if (s.structureType !== STRUCTURE_CONTAINER && s.structureType !== STRUCTURE_RAMPART) {
+            costs.set(x, y, 255);
+        }
+    }
+    const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
+    for (let i = 0; i < sites.length; i++) {
+        const site = sites[i];
+        if (site.structureType !== STRUCTURE_ROAD && site.structureType !== STRUCTURE_CONTAINER && site.structureType !== STRUCTURE_RAMPART) {
+            costs.set(site.pos.x, site.pos.y, 255);
+        }
+    }
+    const creeps = room.find(FIND_CREEPS);
+    for (let i = 0; i < creeps.length; i++) {
+        const c = creeps[i];
+        costs.set(c.pos.x, c.pos.y, c.my ? 8 : 15);
+    }
+    pathCache[room.name] = costs;
+    return costs;
+}
 function moveTo(creep, target, opts) {
+    const stuck = isCreepStuck(creep);
     creep.moveTo(target, {
         visualizePathStyle: { stroke: '#ffffff' },
-        ...opts
+        reusePath: stuck ? 0 : 10,
+        maxOps: stuck ? 2000 : 1200,
+        ignoreCreeps: false,
+        ...opts,
+        costCallback: (roomName, matrix) => {
+            if (roomName !== creep.room.name)
+                return matrix;
+            return buildCostMatrix(creep.room);
+        },
     });
 }
 
@@ -462,180 +707,6 @@ function run(creep, goal) {
             }
         }
     }
-}
-
-const CURRENT_NS = 'v1';
-const ENGINE_KEYS = {
-    creeps: true,
-    rooms: true,
-    flags: true,
-    powerCreeps: true,
-};
-function ensureRoomMemory(room) {
-    if (!room.memory.goal) {
-        room.memory.goal = Goal.ECONOMY;
-    }
-}
-function ensureCreepMemory(creep) {
-    if (!creep.memory.role) {
-        creep.memory.role = 'harvester';
-    }
-    if (!creep.memory.roomName) {
-        creep.memory.roomName = creep.room.name;
-    }
-}
-function ensureMemoryNs() {
-    if (!Memory[CURRENT_NS]) {
-        Memory[CURRENT_NS] = {};
-    }
-}
-function cleanLegacyMemory() {
-    for (const key in Memory) {
-        if (key === CURRENT_NS)
-            continue;
-        if (ENGINE_KEYS[key])
-            continue;
-        delete Memory[key];
-    }
-}
-
-const TERRAIN_COSTS = {
-    plain: 1,
-    swamp: 5,
-    wall: 255,
-};
-function ensurePathingMemory() {
-    ensureMemoryNs();
-    const ns = Memory[CURRENT_NS];
-    if (!ns.pathing) {
-        ns.pathing = {};
-    }
-    if (!ns.pathing.terrain) {
-        ns.pathing.terrain = {};
-    }
-}
-function generateTerrainMatrix(roomName) {
-    const matrix = new PathFinder.CostMatrix();
-    const terrain = Game.map.getRoomTerrain(roomName);
-    for (let y = 0; y < 50; y++) {
-        for (let x = 0; x < 50; x++) {
-            const terrainType = terrain.get(x, y);
-            if (terrainType === TERRAIN_MASK_WALL) {
-                matrix.set(x, y, TERRAIN_COSTS.wall);
-            }
-            else if (terrainType === TERRAIN_MASK_SWAMP) {
-                matrix.set(x, y, TERRAIN_COSTS.swamp);
-            }
-            else {
-                matrix.set(x, y, TERRAIN_COSTS.plain);
-            }
-        }
-    }
-    return matrix;
-}
-function getTerrainMatrix(roomName) {
-    ensurePathingMemory();
-    const ns = Memory[CURRENT_NS];
-    const cached = ns.pathing.terrain[roomName];
-    if (cached) {
-        return PathFinder.CostMatrix.deserialize(cached.matrix);
-    }
-    const matrix = generateTerrainMatrix(roomName);
-    ns.pathing.terrain[roomName] = {
-        matrix: matrix.serialize(),
-        tick: Game.time,
-    };
-    return matrix;
-}
-function isWalkable(terrainMatrix, x, y) {
-    if (x < 0 || x > 49 || y < 0 || y > 49)
-        return false;
-    return terrainMatrix.get(x, y) < 255;
-}
-function findWalkablePositions(roomName) {
-    const matrix = getTerrainMatrix(roomName);
-    const positions = [];
-    for (let y = 0; y < 50; y++) {
-        for (let x = 0; x < 50; x++) {
-            if (isWalkable(matrix, x, y)) {
-                positions.push(new RoomPosition(x, y, roomName));
-            }
-        }
-    }
-    return positions;
-}
-function findChokepoints(roomName) {
-    const matrix = getTerrainMatrix(roomName);
-    const chokepoints = [];
-    for (let y = 1; y < 49; y++) {
-        for (let x = 1; x < 49; x++) {
-            if (!isWalkable(matrix, x, y))
-                continue;
-            const neighbors = [
-                isWalkable(matrix, x - 1, y),
-                isWalkable(matrix, x + 1, y),
-                isWalkable(matrix, x, y - 1),
-                isWalkable(matrix, x, y + 1),
-            ];
-            const walkableCount = neighbors.filter(Boolean).length;
-            if (walkableCount <= 2) {
-                chokepoints.push(new RoomPosition(x, y, roomName));
-            }
-        }
-    }
-    return chokepoints;
-}
-function findPerimeterPositions(roomName) {
-    const matrix = getTerrainMatrix(roomName);
-    const perimeter = [];
-    for (let i = 0; i < 50; i++) {
-        if (isWalkable(matrix, i, 1))
-            perimeter.push(new RoomPosition(i, 1, roomName));
-        if (isWalkable(matrix, i, 48))
-            perimeter.push(new RoomPosition(i, 48, roomName));
-        if (isWalkable(matrix, 1, i))
-            perimeter.push(new RoomPosition(1, i, roomName));
-        if (isWalkable(matrix, 48, i))
-            perimeter.push(new RoomPosition(48, i, roomName));
-    }
-    return perimeter;
-}
-function calculateCoverage(pos, range, roomName) {
-    let count = 0;
-    for (let dy = -range; dy <= range; dy++) {
-        for (let dx = -range; dx <= range; dx++) {
-            const x = pos.x + dx;
-            const y = pos.y + dy;
-            if (x >= 0 && x <= 49 && y >= 0 && y <= 49) {
-                const distance = Math.max(Math.abs(dx), Math.abs(dy));
-                if (distance <= range) {
-                    count++;
-                }
-            }
-        }
-    }
-    return count;
-}
-function findOptimalTowerPositions(roomName, count) {
-    const matrix = getTerrainMatrix(roomName);
-    const positions = [];
-    const candidates = [];
-    for (let y = 5; y < 45; y++) {
-        for (let x = 5; x < 45; x++) {
-            if (!isWalkable(matrix, x, y))
-                continue;
-            const pos = new RoomPosition(x, y, roomName);
-            const coverage = calculateCoverage(pos, 10, roomName);
-            const edgeDistance = Math.min(x, y, 49 - x, 49 - y);
-            const score = coverage + edgeDistance * 2;
-            candidates.push({ pos, score });
-        }
-    }
-    candidates.sort((a, b) => b.score - a.score);
-    for (let i = 0; i < Math.min(count, candidates.length); i++) {
-        positions.push(candidates[i].pos);
-    }
-    return positions;
 }
 
 const REBUILD_COSTS = {
