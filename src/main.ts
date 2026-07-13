@@ -8,6 +8,7 @@ import * as Builder from './roles/Builder';
 import * as Upgrader from './roles/Upgrader';
 import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory, CURRENT_NS } from './lib/Memory';
 import { getTerrainMatrix } from './lib/PathFinder';
+import { shouldRecheck, demolishMisplaced, buildMissing } from './colony/Lifecycle';
 import { planLayout, planSwap } from './colony/Architect';
 import { Goal } from './types';
 import * as HUD from './lib/HUD';
@@ -33,62 +34,6 @@ function runCreeps(room: Room, goal: Goal): void {
       case 'upgrader':
         Upgrader.run(creep, goal);
         break;
-    }
-  }
-}
-
-const STRUCTURE_COSTS: Record<string, number> = {
-  [STRUCTURE_SPAWN]: 15000,
-  [STRUCTURE_STORAGE]: 100000,
-  [STRUCTURE_TOWER]: 5000,
-  [STRUCTURE_LINK]: 5000,
-  [STRUCTURE_TERMINAL]: 100000,
-  [STRUCTURE_LAB]: 50000,
-  [STRUCTURE_FACTORY]: 100000,
-  [STRUCTURE_OBSERVER]: 8000,
-  [STRUCTURE_NUKER]: 100000,
-  [STRUCTURE_POWER_SPAWN]: 200000,
-  [STRUCTURE_EXTRACTOR]: 5000,
-  [STRUCTURE_ROAD]: 300,
-  [STRUCTURE_WALL]: 10000,
-  [STRUCTURE_RAMPART]: 10000,
-  [STRUCTURE_CONTAINER]: 5000,
-  [STRUCTURE_EXTENSION]: 3000,
-};
-
-function createConstructionSites(room: Room): void {
-  const { buildBudget } = getBudget(room);
-  if (buildBudget <= 0) return;
-
-  const layout = room.memory.layout;
-  if (!layout || !layout.swap || layout.swap.build.length === 0) return;
-
-  // Only create sites every 100 ticks
-  if (Game.time % 100 !== 0) return;
-
-  // Check energy availability
-  const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
-
-  const sitesPerRun = 5;
-  let sitesCreated = 0;
-
-  for (const entry of layout.swap.build) {
-    // Skip if construction site already exists at this position
-    const existingSite = sites.find(s => 
-      s.pos.isEqualTo(entry.pos) && s.structureType === entry.structureType
-    );
-    if (existingSite) continue;
-
-    // Skip if structure already exists at this position
-    const existingStructure = room.lookForAt(LOOK_STRUCTURES, entry.pos.x, entry.pos.y)
-      .find(s => s.structureType === entry.structureType);
-    if (existingStructure) continue;
-
-    // Create construction site
-    const result = room.createConstructionSite(entry.pos, entry.structureType);
-    if (result === OK) {
-      sitesCreated++;
-      if (sitesCreated >= sitesPerRun) break;
     }
   }
 }
@@ -207,7 +152,13 @@ export const loop = (): void => {
     }
 
     // Create construction sites from swap plan
-    createConstructionSites(room);
+    if (room.memory.layout && room.memory.layout.swap) {
+      if (shouldRecheck(room)) {
+        demolishMisplaced(room, room.memory.layout.swap);
+      } else if (shouldRecheck(room, 1)) {
+        buildMissing(room, room.memory.layout.swap);
+      }
+    }
 
     // Drain pending roads from traffic heatmap (up to 5 per tick)
     drainPendingRoads(room);
