@@ -372,16 +372,17 @@ function moveTo(creep, target, opts) {
 
 // src/roles/Harvester.ts
 function findSource(creep) {
-    const sources = creep.room.find(FIND_SOURCES);
-    const active = sources.filter(s => s.energy > 0);
-    if (active.length === 0)
-        return sources[0] || null;
+    const sources = creep.room.find(FIND_SOURCES_ACTIVE);
+    if (sources.length === 0) {
+        const allSources = creep.room.find(FIND_SOURCES);
+        return allSources[0] || null;
+    }
     const harvesters = creep.room.find(FIND_MY_CREEPS, {
-        filter: (c) => c.memory.role === 'harvester'
+        filter: (c) => c.memory.role === 'harvester' && c.name !== creep.name
     });
     let best = null;
     let bestScore = Infinity;
-    for (const source of active) {
+    for (const source of sources) {
         const dist = creep.pos.getRangeTo(source);
         const harvesterCount = harvesters.filter((h) => h.memory.targetSourceId === source.id).length;
         const score = dist * 10 + harvesterCount;
@@ -423,10 +424,10 @@ function harvestAndTransfer(creep) {
         const busyAdj = source.pos.findInRange(FIND_MY_CREEPS, 1)
             .filter((c) => c.pos.getRangeTo(source) === 1).length;
         if (busyAdj >= totalAdj && totalAdj > 0 && creep.pos.getRangeTo(source) <= 1) {
-            const waitPos = creep.pos.findClosestByPath(source.pos.findInRange(FIND_STRUCTURES, 3)
-                .filter((s) => s.structureType !== STRUCTURE_WALL));
-            if (waitPos) {
-                moveTo(creep, waitPos);
+            const freeSpots = getAdjacentWalkable$1(getTerrainMatrix(creep.room.name), source.pos)
+                .filter((p) => creep.room.lookForAt(LOOK_CREEPS, p.x, p.y).length === 0);
+            if (freeSpots.length > 0) {
+                moveTo(creep, freeSpots[0]);
                 return;
             }
         }
