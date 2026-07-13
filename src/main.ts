@@ -9,11 +9,10 @@ import * as Upgrader from './roles/Upgrader';
 import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory, CURRENT_NS } from './lib/Memory';
 import { getTerrainMatrix } from './lib/PathFinder';
 import { planLayout, planSwap } from './colony/Architect';
-import { Goal } from './types';
 import * as HUD from './lib/HUD';
 import { trackIncome, getBudget, getHealth, trackBuild } from './lib/Cashflow';
 
-function runCreeps(room: Room, goal: Goal): void {
+function runCreeps(room: Room): void {
   for (const name in Game.creeps) {
     const creep = Game.creeps[name];
     if (creep.memory.roomName !== room.name) continue;
@@ -22,16 +21,16 @@ function runCreeps(room: Room, goal: Goal): void {
     
     switch (creep.memory.role) {
       case 'harvester':
-        Harvester.run(creep, goal);
+        Harvester.run(creep);
         break;
       case 'hauler':
-        Hauler.run(creep, goal);
+        Hauler.run(creep);
         break;
       case 'builder':
-        Builder.run(creep, goal);
+        Builder.run(creep);
         break;
       case 'upgrader':
-        Upgrader.run(creep, goal);
+        Upgrader.run(creep);
         break;
     }
   }
@@ -219,7 +218,7 @@ export const loop = (): void => {
     hatcheryProcess(room);
 
     // Run existing creeps
-    runCreeps(room, room.memory.goal);
+    runCreeps(room);
 
     // Track construction progress for build rate
     const sites = room.find(FIND_MY_CONSTRUCTION_SITES);

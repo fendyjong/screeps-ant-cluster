@@ -1,4 +1,3 @@
-import { Goal } from '../types';
 import { moveTo } from '../lib/Pathing';
 
 function findEnergy(creep: Creep): Resource | null {
@@ -97,16 +96,6 @@ function deliverToTowers(creep: Creep): void {
   }
 }
 
-export function run(creep: Creep, goal: Goal): void {
-  switch (goal) {
-    case Goal.ECONOMY:
-      haulEnergy(creep);
-      break;
-    case Goal.DEFEND:
-      deliverToTowers(creep);
-      break;
-    case Goal.RECOVER:
-      haulEnergy(creep);
-      break;
-  }
+export function run(creep: Creep): void {
+  haulEnergy(creep);
 }

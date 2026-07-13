@@ -1,6 +1,5 @@
 // src/roles/Harvester.ts
 
-import { Goal } from '../types';
 import { moveTo } from '../lib/Pathing';
 import { getTerrainMatrix } from '../lib/PathFinder';
 
@@ -130,18 +129,6 @@ function getAdjacentWalkable(matrix: CostMatrix, pos: RoomPosition): RoomPositio
   return result;
 }
 
-export function run(creep: Creep, goal: Goal): void {
-  switch (goal) {
-    case Goal.ECONOMY:
-      harvestAndTransfer(creep);
-      break;
-    case Goal.DEFEND:
-      if (creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0) {
-        repairNearby(creep);
-      }
-      break;
-    case Goal.RECOVER:
-      harvestAndTransfer(creep);
-      break;
-  }
+export function run(creep: Creep): void {
+  harvestAndTransfer(creep);
 }

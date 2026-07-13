@@ -1,6 +1,5 @@
 // src/roles/Builder.ts
 
-import { Goal } from '../types';
 import { moveTo } from '../lib/Pathing';
 import { BUILD_PRIORITIES } from '../colony/Architect';
 
@@ -84,7 +83,7 @@ function harvestEnergy(creep: Creep): void {
   }
 }
 
-export function run(creep: Creep, goal: Goal): void {
+export function run(creep: Creep): void {
   const layout = creep.room.memory.layout;
   const swapPlan = layout?.swap;
   
@@ -137,17 +136,7 @@ export function run(creep: Creep, goal: Goal): void {
   }
   
   if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
-    switch (goal) {
-      case Goal.ECONOMY:
-        buildStructures(creep);
-        break;
-      case Goal.DEFEND:
-        repairStructures(creep);
-        break;
-      case Goal.RECOVER:
-        repairStructures(creep);
-        break;
-    }
+    buildStructures(creep);
   } else {
     harvestEnergy(creep);
   }

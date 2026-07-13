@@ -1,4 +1,3 @@
-import { Goal } from '../types';
 import { moveTo } from '../lib/Pathing';
 
 function upgradeController(creep: Creep): void {
@@ -19,19 +18,9 @@ function parkNearSpawn(creep: Creep): void {
   }
 }
 
-export function run(creep: Creep, goal: Goal): void {
+export function run(creep: Creep): void {
   if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
-    switch (goal) {
-      case Goal.ECONOMY:
-        upgradeController(creep);
-        break;
-      case Goal.DEFEND:
-        parkNearSpawn(creep);
-        break;
-      case Goal.RECOVER:
-        upgradeController(creep);
-        break;
-    }
+    upgradeController(creep);
   } else {
     // Find energy
     const sources = creep.room.find(FIND_SOURCES);
