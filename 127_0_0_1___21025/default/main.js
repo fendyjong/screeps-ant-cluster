@@ -248,7 +248,7 @@ function process(room) {
     Memory.v1.hatchery.queue[room.name] = fresh;
 }
 
-// src/hatchery/Queen.ts
+// src/colony/Queen.ts
 const ROLE_PRIORITIES = {
     harvester: Priority.HIGH,
     hauler: Priority.NORMAL,

@@ -1,6 +1,6 @@
 // src/main.ts
 
-import { tick as queenTick } from './hatchery/Queen';
+import { tick as queenTick } from './colony/Queen';
 import { process as hatcheryProcess } from './hatchery/Hatchery';
 import * as Harvester from './roles/Harvester';
 import * as Hauler from './roles/Hauler';
@@ -8,7 +8,7 @@ import * as Builder from './roles/Builder';
 import * as Upgrader from './roles/Upgrader';
 import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory, CURRENT_NS } from './lib/Memory';
 import { getTerrainMatrix } from './lib/PathFinder';
-import { shouldRecheck, demolishMisplaced, buildMissing } from './colony/Lifecycle';
+import { shouldRecheck, demolishMisplaced, buildMissing } from './colony/SwapExecutor';
 import { planLayout } from './colony/LayoutPlanner';
 import { planSwap } from './colony/SwapPlanner';
 import * as HUD from './lib/HUD';

@@ -1,7 +1,7 @@
-// src/hatchery/Queen.ts
+// src/colony/Queen.ts
 
-import { Priority, SpawnRequest } from './Request';
-import { request } from './Hatchery';
+import { Priority, SpawnRequest } from '../hatchery/Request';
+import { request } from '../hatchery/Hatchery';
 import { DeathWatchEntry, CashflowHealth } from '../types';
 import { getHealth } from '../lib/Cashflow';
 
