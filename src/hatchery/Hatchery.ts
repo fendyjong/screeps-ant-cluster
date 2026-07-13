@@ -7,10 +7,9 @@ import { HatcheryMemory, SpawnRequestData } from '../types';
 const QUEUE_TTL = 100;
 
 function ensureHatcheryMemory(roomName: string): void {
-	if (!Memory.v1) Memory.v1 = {} as any;
+	if (!Memory.v1) (Memory as any).v1 = {};
 	if (!Memory.v1.hatchery) Memory.v1.hatchery = { queue: {}, deathWatch: {} } as HatcheryMemory;
 	if (!Memory.v1.hatchery.queue[roomName]) Memory.v1.hatchery.queue[roomName] = [];
-	if (!Memory.v1.hatchery.deathWatch[roomName]) Memory.v1.hatchery.deathWatch[roomName] = {};
 }
 
 export function request(req: SpawnRequest): void {
@@ -55,7 +54,13 @@ export function process(room: Room): void {
 		return;
 	}
 
-	for (const entry of fresh) {
+	// Process entries with manual index to allow deferred splice
+	let spawned = false;
+	const toRemove: number[] = [];
+
+	for (let i = 0; i < fresh.length; i++) {
+		if (spawned) break;
+		const entry = fresh[i];
 		const req = requestFromMemory(entry);
 		const body = scaleBody(req.body.min, req.body.ideal, room.energyAvailable);
 		if (!body) continue; // can't afford min, keep for next tick
@@ -67,18 +72,16 @@ export function process(room: Room): void {
 
 		if (result === OK) {
 			entry.count--;
-			if (entry.count <= 0) {
-				const idx = fresh.indexOf(entry);
-				if (idx >= 0) fresh.splice(idx, 1);
-			}
-			Memory.v1.hatchery.queue[room.name] = fresh;
-			return;
+			if (entry.count <= 0) toRemove.push(i);
+			spawned = true;
+		} else if (result !== ERR_NOT_ENOUGH_ENERGY && result !== ERR_NOT_ENOUGH_RESOURCES) {
+			toRemove.push(i);
 		}
+	}
 
-		if (result !== ERR_NOT_ENOUGH_ENERGY && result !== ERR_NOT_ENOUGH_RESOURCES) {
-			const idx = fresh.indexOf(entry);
-			if (idx >= 0) fresh.splice(idx, 1);
-		}
+	// Remove consumed entries (reverse order to preserve indices)
+	for (let i = toRemove.length - 1; i >= 0; i--) {
+		fresh.splice(toRemove[i], 1);
 	}
 
 	Memory.v1.hatchery.queue[room.name] = fresh;
