@@ -805,50 +805,6 @@ function findSpawnPosition(roomName) {
     // Fallback to center
     return new RoomPosition(25, 25, roomName);
 }
-function findStoragePosition(roomName, spawnPos) {
-    const matrix = getTerrainMatrix(roomName);
-    // Find walkable position near spawn
-    for (let radius = 1; radius < 5; radius++) {
-        for (let dy = -radius; dy <= radius; dy++) {
-            for (let dx = -radius; dx <= radius; dx++) {
-                const x = spawnPos.x + dx;
-                const y = spawnPos.y + dy;
-                if (isWalkable(matrix, x, y) && !(x === spawnPos.x && y === spawnPos.y)) {
-                    return new RoomPosition(x, y, roomName);
-                }
-            }
-        }
-    }
-    return new RoomPosition(spawnPos.x + 1, spawnPos.y, roomName);
-}
-function findRampartPositions(roomName, layout) {
-    const matrix = getTerrainMatrix(roomName);
-    const ramparts = [];
-    // Find perimeter positions near spawn
-    for (let dy = -5; dy <= 5; dy++) {
-        for (let dx = -5; dx <= 5; dx++) {
-            const x = layout.spawn.x + dx;
-            const y = layout.spawn.y + dy;
-            if (isWalkable(matrix, x, y)) {
-                // Check if this is a perimeter position
-                const neighbors = [
-                    isWalkable(matrix, x - 1, y),
-                    isWalkable(matrix, x + 1, y),
-                    isWalkable(matrix, x, y - 1),
-                    isWalkable(matrix, x, y + 1),
-                ];
-                const walkableCount = neighbors.filter(Boolean).length;
-                if (walkableCount <= 3) {
-                    ramparts.push(new RoomPosition(x, y, roomName));
-                }
-            }
-        }
-    }
-    return ramparts.slice(0, 10); // Limit to 10 ramparts
-}
-function findWallPositions(roomName, _layout) {
-    return findChokepoints(roomName).slice(0, 20);
-}
 function getAdjacentWalkable(matrix, pos) {
     const dirs = [
         { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
@@ -885,14 +841,15 @@ function carveCoreZone(room, anchor, matrix) {
     }
     const sortedTiles = Array.from(coreTiles.values())
         .sort((a, b) => a.getRangeTo(anchor) - b.getRangeTo(anchor));
-    const adjToSpawn = sortedTiles.filter(t => t.getRangeTo(anchor) === 1);
-    layout.storage = adjToSpawn[0] || sortedTiles[1];
-    layout.terminal = adjToSpawn[1] || sortedTiles[2];
-    layout.factory = adjToSpawn[2] || sortedTiles[3];
-    layout.powerSpawn = adjToSpawn[3] || sortedTiles[4];
-    layout.nuker = sortedTiles[5] || sortedTiles[6];
-    layout.observer = sortedTiles[6] || sortedTiles[7];
-    layout.linkSpawn = sortedTiles[8] || sortedTiles[7];
+    // Fallback to anchor (spawn) if not enough walkable tiles
+    const getTile = (i) => sortedTiles[i] || anchor;
+    layout.storage = getTile(1);
+    layout.terminal = getTile(2);
+    layout.factory = getTile(3);
+    layout.powerSpawn = getTile(4);
+    layout.nuker = getTile(5);
+    layout.observer = getTile(6);
+    layout.linkSpawn = getTile(7);
     layout.labs = [];
     layout.extensions = [];
     layout.towers = [];
@@ -1217,7 +1174,7 @@ function planSwap(room, layout) {
     };
 }
 function isWalkablePos(pos) {
-    return pos !== undefined && pos.x >= 0 && pos.y >= 0;
+    return pos !== undefined && pos.x >= 0 && pos.x < 50 && pos.y >= 0 && pos.y < 50;
 }
 
 // src/main.ts
