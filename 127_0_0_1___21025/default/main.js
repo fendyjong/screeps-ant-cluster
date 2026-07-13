@@ -1519,42 +1519,6 @@ function findWalkablePositions(roomName) {
     }
     return positions;
 }
-function findChokepoints(roomName) {
-    const matrix = getTerrainMatrix(roomName);
-    const chokepoints = [];
-    for (let y = 1; y < 49; y++) {
-        for (let x = 1; x < 49; x++) {
-            if (!isWalkable(matrix, x, y))
-                continue;
-            const neighbors = [
-                isWalkable(matrix, x - 1, y),
-                isWalkable(matrix, x + 1, y),
-                isWalkable(matrix, x, y - 1),
-                isWalkable(matrix, x, y + 1),
-            ];
-            const walkableCount = neighbors.filter(Boolean).length;
-            if (walkableCount <= 2) {
-                chokepoints.push(new RoomPosition(x, y, roomName));
-            }
-        }
-    }
-    return chokepoints;
-}
-function findPerimeterPositions(roomName) {
-    const matrix = getTerrainMatrix(roomName);
-    const perimeter = [];
-    for (let i = 0; i < 50; i++) {
-        if (isWalkable(matrix, i, 1))
-            perimeter.push(new RoomPosition(i, 1, roomName));
-        if (isWalkable(matrix, i, 48))
-            perimeter.push(new RoomPosition(i, 48, roomName));
-        if (isWalkable(matrix, 1, i))
-            perimeter.push(new RoomPosition(1, i, roomName));
-        if (isWalkable(matrix, 48, i))
-            perimeter.push(new RoomPosition(48, i, roomName));
-    }
-    return perimeter;
-}
 function calculateCoverage(pos, range, roomName) {
     let count = 0;
     for (let dy = -range; dy <= range; dy++) {
@@ -1592,8 +1556,6 @@ function findOptimalTowerPositions(roomName, count) {
     }
     return positions;
 }
-
-// Stub — full implementation in Task 3
 
 const BUNKER_RADIUS$1 = 6;
 function findBestAnchor(room) {
@@ -2041,6 +2003,7 @@ const REBUILD_COSTS = {
     [STRUCTURE_LINK]: 5000,
     [STRUCTURE_TERMINAL]: 100000,
     [STRUCTURE_LAB]: 50000,
+    ['factory']: 100000,
     [STRUCTURE_OBSERVER]: 8000,
     [STRUCTURE_NUKER]: 100000,
     [STRUCTURE_POWER_SPAWN]: 200000,
@@ -2057,6 +2020,7 @@ const BUILD_PRIORITIES = [
     STRUCTURE_LINK,
     STRUCTURE_TERMINAL,
     STRUCTURE_LAB,
+    'factory',
     STRUCTURE_OBSERVER,
     STRUCTURE_NUKER,
     STRUCTURE_POWER_SPAWN,
