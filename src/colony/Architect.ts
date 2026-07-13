@@ -2,6 +2,8 @@ import { CostMatrix } from 'screeps';
 import { getTerrainMatrix, isWalkable } from '../lib/PathFinder';
 import { findOptimalTowerPositions } from '../lib/TerrainMatrix';
 import { getBudget } from '../lib/Cashflow';
+import { findBestAnchor } from './AnchorPlanner';
+import { computeBarriers } from './BarrierPlanner';
 
 const REBUILD_COSTS: Record<StructureConstant, number> = {
   [STRUCTURE_SPAWN]: 15000,
@@ -112,27 +114,6 @@ export interface SwapPlan {
   destroy: string[];           // structure IDs to remove
   build: { pos: RoomPosition; structureType: StructureConstant }[];
   state: 'idle' | 'destroying' | 'building';
-}
-
-function findSpawnPosition(roomName: string): RoomPosition {
-  const matrix = getTerrainMatrix(roomName);
-  
-  // Find central walkable position
-  for (let radius = 0; radius < 20; radius++) {
-    for (let dy = -radius; dy <= radius; dy++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        const x = 25 + dx;
-        const y = 25 + dy;
-        
-        if (isWalkable(matrix, x, y)) {
-          return new RoomPosition(x, y, roomName);
-        }
-      }
-    }
-  }
-  
-  // Fallback to center
-  return new RoomPosition(25, 25, roomName);
 }
 
 function getAdjacentWalkable(matrix: CostMatrix, pos: RoomPosition): RoomPosition[] {
@@ -284,44 +265,6 @@ function placeTowers(room: Room, matrix: CostMatrix, extensions: RoomPosition[])
 	return findOptimalTowerPositions(room.name, towerCount);
 }
 
-function computeRampartPositions(
-	core: BunkerLayout, labs: RoomPosition[], extensions: RoomPosition[]
-): RoomPosition[] {
-	const ramparts: RoomPosition[] = [];
-
-	const corePositions = [
-		core.spawn, core.storage, core.terminal, core.factory,
-		core.powerSpawn, core.nuker, core.observer, core.linkSpawn
-	];
-	for (const pos of corePositions) {
-		if (pos && isWalkablePos(pos)) ramparts.push(pos);
-	}
-
-	for (const pos of labs) ramparts.push(pos);
-	for (const pos of core.towers) {
-		if (pos && isWalkablePos(pos)) ramparts.push(pos);
-	}
-
-	return ramparts;
-}
-
-function computeWallPositions(room: Room, matrix: CostMatrix, allStructureKeys: Set<string>): RoomPosition[] {
-	const walls: RoomPosition[] = [];
-	const roomName = room.name;
-
-	for (const key of allStructureKeys) {
-		const [x, y] = key.split(',').map(Number);
-		for (const adj of getAdjacentWalkable(matrix, new RoomPosition(x, y, roomName))) {
-			const k = adj.x + ',' + adj.y;
-			if (!allStructureKeys.has(k)) {
-				walls.push(adj);
-			}
-		}
-	}
-
-	return walls.slice(0, 50);
-}
-
 function computeRoadPositions(
 	room: Room, matrix: CostMatrix,
 	core: BunkerLayout, extensions: RoomPosition[]
@@ -370,7 +313,7 @@ function computeRoadPositions(
 
 export function planLayout(room: Room): BunkerLayout {
 	const matrix = getTerrainMatrix(room.name);
-	const anchor = findSpawnPosition(room.name);
+	const anchor = findBestAnchor(room);
 
 	// Phase 1: Core zone
 	const core = carveCoreZone(room, anchor, matrix);
@@ -399,15 +342,9 @@ export function planLayout(room: Room): BunkerLayout {
 	// Phase 4: Towers
 	core.towers = placeTowers(room, matrix, extensions);
 
-	// Phase 5: Ramparts + walls
-	const allKeys = new Set<string>();
-	for (const k of coreKeys) allKeys.add(k);
-	for (const k of labKeys) allKeys.add(k);
-	for (const ext of extensions) allKeys.add(ext.x + ',' + ext.y);
-	for (const t of core.towers) allKeys.add(t.x + ',' + t.y);
-
-	core.ramparts = computeRampartPositions(core, labs, extensions);
-	core.walls = computeWallPositions(room, matrix, allKeys);
+	// Phase 5: Barriers — min-cut rampart placement
+	core.ramparts = computeBarriers(room, core.anchor);
+	core.walls = [];
 
 	// Phase 6: Roads
 	core.roads = computeRoadPositions(room, matrix, core, extensions);
