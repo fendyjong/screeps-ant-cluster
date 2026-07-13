@@ -47,7 +47,7 @@ function drawTopLeft(vis: RoomVisual, room: Room): void {
   const idle = myCreeps.filter((c: Creep) => (c.memory._stuckTicks || 0) > 5).length;
 
   const cpuAtStart = (Memory.v1 as any).hud?.cpuTick?.[room.name] || 0;
-  const cpuUsed = ((Game.cpu.getUsed() - cpuAtStart) * 100).toFixed(1);
+  const cpuUsed = ((Game.cpu.getUsed() - cpuAtStart) / 25).toFixed(1);
 
   drawPanel(vis, 0.5, 0.5, [
     [room.name + '  RCL ' + rcl, ''],

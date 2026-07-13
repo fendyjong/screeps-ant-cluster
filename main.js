@@ -1333,7 +1333,7 @@ function drawTopLeft(vis, room) {
     const myCreeps = Object.values(Game.creeps).filter((c) => c.memory.roomName === room.name);
     const idle = myCreeps.filter((c) => (c.memory._stuckTicks || 0) > 5).length;
     const cpuAtStart = Memory.v1.hud?.cpuTick?.[room.name] || 0;
-    const cpuUsed = ((Game.cpu.getUsed() - cpuAtStart) * 100).toFixed(1);
+    const cpuUsed = ((Game.cpu.getUsed() - cpuAtStart) / 25).toFixed(1);
     drawPanel(vis, 0.5, 0.5, [
         [room.name + '  RCL ' + rcl, ''],
         ['Sources: ' + sourceAssignments, avgFill + '%'],
