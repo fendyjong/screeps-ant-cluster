@@ -27,6 +27,28 @@ Road overlay in `buildCostMatrix` stays at 1. Now roads (1) are cheaper than pla
 
 `isWalkable()` checks `< 255` — still correct for all non-wall tiles.
 
+### Persistent cost matrix cache
+
+Store serialized CostMatrix in `Memory.v1.pathing.costCache[roomName]` with a structure signature:
+
+```ts
+interface CostCacheEntry {
+  matrix: number[]
+  structSig: number
+  tick: number
+}
+```
+
+`structSig` is a cheap XOR hash of `structureType * pos.x * pos.y` for each structure. Build the static matrix (terrain + structure costs) only when `structSig` changes — usually every hundreds of ticks when a building is placed or destroyed. On most ticks, just deserialize the cached matrix.
+
+When hostiles are present in the room, rebuild every tick (dynamic overlay for creep positions).
+
+| Layer | Cache type | Refresh cadence |
+|-------|-----------|-----------------|
+| Terrain matrix | Memory (`pathing.terrain`) | Once (terrain never changes) |
+| Static cost matrix | Memory (`pathing.costCache`) | Only on structure change |
+| Dynamic overlay | In-memory (`pathCache`) | Every tick (creep positions) |
+
 ### Fix 2: Terrain cache version stamp
 
 **File:** `src/lib/TerrainMatrix.ts`
@@ -97,6 +119,14 @@ globals.ts
 
 28 `.js` files at root (same names, `.js` extension):
 Same list, plus `dist/main.js` (build artifact, not loaded by Screeps client).
+
+## Traffic Heatmap → Road Building
+
+Track which tiles are walked on most. Each tick, after a creep moves, record the previous tile position. Increment a counter in `Memory.v1.pathing.traffic[roomName]["x,y"]`.
+
+When `counter ≥ 100`, place a road construction site at that tile and reset counter to 0. This auto-builds roads on high-traffic paths without manual planning.
+
+Heatmap is per-room — only tracks rooms we own. Counter resets per tile after road placed, so ongoing traffic maintains the road.
 
 **Files KEPT** — all used by `main.ts` bundle:
 - `src/main.ts`
