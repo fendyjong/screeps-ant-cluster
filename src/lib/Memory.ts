@@ -1,4 +1,4 @@
-import { Goal } from '../types';
+// src/lib/Memory.ts
 
 export const CURRENT_NS = 'v1';
 
@@ -10,9 +10,7 @@ const ENGINE_KEYS: Record<string, true> = {
 };
 
 export function ensureRoomMemory(room: Room): void {
-  if (!room.memory.goal) {
-    room.memory.goal = Goal.ECONOMY;
-  }
+  // Nothing required — layout is optional
 }
 
 export function ensureCreepMemory(creep: Creep): void {

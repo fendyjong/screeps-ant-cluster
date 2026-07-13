@@ -12,10 +12,6 @@ const ROLE_PRIORITIES: Record<string, number> = {
 	builder: Priority.NORMAL,
 	upgrader: Priority.NORMAL,
 	defender: Priority.HIGH,
-	scout: Priority.LOW,
-	claimer: Priority.LOW,
-	attacker: Priority.IDLE,
-	healer: Priority.IDLE,
 };
 
 const DEFAULT_BODIES: Record<string, { min: BodyPartConstant[]; ideal: BodyPartConstant[] }> = {
@@ -38,22 +34,6 @@ const DEFAULT_BODIES: Record<string, { min: BodyPartConstant[]; ideal: BodyPartC
 	defender: {
 		min: [TOUGH, ATTACK, ATTACK, MOVE],
 		ideal: [TOUGH, TOUGH, ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE],
-	},
-	scout: {
-		min: [MOVE],
-		ideal: [MOVE, MOVE],
-	},
-	claimer: {
-		min: [CLAIM, MOVE],
-		ideal: [CLAIM, MOVE],
-	},
-	attacker: {
-		min: [ATTACK, MOVE],
-		ideal: [ATTACK, ATTACK, ATTACK, MOVE, MOVE, MOVE],
-	},
-	healer: {
-		min: [HEAL, MOVE],
-		ideal: [HEAL, HEAL, MOVE, MOVE],
 	},
 };
 
@@ -175,52 +155,61 @@ function scanCreeps(room: Room): { live: Record<string, number>; soonDead: Recor
 	return { live, soonDead, deathWatch };
 }
 
-function maybeRequestRoomExpansion(room: Room): void {
-	const rcl = room.controller?.level || 1;
-	if (rcl >= 4 && room.energyCapacityAvailable >= 5000 && room.storage) {
-		const stored = room.storage.store[RESOURCE_ENERGY] || 0;
-		if (stored > 500000) {
-			const exits = Game.map.describeExits(room.name);
-			for (const exitKey in exits) {
-				const exitRoom = exits[exitKey as unknown as ExitKey];
-				if (!Game.rooms[exitRoom] || !Game.rooms[exitRoom].controller?.my) {
-					const claimReq: SpawnRequest = {
-						role: 'claimer',
-						priority: Priority.LOW,
-						body: DEFAULT_BODIES.claimer,
-						count: 1,
-						memory: { targetRoom: exitRoom, claim: true },
-						createdAt: Game.time,
-						roomName: room.name,
-					};
-					request(claimReq);
+function processEvents(room: Room): void {
+	const events = Memory.v1.events;
+	if (!events) return;
 
-					const remoteHarvester: SpawnRequest = {
-						role: 'harvester',
-						priority: Priority.LOW,
-						body: DEFAULT_BODIES.harvester,
-						count: 2,
-						memory: { remoteRoom: exitRoom },
-						createdAt: Game.time,
-						roomName: room.name,
-					};
-					request(remoteHarvester);
+	if (events.hostile?.[room.name]) {
+		const bodyDef = DEFAULT_BODIES.defender;
+		const spawnReq: SpawnRequest = {
+			role: 'defender',
+			priority: Priority.CRITICAL,
+			body: bodyDef,
+			count: 1,
+			memory: {},
+			createdAt: Game.time,
+			roomName: room.name,
+		};
+		request(spawnReq);
+		delete events.hostile[room.name];
+	}
 
-					const remoteHauler: SpawnRequest = {
-						role: 'hauler',
-						priority: Priority.LOW,
-						body: DEFAULT_BODIES.hauler,
-						count: 1,
-						memory: { remoteRoom: exitRoom },
-						createdAt: Game.time,
-						roomName: room.name,
-					};
-					request(remoteHauler);
+	if (events.expansion?.[room.name]) {
+		const ev = events.expansion[room.name];
+		const claimReq: SpawnRequest = {
+			role: 'claimer',
+			priority: Priority.LOW,
+			body: { min: [CLAIM, MOVE], ideal: [CLAIM, MOVE] },
+			count: 1,
+			memory: { targetRoom: ev.targetRoom, claim: true },
+			createdAt: Game.time,
+			roomName: room.name,
+		};
+		request(claimReq);
 
-					continue;
-				}
-			}
-		}
+		const remoteHarvester: SpawnRequest = {
+			role: 'harvester',
+			priority: Priority.LOW,
+			body: DEFAULT_BODIES.harvester,
+			count: 2,
+			memory: { remoteRoom: ev.targetRoom },
+			createdAt: Game.time,
+			roomName: room.name,
+		};
+		request(remoteHarvester);
+
+		const remoteHauler: SpawnRequest = {
+			role: 'hauler',
+			priority: Priority.LOW,
+			body: DEFAULT_BODIES.hauler,
+			count: 1,
+			memory: { remoteRoom: ev.targetRoom },
+			createdAt: Game.time,
+			roomName: room.name,
+		};
+		request(remoteHauler);
+
+		delete events.expansion[room.name];
 	}
 }
 
@@ -228,6 +217,7 @@ export function tick(room: Room): void {
 	if (!Memory.v1) Memory.v1 = {} as Memory['v1'];
 	if (!Memory.v1.hatchery) Memory.v1.hatchery = { queue: {}, deathWatch: {} };
 	if (!Memory.v1.hatchery.deathWatch[room.name]) Memory.v1.hatchery.deathWatch[room.name] = {};
+	if (!Memory.v1.events) Memory.v1.events = {};
 
 	const { live, soonDead, deathWatch } = scanCreeps(room);
 	Memory.v1.hatchery.deathWatch[room.name] = deathWatch;
@@ -235,7 +225,7 @@ export function tick(room: Room): void {
 	const locked = isEconomyLocked(room);
 	const targets = computeTargets(room, getHealth(room));
 
-	const roleOrder = ['harvester', 'hauler', 'builder', 'upgrader', 'defender', 'scout', 'claimer', 'attacker', 'healer'];
+	const roleOrder = ['harvester', 'hauler', 'builder', 'upgrader', 'defender'];
 
 	for (const role of roleOrder) {
 		const target = targets[role] || 0;
@@ -272,5 +262,5 @@ export function tick(room: Room): void {
 		request(spawnReq);
 	}
 
-	maybeRequestRoomExpansion(room);
+	processEvents(room);
 }

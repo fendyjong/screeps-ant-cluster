@@ -36,7 +36,7 @@ function drawTopLeft(vis: RoomVisual, room: Room): void {
     c.memory.roomName === room.name && c.memory.role === 'harvester'
   );
   const sourceAssignments = sources.map((s: Source) => {
-    const count = harvesters.filter((h: Creep) => h.memory.targetSourceId === s.id).length;
+    const count = harvesters.filter((h: Creep) => h.memory.task?.targetId === s.id).length;
     const fill = s.energy / s.energyCapacity;
     return 'S' + (sources.indexOf(s) + 1) + '(' + count + ')';
   }).join(' ');
@@ -131,22 +131,25 @@ function drawBottomRight(vis: RoomVisual, room: Room): void {
 function drawCreepLabels(vis: RoomVisual, creep: Creep): void {
   let label = '';
   let color = '#ffffff';
+  const task = creep.memory.task;
+
+  const taskLabel = task ? task.type.slice(0, 4).toUpperCase() : 'IDLE';
 
   switch (creep.memory.role) {
     case 'harvester':
-      label = '[H' + (creep.memory.targetSourceId ? ' ->' + creep.memory.targetSourceId.slice(0, 4) : '') + ']';
+      label = '[H:' + taskLabel + ']';
       color = '#4caf50';
       break;
     case 'hauler':
-      label = '[HAUL]';
+      label = '[HAUL:' + taskLabel + ']';
       color = '#00bcd4';
       break;
     case 'builder':
-      label = '[BUILD]';
+      label = '[BLD:' + taskLabel + ']';
       color = '#ffeb3b';
       break;
     case 'upgrader':
-      label = '[UP]';
+      label = '[UP:' + taskLabel + ']';
       color = '#9c27b0';
       break;
   }

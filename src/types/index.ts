@@ -3,22 +3,15 @@
 import { BunkerLayout, SwapPlan } from '../colony/Architect';
 import { SpawnRequest } from '../hatchery/Request';
 
-export enum Goal {
-	ECONOMY = 'economy',
-	DEFEND = 'defend',
-	RECOVER = 'recover',
-}
-
-export interface RoleTargets {
-	harvester: number;
-	hauler: number;
-	builder: number;
-	upgrader: number;
+export interface TaskMemory {
+	type: 'harvest' | 'transfer' | 'withdraw' | 'pickup' | 'build' | 'repair' | 'upgrade' | 'dismantle' | 'recharge'
+	targetId: string
 }
 
 export interface CreepMemory {
-	role: string;
-	roomName: string;
+	role: string
+	roomName: string
+	task?: TaskMemory
 }
 
 export interface LayoutMemory {
@@ -28,7 +21,6 @@ export interface LayoutMemory {
 }
 
 export interface RoomMemory {
-	goal: Goal;
 	layout?: LayoutMemory;
 }
 
@@ -54,7 +46,7 @@ export interface SpawnRequestData {
 
 export interface DeathWatchEntry {
 	name: string
-	ttl: number // ticks remaining
+	ttl: number
 }
 
 export interface HatcheryMemory {
@@ -70,11 +62,17 @@ export interface CashflowMemory {
 	buildRate: number
 }
 
+export interface GameEvents {
+	hostile?: Record<string, { tick: number; room: string; threat: 'scout' | 'swarm' }>
+	expansion?: Record<string, { sourceRoom: string; targetRoom: string; tick: number }>
+}
+
 declare global {
 	interface Memory {
 		v1: {
 			hatchery: HatcheryMemory
 			cashflow?: Record<string, CashflowMemory>
+			events?: GameEvents
 		}
 		pathing?: PathingMemory
 	}

@@ -1,112 +1,117 @@
-import { Goal } from '../types';
 import { moveTo } from '../lib/Pathing';
+import { getTask, setTask, clearTask, isValidTask, executeTask } from '../lib/TaskManager';
 
-function findEnergy(creep: Creep): Resource | null {
-  // Look for dropped energy
-  const droppedEnergy = creep.room.find(FIND_DROPPED_RESOURCES, {
-    filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount > 50
-  });
+function findEnergy(creep: Creep): Resource | Structure | null {
+	const droppedEnergy = creep.room.find(FIND_DROPPED_RESOURCES, {
+		filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount > 50
+	});
+	if (droppedEnergy.length > 0) {
+		return creep.pos.findClosestByPath(droppedEnergy);
+	}
 
-  if (droppedEnergy.length > 0) {
-    return creep.pos.findClosestByPath(droppedEnergy);
-  }
+	const containers = creep.room.find(FIND_STRUCTURES, {
+		filter: (s) => (
+			s.structureType === STRUCTURE_CONTAINER &&
+			s.store[RESOURCE_ENERGY] > 0
+		)
+	});
+	if (containers.length > 0) {
+		return creep.pos.findClosestByPath(containers);
+	}
 
-  // Look for containers with energy
-  const containers = creep.room.find(FIND_STRUCTURES, {
-    filter: (s) => (
-      s.structureType === STRUCTURE_CONTAINER &&
-      s.store[RESOURCE_ENERGY] > 0
-    )
-  });
+	const storage = creep.room.find(FIND_MY_STRUCTURES, {
+		filter: (s) => (
+			s.structureType === STRUCTURE_STORAGE &&
+			s.store[RESOURCE_ENERGY] > 0
+		)
+	});
+	if (storage.length > 0) {
+		return storage[0];
+	}
 
-  if (containers.length > 0) {
-    return creep.pos.findClosestByPath(containers);
-  }
-
-  return null;
+	return null;
 }
 
 function findDropOff(creep: Creep): Structure | null {
-  // Prefer spawn and extensions
-  const targets = creep.room.find(FIND_MY_STRUCTURES, {
-    filter: (s) => (
-      (s.structureType === STRUCTURE_SPAWN ||
-       s.structureType === STRUCTURE_EXTENSION) &&
-      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-    )
-  });
+	const targets = creep.room.find(FIND_MY_STRUCTURES, {
+		filter: (s) => (
+			(s.structureType === STRUCTURE_SPAWN ||
+			 s.structureType === STRUCTURE_EXTENSION) &&
+			s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+		)
+	});
+	if (targets.length > 0) {
+		return creep.pos.findClosestByPath(targets);
+	}
 
-  if (targets.length > 0) {
-    return creep.pos.findClosestByPath(targets);
-  }
+	const storage = creep.room.find(FIND_MY_STRUCTURES, {
+		filter: (s) => (
+			s.structureType === STRUCTURE_STORAGE &&
+			s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+		)
+	});
+	if (storage.length > 0) {
+		return storage[0];
+	}
 
-  // Fallback to storage
-  const storage = creep.room.find(FIND_MY_STRUCTURES, {
-    filter: (s) => (
-      s.structureType === STRUCTURE_STORAGE &&
-      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-    )
-  });
-
-  if (storage.length > 0) {
-    return storage[0];
-  }
-
-  return null;
+	return null;
 }
 
-function haulEnergy(creep: Creep): void {
-  if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
-    const energy = findEnergy(creep);
-    if (energy) {
-      if (energy instanceof Structure) {
-        if (creep.withdraw(energy, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-          moveTo(creep, energy);
-        }
-      } else {
-        if (creep.pickup(energy) === ERR_NOT_IN_RANGE) {
-          moveTo(creep, energy);
-        }
-      }
-    }
-  } else {
-    const dropOff = findDropOff(creep);
-    if (dropOff) {
-      if (creep.transfer(dropOff, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-        moveTo(creep, dropOff);
-      }
-    }
-  }
+function actionPickup(creep: Creep): boolean {
+	if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) return false;
+
+	let task = getTask(creep);
+	if (task && task.type === 'pickup' && isValidTask(creep)) return true;
+
+	const energy = creep.room.find(FIND_DROPPED_RESOURCES, {
+		filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount > 50
+	});
+	if (energy.length === 0) return false;
+	const closest = creep.pos.findClosestByPath(energy);
+	if (!closest) return false;
+	setTask(creep, 'pickup', closest.id);
+	return true;
 }
 
-function deliverToTowers(creep: Creep): void {
-  const towers = creep.room.find(FIND_MY_STRUCTURES, {
-    filter: (s) => (
-      s.structureType === STRUCTURE_TOWER &&
-      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-    )
-  });
+function actionWithdraw(creep: Creep): boolean {
+	if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) return false;
 
-  if (towers.length > 0) {
-    const tower = creep.pos.findClosestByPath(towers);
-    if (tower) {
-      if (creep.transfer(tower, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-        moveTo(creep, tower);
-      }
-    }
-  }
+	let task = getTask(creep);
+	if (task && task.type === 'withdraw' && isValidTask(creep)) return true;
+
+	const energy = findEnergy(creep);
+	if (!energy) return false;
+	setTask(creep, 'withdraw', energy.id);
+	return true;
 }
 
-export function run(creep: Creep, goal: Goal): void {
-  switch (goal) {
-    case Goal.ECONOMY:
-      haulEnergy(creep);
-      break;
-    case Goal.DEFEND:
-      deliverToTowers(creep);
-      break;
-    case Goal.RECOVER:
-      haulEnergy(creep);
-      break;
-  }
+function actionTransfer(creep: Creep): boolean {
+	if (creep.store.getUsedCapacity(RESOURCE_ENERGY) === 0) return false;
+
+	let task = getTask(creep);
+	if (task && task.type === 'transfer' && isValidTask(creep)) return true;
+
+	const dropOff = findDropOff(creep);
+	if (!dropOff) return false;
+	setTask(creep, 'transfer', dropOff.id);
+	return true;
+}
+
+export const PRIORITY: ((creep: Creep) => boolean)[] = [
+	actionPickup,
+	actionWithdraw,
+	actionTransfer,
+];
+
+export function run(creep: Creep): void {
+	if (isValidTask(creep)) {
+		const result = executeTask(creep);
+		if (result !== 'invalid') return;
+	}
+	for (const action of PRIORITY) {
+		if (action(creep)) {
+			executeTask(creep);
+			return;
+		}
+	}
 }
