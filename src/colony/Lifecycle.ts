@@ -29,7 +29,7 @@ export function demolishMisplaced(room: Room, plan: { destroy: string[]; build: 
 			});
 			if (otherSpawns.length === 0) {
 				const { buildBudget } = getBudget(room);
-			if (buildBudget < 15000) continue;
+				if (buildBudget < 15000) continue;
 				let workerCapacity = 0;
 				for (const name in Game.creeps) {
 					const c = Game.creeps[name];
