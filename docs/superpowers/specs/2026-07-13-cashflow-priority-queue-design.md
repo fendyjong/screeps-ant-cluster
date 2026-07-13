@@ -48,7 +48,8 @@ No saving. Emergency reserve is just a float, not a growing stockpile. When colo
 | File | Change |
 |------|--------|
 | `src/hatchery/Hatchery.ts` | Record spawn cost after each spawn. Gate on spawnBudget. |
-| `src/main.ts` | Replace inline energy tracking (lines 189-206) with Cashflow call. Gate `createConstructionSites` on buildBudget. |
+| `src/main.ts` | Replace inline energy tracking (lines 189-206) with Cashflow call. Gate `createConstructionSites` on buildBudget. Gate `planLayout`/`planSwap`: skip when health is red (waste of CPU). |
+| `src/colony/Architect.ts` | `isSafeToDestroy` uses buildBudget instead of `energyCapacityAvailable`. `planSwap` caps build list to items affordable within buildBudget. |
 | `src/hatchery/Queen.ts` | Read cashflow health. If health is red: cap upgrader target to 1, reduce builder scaling threshold 2x. If health is green: restore normal targets. |
 | `src/lib/HUD.ts` | Replace income/spend panel with cashflow panel: income/t, spawn/t, build/t, net/t, health color, reserve bar. |
 
