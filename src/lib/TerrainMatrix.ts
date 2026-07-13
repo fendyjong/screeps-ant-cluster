@@ -1,4 +1,5 @@
 import { CostMatrix } from 'screeps';
+import { ensureMemoryNs, CURRENT_NS } from './Memory';
 
 const TERRAIN_COSTS = {
   plain: 1,
@@ -7,11 +8,13 @@ const TERRAIN_COSTS = {
 };
 
 function ensurePathingMemory(): void {
-  if (!Memory.pathing) {
-    Memory.pathing = {};
+  ensureMemoryNs();
+  const ns = Memory[CURRENT_NS];
+  if (!ns.pathing) {
+    ns.pathing = {};
   }
-  if (!Memory.pathing.terrain) {
-    Memory.pathing.terrain = {};
+  if (!ns.pathing.terrain) {
+    ns.pathing.terrain = {};
   }
 }
 
@@ -39,13 +42,14 @@ function generateTerrainMatrix(roomName: string): CostMatrix {
 export function getTerrainMatrix(roomName: string): CostMatrix {
   ensurePathingMemory();
 
-  const cached = Memory.pathing.terrain[roomName];
+  const ns = Memory[CURRENT_NS];
+  const cached = ns.pathing.terrain[roomName];
   if (cached) {
     return PathFinder.CostMatrix.deserialize(cached.matrix);
   }
 
   const matrix = generateTerrainMatrix(roomName);
-  Memory.pathing.terrain[roomName] = {
+  ns.pathing.terrain[roomName] = {
     matrix: matrix.serialize(),
     tick: Game.time,
   };
