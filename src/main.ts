@@ -11,6 +11,7 @@ import { getTerrainMatrix } from './lib/TerrainMatrix';
 import { planLayout, planSwap } from './colony/Architect';
 import { Goal } from './types';
 import * as HUD from './lib/HUD';
+import { trackIncome, getBudget, getHealth, trackBuild } from './lib/Cashflow';
 
 function runCreeps(room: Room, goal: Goal): void {
   for (const name in Game.creeps) {
@@ -56,6 +57,9 @@ const STRUCTURE_COSTS: Record<string, number> = {
 };
 
 function createConstructionSites(room: Room): void {
+  const { buildBudget } = getBudget(room);
+  if (buildBudget <= 0) return;
+
   const layout = room.memory.layout;
   if (!layout || !layout.swap || layout.swap.build.length === 0) return;
 
@@ -79,10 +83,6 @@ function createConstructionSites(room: Room): void {
     const existingStructure = room.lookForAt(LOOK_STRUCTURES, entry.pos.x, entry.pos.y)
       .find(s => s.structureType === entry.structureType);
     if (existingStructure) continue;
-
-    // Check energy availability (50% of structure cost)
-    const cost = STRUCTURE_COSTS[entry.structureType] || 0;
-    if (cost > 0 && room.energyAvailable < cost * 0.5) continue;
 
     // Create construction site
     const result = room.createConstructionSite(entry.pos, entry.structureType);
@@ -186,31 +186,24 @@ export const loop = (): void => {
     // Queen evaluates colony needs and submits spawn requests
     queenTick(room);
 
-    // Track energy for HUD income/spend
-    const prevEnergy = (Memory.v1 as any)?.hud?.prevEnergy?.[roomName];
-    const currentEnergy = room.energyAvailable + (room.storage ? room.storage.store[RESOURCE_ENERGY] : 0);
-    if (prevEnergy !== undefined) {
-      const delta = currentEnergy - prevEnergy;
-      if (!(Memory.v1 as any).hud) (Memory.v1 as any).hud = {};
-      if (!(Memory.v1 as any).hud.income) (Memory.v1 as any).hud.income = {};
-      if (!(Memory.v1 as any).hud.spend) (Memory.v1 as any).hud.spend = {};
-      if (delta > 0) {
-        (Memory.v1 as any).hud.income[roomName] = (Memory.v1 as any).hud.income[roomName] || 0;
-        (Memory.v1 as any).hud.income[roomName] = (Memory.v1 as any).hud.income[roomName] * 0.9 + delta * 0.1;
-      } else {
-        (Memory.v1 as any).hud.spend[roomName] = (Memory.v1 as any).hud.spend[roomName] || 0;
-        (Memory.v1 as any).hud.spend[roomName] = (Memory.v1 as any).hud.spend[roomName] * 0.9 + Math.abs(delta) * 0.1;
-      }
+    // Track energy for cashflow
+    const prevTotal = (Memory.v1 as any)._prevTotalEnergy?.[roomName] ?? -1;
+    const currentTotal = room.energyAvailable + (room.storage ? room.storage.store[RESOURCE_ENERGY] : 0);
+    if (prevTotal >= 0) {
+      trackIncome(roomName, currentTotal, prevTotal);
     }
-    if (!(Memory.v1 as any).hud.prevEnergy) (Memory.v1 as any).hud.prevEnergy = {};
-    (Memory.v1 as any).hud.prevEnergy[roomName] = currentEnergy;
+    if (!(Memory.v1 as any)._prevTotalEnergy) (Memory.v1 as any)._prevTotalEnergy = {};
+    (Memory.v1 as any)._prevTotalEnergy[roomName] = currentTotal;
 
     // Terrain and layout planning — cache every 100 ticks
     getTerrainMatrix(room.name);
     if (Game.time % 100 === 0 || !room.memory.layout || !room.memory.layout.lastUpdated) {
-      const layout = planLayout(room);
-      const swapPlan = planSwap(room, layout);
-      room.memory.layout = { bunker: layout, swap: swapPlan, lastUpdated: Game.time };
+      const health = getHealth(room);
+      if (health !== 'red' || !room.memory.layout) {
+        const layout = planLayout(room);
+        const swapPlan = planSwap(room, layout);
+        room.memory.layout = { bunker: layout, swap: swapPlan, lastUpdated: Game.time };
+      }
     }
 
     // Create construction sites from swap plan
@@ -227,6 +220,19 @@ export const loop = (): void => {
 
     // Run existing creeps
     runCreeps(room, room.memory.goal);
+
+    // Track construction progress for build rate
+    const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
+    let progressDelta = 0;
+    for (const site of sites) {
+      const prev = (Memory.v1 as any)._prevProgress?.[site.id] || site.progress;
+      progressDelta += Math.max(0, site.progress - prev);
+      if (!(Memory.v1 as any)._prevProgress) (Memory.v1 as any)._prevProgress = {};
+      (Memory.v1 as any)._prevProgress[site.id] = site.progress;
+    }
+    if (progressDelta > 0) {
+      trackBuild(roomName, progressDelta);
+    }
 
     HUD.run(room);
   }
