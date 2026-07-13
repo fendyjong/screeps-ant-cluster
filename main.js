@@ -152,10 +152,11 @@ function cleanLegacyMemory() {
 }
 
 const TERRAIN_COSTS = {
-    plain: 1,
-    swamp: 5,
+    plain: 2,
+    swamp: 10,
     wall: 255,
 };
+const TERRAIN_VERSION = 1;
 function ensurePathingMemory() {
     ensureMemoryNs();
     const ns = Memory[CURRENT_NS];
@@ -189,13 +190,14 @@ function getTerrainMatrix(roomName) {
     ensurePathingMemory();
     const ns = Memory[CURRENT_NS];
     const cached = ns.pathing.terrain[roomName];
-    if (cached) {
+    if (cached && cached.version === TERRAIN_VERSION) {
         return PathFinder.CostMatrix.deserialize(cached.matrix);
     }
     const matrix = generateTerrainMatrix(roomName);
     ns.pathing.terrain[roomName] = {
         matrix: matrix.serialize(),
         tick: Game.time,
+        version: TERRAIN_VERSION,
     };
     return matrix;
 }

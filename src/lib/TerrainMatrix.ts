@@ -2,10 +2,12 @@ import { CostMatrix } from 'screeps';
 import { ensureMemoryNs, CURRENT_NS } from './Memory';
 
 const TERRAIN_COSTS = {
-  plain: 1,
-  swamp: 5,
+  plain: 2,
+  swamp: 10,
   wall: 255,
 };
+
+const TERRAIN_VERSION = 1;
 
 function ensurePathingMemory(): void {
   ensureMemoryNs();
@@ -44,7 +46,7 @@ export function getTerrainMatrix(roomName: string): CostMatrix {
 
   const ns = Memory[CURRENT_NS];
   const cached = ns.pathing.terrain[roomName];
-  if (cached) {
+  if (cached && cached.version === TERRAIN_VERSION) {
     return PathFinder.CostMatrix.deserialize(cached.matrix);
   }
 
@@ -52,6 +54,7 @@ export function getTerrainMatrix(roomName: string): CostMatrix {
   ns.pathing.terrain[roomName] = {
     matrix: matrix.serialize(),
     tick: Game.time,
+    version: TERRAIN_VERSION,
   };
 
   return matrix;
