@@ -6,7 +6,7 @@ import * as Harvester from './roles/Harvester';
 import * as Hauler from './roles/Hauler';
 import * as Builder from './roles/Builder';
 import * as Upgrader from './roles/Upgrader';
-import { ensureRoomMemory, ensureCreepMemory } from './lib/Memory';
+import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory, CURRENT_NS } from './lib/Memory';
 import { getTerrainMatrix } from './lib/TerrainMatrix';
 import { planLayout, planSwap } from './colony/Architect';
 import { Goal } from './types';
@@ -133,18 +133,32 @@ function recheckLayout(room: Room): void {
 }
 
 export const loop = (): void => {
+  // Migration: carry v1 → v2 (or whatever next version) when CURRENT_NS changes
+  if (Memory.v1 && !Memory[CURRENT_NS]) {
+    Memory[CURRENT_NS] = Memory.v1;
+    delete Memory.v1;
+  }
+
+  // Ensure current version namespace exists
+  ensureMemoryNs();
+
   // Clean up dead creep memory
   for (const name in Memory.creeps) {
     if (!Game.creeps[name]) {
       delete Memory.creeps[name];
     }
   }
-  
+
+  // Prune legacy top-level Memory keys every 100 ticks
+  if (Game.time % 100 === 0) {
+    cleanLegacyMemory();
+  }
+
   // Process each owned room
   for (const roomName in Game.rooms) {
     const room = Game.rooms[roomName];
     if (!room.controller || !room.controller.my) continue;
-    
+
     ensureRoomMemory(room);
     colonyTick(room);
 
