@@ -13,6 +13,9 @@ import { planLayout } from './colony/LayoutPlanner';
 import { planSwap } from './colony/SwapPlanner';
 import * as HUD from './lib/HUD';
 import { trackIncome, getBudget, getHealth, trackBuild, getCpuBudgets } from './lib/Cashflow';
+import { hostileWatcher, expansionWatcher } from './colony/Watchers';
+import { drainPendingRoads } from './colony/RoadDrainer';
+import { recheckLayout } from './colony/LayoutWatcher';
 
 const ALWAYS_RUN_ROLES = new Set(['harvester', 'hauler']);
 const PRODUCTION_ROLES = new Set(['builder', 'upgrader']);
@@ -46,105 +49,6 @@ function runCreeps(room: Room): void {
 		ensureCreepMemory(creep);
 		runCreep(creep, budgetHard);
 	}
-}
-
-function hostileWatcher(room: Room): void {
-	const hostiles = room.find(FIND_HOSTILE_CREEPS);
-	if (hostiles.length === 0) return;
-
-	const events = Memory.v1.events;
-	if (!events) return;
-	if (events.hostile?.[room.name]) return;
-
-	if (!events.hostile) events.hostile = {};
-	events.hostile[room.name] = {
-		tick: Game.time,
-		room: room.name,
-		threat: hostiles.length > 3 ? 'swarm' : 'scout',
-	};
-}
-
-function expansionWatcher(room: Room): void {
-	const rcl = room.controller?.level || 1;
-	if (rcl < 4) return;
-
-	const storage = room.storage;
-	if (!storage) return;
-	if ((storage.store[RESOURCE_ENERGY] || 0) < 500000) return;
-
-	const events = Memory.v1.events;
-	if (!events) return;
-	if (events.expansion?.[room.name]) return;
-
-	const exits = Game.map.describeExits(room.name);
-	for (const exitKey in exits) {
-		const exitRoom = exits[exitKey as unknown as ExitKey];
-		if (!Game.rooms[exitRoom] || !Game.rooms[exitRoom].controller?.my) {
-			if (!events.expansion) events.expansion = {};
-			events.expansion[room.name] = {
-				sourceRoom: room.name,
-				targetRoom: exitRoom,
-				tick: Game.time,
-			};
-			return;
-		}
-	}
-}
-
-const MAX_ROADS_PER_TICK = 5;
-
-function drainPendingRoads(room: Room): void {
-  const ns = Memory[CURRENT_NS];
-  if (!ns.pathing || !ns.pathing.pendingRoads) return;
-
-  const pending = ns.pathing.pendingRoads;
-  let placed = 0;
-
-  for (let i = pending.length - 1; i >= 0 && placed < MAX_ROADS_PER_TICK; i--) {
-    const entry = pending[i];
-    if (entry.roomName !== room.name) continue;
-
-    const result = room.createConstructionSite(entry.x, entry.y, STRUCTURE_ROAD);
-    if (result === OK || result === ERR_INVALID_TARGET) {
-      pending.splice(i, 1);
-      if (result === OK) placed++;
-    }
-  }
-}
-
-function recheckLayout(room: Room): void {
-  if (Game.time % 200 !== 0) return;
-
-  const layout = room.memory.layout;
-  if (!layout || !layout.bunker) return;
-
-  let needsReplan = false;
-
-  for (const towerPos of layout.bunker.towers) {
-    const tower = room.lookForAt(LOOK_STRUCTURES, towerPos.x, towerPos.y)
-      .find(s => s.structureType === STRUCTURE_TOWER);
-    if (!tower) {
-      needsReplan = true;
-      break;
-    }
-  }
-
-  const existingSpawns = room.find(FIND_MY_STRUCTURES, {
-    filter: (s) => s.structureType === STRUCTURE_SPAWN
-  });
-
-  if (existingSpawns.length > 0) {
-    const spawn = existingSpawns[0];
-    if (!spawn.pos.isEqualTo(layout.bunker.spawn)) {
-      needsReplan = true;
-    }
-  }
-
-  if (needsReplan) {
-    const newLayout = planLayout(room);
-    const newSwapPlan = planSwap(room, newLayout);
-    room.memory.layout = { bunker: newLayout, swap: newSwapPlan, lastUpdated: Game.time };
-  }
 }
 
 export const loop = (): void => {

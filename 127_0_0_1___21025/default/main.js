@@ -2445,47 +2445,7 @@ function run(room) {
     }
 }
 
-// src/main.ts
-const ALWAYS_RUN_ROLES = new Set(['harvester', 'hauler']);
-const PRODUCTION_ROLES = new Set(['builder', 'upgrader']);
-function runCreep(creep, budgetHard) {
-    const role = creep.memory.role;
-    if (ALWAYS_RUN_ROLES.has(role)) {
-        // Tier 1: always run
-    }
-    else if (PRODUCTION_ROLES.has(role)) {
-        if (Game.cpu.getUsed() >= budgetHard)
-            return;
-    }
-    else {
-        if (Game.cpu.getUsed() >= budgetHard)
-            return;
-    }
-    switch (role) {
-        case 'harvester':
-            run$4(creep);
-            break;
-        case 'hauler':
-            run$3(creep);
-            break;
-        case 'builder':
-            run$2(creep);
-            break;
-        case 'upgrader':
-            run$1(creep);
-            break;
-    }
-}
-function runCreeps(room) {
-    const { hard: budgetHard } = getCpuBudgets();
-    for (const name in Game.creeps) {
-        const creep = Game.creeps[name];
-        if (creep.memory.roomName !== room.name)
-            continue;
-        ensureCreepMemory(creep);
-        runCreep(creep, budgetHard);
-    }
-}
+// src/colony/Watchers.ts
 function hostileWatcher(room) {
     const hostiles = room.find(FIND_HOSTILE_CREEPS);
     if (hostiles.length === 0)
@@ -2532,6 +2492,8 @@ function expansionWatcher(room) {
         }
     }
 }
+
+// src/colony/RoadDrainer.ts
 const MAX_ROADS_PER_TICK = 5;
 function drainPendingRoads(room) {
     const ns = Memory[CURRENT_NS];
@@ -2551,6 +2513,8 @@ function drainPendingRoads(room) {
         }
     }
 }
+
+// src/colony/LayoutWatcher.ts
 function recheckLayout(room) {
     if (Game.time % 200 !== 0)
         return;
@@ -2579,6 +2543,48 @@ function recheckLayout(room) {
         const newLayout = planLayout(room);
         const newSwapPlan = planSwap(room, newLayout);
         room.memory.layout = { bunker: newLayout, swap: newSwapPlan, lastUpdated: Game.time };
+    }
+}
+
+// src/main.ts
+const ALWAYS_RUN_ROLES = new Set(['harvester', 'hauler']);
+const PRODUCTION_ROLES = new Set(['builder', 'upgrader']);
+function runCreep(creep, budgetHard) {
+    const role = creep.memory.role;
+    if (ALWAYS_RUN_ROLES.has(role)) {
+        // Tier 1: always run
+    }
+    else if (PRODUCTION_ROLES.has(role)) {
+        if (Game.cpu.getUsed() >= budgetHard)
+            return;
+    }
+    else {
+        if (Game.cpu.getUsed() >= budgetHard)
+            return;
+    }
+    switch (role) {
+        case 'harvester':
+            run$4(creep);
+            break;
+        case 'hauler':
+            run$3(creep);
+            break;
+        case 'builder':
+            run$2(creep);
+            break;
+        case 'upgrader':
+            run$1(creep);
+            break;
+    }
+}
+function runCreeps(room) {
+    const { hard: budgetHard } = getCpuBudgets();
+    for (const name in Game.creeps) {
+        const creep = Game.creeps[name];
+        if (creep.memory.roomName !== room.name)
+            continue;
+        ensureCreepMemory(creep);
+        runCreep(creep, budgetHard);
     }
 }
 const loop = () => {
