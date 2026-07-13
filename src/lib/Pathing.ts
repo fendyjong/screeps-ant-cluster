@@ -1,166 +1,161 @@
-import { CostMatrix } from 'screeps';
-import { getTerrainMatrix } from './TerrainMatrix';
-import { CURRENT_NS } from './Memory';
+import { findPath, MoveOpts } from './PathFinder';
+import { getTerrainCosts, normalizePos } from './helpers';
 
+const MOVE_PRIORITY: Record<string, number> = {
+	harvester: 1,
+	defender: 2,
+	hauler: 3,
+	builder: 4,
+	upgrader: 5,
+	scout: 9,
+};
 
+const DEFAULT_PRIORITY = 10;
+const STUCK_THRESHOLD = 2;
+const TRAFFIC_THRESHOLD = 100;
 
-function isCreepStuck(creep: Creep): boolean {
-	if (!creep.memory._lastPos) {
+const DIR_OFFSETS: Record<number, { dx: number; dy: number }> = {
+	1: { dx: 0, dy: -1 },
+	2: { dx: 1, dy: -1 },
+	3: { dx: 1, dy: 0 },
+	4: { dx: 1, dy: 1 },
+	5: { dx: 0, dy: 1 },
+	6: { dx: -1, dy: 1 },
+	7: { dx: -1, dy: 0 },
+	8: { dx: -1, dy: -1 },
+};
+
+function oppositeDir(dir: DirectionConstant): DirectionConstant {
+	return ((dir + 3) % 8 + 1) as DirectionConstant;
+}
+
+function getPushPriority(creep: Creep): number {
+	return MOVE_PRIORITY[creep.memory.role] ?? DEFAULT_PRIORITY;
+}
+
+function serializePath(startPos: RoomPosition, path: RoomPosition[]): string {
+	let result = '';
+	let last = startPos;
+	for (const pos of path) {
+		if (pos.roomName === last.roomName) {
+			result += last.getDirectionTo(pos);
+		}
+		last = pos;
+	}
+	return result;
+}
+
+function isStuck(creep: Creep): boolean {
+	const last = creep.memory._lastPos as { x: number; y: number; roomName: string } | undefined;
+	if (!last) {
 		creep.memory._lastPos = { x: creep.pos.x, y: creep.pos.y, roomName: creep.room.name };
 		return false;
 	}
-
-	const last = creep.memory._lastPos;
 	if (creep.pos.x === last.x && creep.pos.y === last.y && creep.room.name === last.roomName) {
 		creep.memory._stuckTicks = (creep.memory._stuckTicks || 0) + 1;
 	} else {
 		creep.memory._stuckTicks = 0;
 	}
-
 	creep.memory._lastPos = { x: creep.pos.x, y: creep.pos.y, roomName: creep.room.name };
-	return (creep.memory._stuckTicks || 0) > 1;
+	return (creep.memory._stuckTicks || 0) > STUCK_THRESHOLD;
 }
 
-const TRAFFIC_THRESHOLD = 100;
+function tryPush(creep: Creep, dir: DirectionConstant): boolean {
+	const offset = DIR_OFFSETS[dir];
+	if (!offset) return false;
+	const x = creep.pos.x + offset.dx;
+	const y = creep.pos.y + offset.dy;
+	if (x < 0 || x > 49 || y < 0 || y > 49) return true;
 
-function computeStructSig(room: Room): number {
-	let sig = 0;
-	const structures = room.find(FIND_STRUCTURES);
-	for (let i = 0; i < structures.length; i++) {
-		const s = structures[i];
-		sig ^= s.structureType.charCodeAt(0) * (s.pos.x + 1) * (s.pos.y + 3);
-	}
-	const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
-	for (let i = 0; i < sites.length; i++) {
-		const s = sites[i];
-		sig ^= s.structureType.charCodeAt(0) * (s.pos.x + 1) * (s.pos.y + 3) * 7;
-	}
-	return sig;
-}
+	const blocking = creep.room.lookForAt(LOOK_CREEPS, x, y)[0];
+	if (!blocking) return true;
 
-function getOrBuildCostMatrix(room: Room): CostMatrix {
-	const ns = Memory[CURRENT_NS];
-	if (!ns.pathing) ns.pathing = {};
-	if (!ns.pathing.costCache) ns.pathing.costCache = {};
+	if (getPushPriority(creep) >= getPushPriority(blocking)) return false;
 
-	const currentSig = computeStructSig(room);
-	const cached = ns.pathing.costCache[room.name] as { matrix: number[]; structSig: number } | undefined;
+	const dirs: DirectionConstant[] = [1, 2, 3, 4, 5, 6, 7, 8];
+	for (const d of dirs) {
+		const off = DIR_OFFSETS[d];
+		const nx = blocking.pos.x + off.dx;
+		const ny = blocking.pos.y + off.dy;
+		if (nx < 0 || nx > 49 || ny < 0 || ny > 49) continue;
+		const terrain = blocking.room.lookForAt(LOOK_TERRAIN, nx, ny)[0];
+		if (terrain === 'wall') continue;
+		if (blocking.room.lookForAt(LOOK_CREEPS, nx, ny).length > 0) continue;
+		if (blocking.room.lookForAt(LOOK_STRUCTURES, nx, ny).some(s => !(s as any).isWalkable)) continue;
 
-	if (cached && cached.structSig === currentSig) {
-		return PathFinder.CostMatrix.deserialize(cached.matrix);
-	}
-
-	const base = getTerrainMatrix(room.name);
-	const costs = new PathFinder.CostMatrix();
-
-	for (let y = 0; y < 50; y++) {
-		for (let x = 0; x < 50; x++) {
-			costs.set(x, y, base.get(x, y));
+		const result = blocking.move(d);
+		if (result === OK) {
+			if (blocking.memory._path) {
+				blocking.memory._path = oppositeDir(d) + blocking.memory._path;
+			}
+			return true;
 		}
 	}
-
-	const structures = room.find(FIND_STRUCTURES);
-	for (let i = 0; i < structures.length; i++) {
-		const s = structures[i];
-		if (s.structureType === STRUCTURE_ROAD) {
-			costs.set(s.pos.x, s.pos.y, 1);
-		} else if (s.structureType !== STRUCTURE_CONTAINER && s.structureType !== STRUCTURE_RAMPART) {
-			costs.set(s.pos.x, s.pos.y, 255);
-		}
-	}
-
-	const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
-	for (let i = 0; i < sites.length; i++) {
-		const site = sites[i];
-		if (site.structureType !== STRUCTURE_ROAD && site.structureType !== STRUCTURE_CONTAINER && site.structureType !== STRUCTURE_RAMPART) {
-			costs.set(site.pos.x, site.pos.y, 255);
-		}
-	}
-
-	ns.pathing.costCache[room.name] = {
-		matrix: costs.serialize(),
-		structSig: currentSig,
-	};
-
-	return costs;
+	return false;
 }
 
 function recordTraffic(creep: Creep): void {
 	const roomName = creep.room.name;
-	const ns = Memory[CURRENT_NS];
+	if (!Memory.v1) return;
+	const ns = Memory.v1 as any;
 	if (!ns.pathing) ns.pathing = {};
 	if (!ns.pathing.traffic) ns.pathing.traffic = {};
 	if (!ns.pathing.traffic[roomName]) ns.pathing.traffic[roomName] = {};
 
-	const pos = creep.pos;
-	const key = pos.x + ',' + pos.y;
+	const key = creep.pos.x + ',' + creep.pos.y;
 	const heatmap = ns.pathing.traffic[roomName];
 	heatmap[key] = (heatmap[key] || 0) + 1;
 
 	if (heatmap[key] >= TRAFFIC_THRESHOLD) {
 		if (!ns.pathing.pendingRoads) ns.pathing.pendingRoads = [];
-		ns.pathing.pendingRoads.push({ roomName, x: pos.x, y: pos.y });
+		ns.pathing.pendingRoads.push({ roomName, x: creep.pos.x, y: creep.pos.y });
 		heatmap[key] = 0;
 	}
 }
 
-function giveWayIfStuck(creep: Creep): boolean {
-	if (!creep.memory._stuckTicks || creep.memory._stuckTicks < 3) return false;
-	if (creep.store.getUsedCapacity() === 0) return false;
+export function moveTo(creep: Creep, target: HasPos | RoomPosition, opts?: MoveOpts): ScreepsReturnCode {
+	if (creep.fatigue > 0) return ERR_TIRED;
+	if (creep.spawning) return ERR_BUSY;
 
-	const dirs = [
-		{ dx: -1, dy: 0 }, { dx: 1, dy: 0 },
-		{ dx: 0, dy: -1 }, { dx: 0, dy: 1 },
-	];
+	const dest = normalizePos(target);
+	const range = opts?.range ?? 1;
+	const rangeTo = creep.pos.getRangeTo(dest);
 
-	for (const d of dirs) {
-		const x = creep.pos.x + d.dx;
-		const y = creep.pos.y + d.dy;
-		if (x < 0 || x > 49 || y < 0 || y > 49) continue;
-		const look = creep.room.lookForAt(LOOK_CREEPS, x, y);
-		if (look.length > 0) continue;
-		const terrain = creep.room.lookForAt(LOOK_TERRAIN, x, y);
-		if (terrain[0] === 'wall') continue;
-		creep.move(creep.pos.getDirectionTo(new RoomPosition(x, y, creep.room.name)));
-		return true;
+	if (rangeTo <= range) return ERR_NOT_IN_RANGE;
+
+	if (!creep.memory._path) creep.memory._path = '';
+	if (!creep.memory._stuckTicks) creep.memory._stuckTicks = 0;
+
+	const stuck = isStuck(creep);
+	if (stuck && Math.random() > 0.5) {
+		creep.memory._path = '';
 	}
 
-	return false;
-}
+	if (!creep.memory._path || creep.memory._path.length === 0) {
+		const terrainCosts = getTerrainCosts(creep);
+		const ret = findPath(creep.pos, dest, {
+			...opts,
+			terrainCosts,
+			ignoreCreeps: true,
+		});
 
-export function moveTo(creep: Creep, target: RoomPosition | { pos: RoomPosition }, opts?: MoveToOpts): void {
-	const stuck = isCreepStuck(creep);
+		if (ret.incomplete) return ERR_NO_PATH;
 
-	if (giveWayIfStuck(creep)) return;
+		creep.memory._path = serializePath(creep.pos, ret.path);
+	}
 
-	creep.moveTo(target, {
-		visualizePathStyle: { stroke: '#ffffff' },
-		reusePath: stuck ? 0 : 10,
-		maxOps: stuck ? 2000 : 1200,
-		ignoreCreeps: false,
-		...opts,
-		costCallback: (roomName: string, matrix: CostMatrix) => {
-			if (roomName !== creep.room.name) return matrix;
+	if (!creep.memory._path || creep.memory._path.length === 0) return ERR_NO_PATH;
 
-			const cm = getOrBuildCostMatrix(creep.room);
+	const dir = parseInt(creep.memory._path[0], 10) as DirectionConstant;
 
-			const hostiles = creep.room.find(FIND_HOSTILE_CREEPS);
-			for (let i = 0; i < hostiles.length; i++) {
-				const h = hostiles[i];
-				cm.set(h.pos.x, h.pos.y, 255);
-			}
+	if (!tryPush(creep, dir)) {
+		return ERR_BUSY;
+	}
 
-			const friendlies = creep.room.find(FIND_MY_CREEPS);
-			for (let i = 0; i < friendlies.length; i++) {
-				const f = friendlies[i];
-				if (cm.get(f.pos.x, f.pos.y) !== 255) {
-					cm.set(f.pos.x, f.pos.y, 8);
-				}
-			}
-
-			return cm;
-		},
-	});
-
-	recordTraffic(creep);
+	const result = creep.move(dir);
+	if (result === OK) {
+		creep.memory._path = creep.memory._path.slice(1);
+		recordTraffic(creep);
+	}
+	return result;
 }

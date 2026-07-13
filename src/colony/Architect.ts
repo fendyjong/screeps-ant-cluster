@@ -1,5 +1,6 @@
 import { CostMatrix } from 'screeps';
-import { getTerrainMatrix, isWalkable, findOptimalTowerPositions } from '../lib/TerrainMatrix';
+import { getTerrainMatrix, isWalkable } from '../lib/PathFinder';
+import { findOptimalTowerPositions } from '../lib/TerrainMatrix';
 import { getBudget } from '../lib/Cashflow';
 
 const REBUILD_COSTS: Record<StructureConstant, number> = {

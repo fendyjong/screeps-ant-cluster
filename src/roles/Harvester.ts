@@ -2,7 +2,7 @@
 
 import { Goal } from '../types';
 import { moveTo } from '../lib/Pathing';
-import { getTerrainMatrix } from '../lib/TerrainMatrix';
+import { getTerrainMatrix } from '../lib/PathFinder';
 
 function findSource(creep: Creep): Source | null {
   const sources = creep.room.find(FIND_SOURCES_ACTIVE);
