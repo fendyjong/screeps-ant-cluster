@@ -1,6 +1,7 @@
 // src/types/index.ts
 
 import { BunkerLayout, SwapPlan } from '../colony/Architect';
+import { SpawnRequest } from '../hatchery/Request';
 
 export enum Goal {
   ECONOMY = 'economy',
@@ -37,11 +38,35 @@ export interface TerrainCache {
 }
 
 export interface PathingMemory {
-  terrain: Record<string, TerrainCache>;
+	terrain: Record<string, TerrainCache>;
+}
+
+export interface SpawnRequestData {
+	role: string
+	priority: number
+	bodyMin: number[]
+	bodyIdeal: number[]
+	count: number
+	memory: Record<string, any>
+	createdAt: number
+	roomName: string
+}
+
+export interface DeathWatchEntry {
+	name: string
+	ttl: number
+}
+
+export interface HatcheryMemory {
+	queue: Record<string, SpawnRequestData[]>
+	deathWatch: Record<string, Record<string, DeathWatchEntry[]>>
 }
 
 declare global {
-  interface Memory {
-    pathing?: PathingMemory;
-  }
+	interface Memory {
+		v1: {
+			hatchery: HatcheryMemory
+		}
+		pathing?: PathingMemory
+	}
 }
