@@ -1,0 +1,139 @@
+/* tslint:disable:no-eval */
+import { log } from '../console/log';
+import { Segmenter, SEGMENTS } from '../memory/Segmenter';
+import { alignedNewline } from '../utilities/stringConstants';
+import { color } from '../utilities/utils';
+import { MUON, MY_USERNAME } from '../~settings';
+const DEBUG_TIMEOUT = 1000;
+const NO_COMMAND = 'No command';
+const defaultDebuggerMemory = {
+    username: undefined,
+    enabled: false,
+    expiration: 0,
+    command: undefined,
+    response: undefined,
+};
+const DEBUGGER = color('[DEBUGGER]', '#ff00ff');
+/**
+ * Debugging tool which lets me remotely debug other Overmind players' code by communicating through public memory
+ * segments. Can be toggled on and off with console commands startRemoteDebugSession() and endRemoteDebugSession().
+ */
+export class RemoteDebugger {
+    constructor() {
+        if (!Memory.remoteDebugger) {
+            Memory.remoteDebugger = {};
+        }
+        _.defaultsDeep(Memory.remoteDebugger, defaultDebuggerMemory);
+    }
+    get memory() {
+        return Memory.remoteDebugger;
+    }
+    /**
+     * Push all commands from secret memory to public memory and clear secret memory commands
+     */
+    pushCommands_master() {
+        Segmenter.setSegmentProperty(SEGMENTS.remoteDebugger, 'command', this.memory.command);
+        if (this.memory.command) {
+            log.info(`[DEBUGGER] Sending command: ${this.memory.command}`);
+        }
+        this.memory.command = undefined;
+    }
+    /**
+     * Fetch the response from the debugee
+     */
+    fetchResponse_master() {
+        const response = Segmenter.getForeignSegmentProperty('response');
+        return response;
+    }
+    /**
+     * Execute the commands you are given
+     */
+    fetchCommands_slave() {
+        const cmd = Segmenter.getForeignSegmentProperty('command');
+        if (cmd) {
+            log.info(`[DEBUGGER] Executing command: ${cmd}`);
+            const response = eval(cmd);
+            log.info(`[DEBUGGER] Relaying response: ${response}`);
+            this.memory.response = JSON.stringify(response);
+        }
+        else {
+            this.memory.response = NO_COMMAND;
+        }
+    }
+    /**
+     * Push the response from the last run command
+     */
+    pushResponse_slave() {
+        Segmenter.setSegmentProperty(SEGMENTS.remoteDebugger, 'response', this.memory.response);
+        this.memory.response = undefined;
+    }
+    extendSession() {
+        this.memory.expiration = Game.time + DEBUG_TIMEOUT;
+    }
+    enable() {
+        this.memory.enabled = true;
+        this.memory.expiration = Game.time + DEBUG_TIMEOUT;
+        log.info(`[DEBUGGER] Starting remote debug session. Timeout: ${this.memory.expiration} ` + alignedNewline +
+            `Warning: this enables remote arbitrary code execution!`);
+    }
+    disable() {
+        this.memory.enabled = false;
+        this.memory.expiration = -1;
+        log.info(`[DEBUGGER] Remote debugging session ended`);
+    }
+    connect(username) {
+        this.memory.username = username;
+        this.memory.enabled = true;
+        this.memory.expiration = Game.time + DEBUG_TIMEOUT;
+        log.info(`[DEBUGGER] Starting remote debug session with ${username}. Timeout: ${this.memory.expiration}`);
+    }
+    cancelCommand() {
+        this.memory.command = undefined;
+    }
+    /* Register a debug command to be sent to the user */
+    debug(command) {
+        this.memory.command = command;
+        return `[DEBUGGER] Sending command next tick.`;
+    }
+    run_master() {
+        if (Game.time % 2 == 0) {
+            const response = this.fetchResponse_master();
+            if (response && response != NO_COMMAND) {
+                log.info(`[DEBUGGER] Response: ` + response);
+            }
+            this.pushCommands_master();
+        }
+    }
+    run_slave() {
+        if (Game.time % 2 == 1) {
+            this.fetchCommands_slave();
+            this.pushResponse_slave();
+        }
+    }
+    run() {
+        if (this.memory.enabled) {
+            // Run the debugger
+            if (MY_USERNAME == MUON) {
+                if (this.memory.username) {
+                    Segmenter.requestSegments(SEGMENTS.remoteDebugger);
+                    Segmenter.requestForeignSegment(this.memory.username, SEGMENTS.remoteDebugger);
+                    Segmenter.markSegmentAsPublic(SEGMENTS.remoteDebugger);
+                    this.run_master();
+                }
+            }
+            else {
+                Segmenter.requestSegments(SEGMENTS.remoteDebugger);
+                Segmenter.requestForeignSegment(MUON, SEGMENTS.remoteDebugger);
+                Segmenter.markSegmentAsPublic(SEGMENTS.remoteDebugger);
+                this.run_slave();
+            }
+            if (Game.time % 20 == 0) {
+                log.alert(`[DEBUGGER] Remote session is still enabled! Expiration: ${this.memory.expiration}`);
+            }
+            // Disable after timeout
+            if (!this.memory.expiration || Game.time > this.memory.expiration) {
+                this.disable();
+            }
+        }
+    }
+}

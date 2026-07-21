@@ -6913,6 +6913,7 @@ let Mem = Mem_1 = class Mem {
             assimilator: {},
             Overmind: {},
             combatPlanner: {},
+            expansionPlanner: {},
             profiler: {},
             overseer: {},
             segmenter: {},
@@ -8586,9 +8587,6 @@ TransportRequestGroup = __decorate$1([
     profile
 ], TransportRequestGroup);
 
-/**
- * Energetics manager; makes high-level decisions based on energy amounts
- */
 class Energetics {
     static lowPowerMode(colony) {
         if (colony.stage == ColonyStage.Adult) {
@@ -8598,6 +8596,52 @@ class Energetics {
             }
         }
         return false;
+    }
+    static stockpileBenchmark(colony) {
+        const storageEnergy = colony.storage ? colony.storage.store.energy || 0 : 0;
+        const terminalEnergy = colony.terminal ? colony.terminal.store.energy || 0 : 0;
+        const stockpile = storageEnergy + terminalEnergy;
+        const creepReplacementCost = _.sum(colony.creeps, creep => _.sum(creep.body, part => BODYPART_COST[part.type] || 0));
+        const estimatedIncome = _.sum(_.map(colony.miningSites, site => {
+            const overlord = site.overlords.mine;
+            if (overlord.isSuspended || overlord.miners.length == 0)
+                return 0;
+            const miningPowerAssigned = _.sum(overlord.miners, miner => miner.getActiveBodyparts(WORK));
+            const saturation = Math.min(miningPowerAssigned / overlord.miningPowerNeeded, 1);
+            return overlord.energyPerTick * saturation;
+        }));
+        const pipelineBuffer = estimatedIncome * Energetics.settings.stockpile.pipelineTicks;
+        const emergencyRepairBuffer = colony.towers.length * Energetics.settings.stockpile.emergencyTowerEnergy;
+        const constructionBacklog = _.sum(colony.constructionSites, site => Math.max(site.progressTotal - site.progress, 0));
+        const maxBuildBuffer = estimatedIncome * Energetics.settings.stockpile.maxBuildBufferTicks;
+        const plannedBuildBuffer = Math.min(constructionBacklog * Energetics.settings.stockpile.buildBacklogRatio, maxBuildBuffer);
+        const adaptiveFloor = creepReplacementCost + pipelineBuffer + emergencyRepairBuffer + plannedBuildBuffer;
+        const fallbackFloor = Energetics.settings.stockpile.fallbackFloorByLevel[colony.level];
+        const reserveFloor = Math.max(adaptiveFloor, fallbackFloor);
+        const ratio = reserveFloor > 0 ? stockpile / reserveFloor : Infinity;
+        let state;
+        let spendFactor;
+        if (stockpile >= Energetics.settings.storage.total.cap) {
+            state = 'capped';
+            spendFactor = 1.5;
+        }
+        else if (ratio < 0.5) {
+            state = 'critical';
+            spendFactor = 0;
+        }
+        else if (ratio < 1) {
+            state = 'saving';
+            spendFactor = 0.35;
+        }
+        else if (ratio < 2) {
+            state = 'balanced';
+            spendFactor = 1;
+        }
+        else {
+            state = 'surplus';
+            spendFactor = 1.2;
+        }
+        return { state, stockpile, reserveFloor, ratio, spendFactor };
     }
 }
 Energetics.settings = {
@@ -8621,6 +8665,22 @@ Energetics.settings = {
             equilibrium: 50000, // Try to maintain this amount; should be energyInThreshold + 2*energySendSize
             tolerance: 5000, // Don't care about deviation by less than this amount
             tradeAmount: 10000, // Buy/sell energy in increments of this amount
+        },
+    },
+    stockpile: {
+        pipelineTicks: 150,
+        emergencyTowerEnergy: 1000,
+        buildBacklogRatio: 0.25,
+        maxBuildBufferTicks: 1000,
+        fallbackFloorByLevel: {
+            1: 0,
+            2: 0,
+            3: 5000,
+            4: 20000,
+            5: 50000,
+            6: 100000,
+            7: 200000,
+            8: 300000,
         },
     },
 };
@@ -12159,13 +12219,13 @@ function getCutTiles(roomName, toProtect, preferCloserBarriers = true, preferClo
         }
     }
     // Visualise Result
-    if (positions.length > 0) {
+    if (visualize && positions.length > 0) {
         const visual = new RoomVisual(roomName);
         for (let i = positions.length - 1; i >= 0; i--) {
             visual.circle(positions[i].x, positions[i].y, { radius: 0.5, fill: '#ff7722', opacity: 0.9 });
         }
     }
-    else {
+    else if (positions.length == 0) {
         return [];
     }
     const wholeRoom = bounds.x1 === 0 && bounds.y1 === 0 && bounds.x2 === 49 && bounds.y2 === 49;
@@ -21770,6 +21830,16 @@ let WorkerOverlord = WorkerOverlord_1 = class WorkerOverlord extends Overlord {
                     }
                     return numWorkers;
                 });
+            }
+            const stockpile = Energetics.stockpileBenchmark(this.colony);
+            if (this.nukeDefenseRamparts.length == 0 && this.colony.controller.ticksToDowngrade > 2000) {
+                numWorkers = Math.ceil(numWorkers * stockpile.spendFactor);
+                if (stockpile.state == 'saving') {
+                    numWorkers = Math.min(numWorkers, 1);
+                }
+                else if (stockpile.state == 'critical') {
+                    numWorkers = 0;
+                }
             }
         }
         if (this.useBoostedRepair) {
@@ -35890,62 +35960,520 @@ Overseer = Overseer_1 = __decorate$1([
     profile
 ], Overseer);
 
+const CAMPAIGN_PHASES = [
+    'discover',
+    'validate',
+    'escrow',
+    'probe',
+    'claim',
+    'bootstrap',
+    'stabilize',
+    'independent',
+    'abandon',
+    'cooldown',
+];
+var CampaignAction;
+(function (CampaignAction) {
+    CampaignAction["None"] = "none";
+    CampaignAction["WouldProbe"] = "would_probe";
+    CampaignAction["ReserveEscrow"] = "reserve_escrow";
+    CampaignAction["WouldClaim"] = "would_claim";
+    CampaignAction["WouldReinforce"] = "would_reinforce";
+    CampaignAction["WouldAbandon"] = "would_abandon";
+    CampaignAction["WouldUnclaim"] = "would_unclaim";
+    CampaignAction["Complete"] = "complete";
+})(CampaignAction || (CampaignAction = {}));
+const CAMPAIGN_POLICY = {
+    minimumReserveRatio: 2,
+    maximumSpawnUtilization: 0.75,
+    minimumCpuBucket: 5000,
+    probeDeadline: 1500,
+    claimDeadline: 1500,
+    bootstrapDeadline: 2500,
+    stabilizationWindow: 1500,
+    baseCooldown: 5000,
+    maxCooldown: 100000,
+};
+const MILESTONES = [
+    'claimed',
+    'firstHarvest',
+    'spawnSitePlaced',
+    'spawnComplete',
+    'localMinerHauler',
+    'netEnergyNonNegative',
+];
+function createCampaign(dryRun = true) {
+    return {
+        phase: 'discover',
+        attempts: 0,
+        escrowEnergy: 0,
+        escrowSpawnTicks: 0,
+        remainingEscrowEnergy: 0,
+        reinforcementUsed: false,
+        milestones: {},
+        cooldowns: {},
+        dryRun,
+    };
+}
+function isCampaignPhase(value) {
+    return CAMPAIGN_PHASES.includes(value);
+}
+function isRecord(value) {
+    return value !== null && typeof value == 'object' && !Array.isArray(value);
+}
+function isFiniteNumber(value) {
+    return typeof value == 'number' && Number.isFinite(value);
+}
+function campaignMemoryIsValid(value) {
+    if (!isRecord(value) || !isCampaignPhase(value.phase)
+        || !isFiniteNumber(value.attempts)
+        || !isFiniteNumber(value.escrowEnergy)
+        || !isFiniteNumber(value.escrowSpawnTicks)
+        || !isFiniteNumber(value.remainingEscrowEnergy)
+        || typeof value.reinforcementUsed != 'boolean'
+        || typeof value.dryRun != 'boolean'
+        || !isRecord(value.milestones)
+        || !isRecord(value.cooldowns)) {
+        return false;
+    }
+    const optionalNumbers = ['startedAt', 'phaseStartedAt', 'lastProgressAt'];
+    for (const key of optionalNumbers) {
+        if (value[key] !== undefined && !isFiniteNumber(value[key])) {
+            return false;
+        }
+    }
+    if (value.parentRoom !== undefined && typeof value.parentRoom != 'string'
+        || value.targetRoom !== undefined && typeof value.targetRoom != 'string'
+        || value.failureReason !== undefined && typeof value.failureReason != 'string') {
+        return false;
+    }
+    for (const name of Object.keys(value.milestones)) {
+        const milestone = value.milestones[name];
+        if (!isRecord(milestone)
+            || milestone.deadline !== undefined && !isFiniteNumber(milestone.deadline)
+            || milestone.completedAt !== undefined && !isFiniteNumber(milestone.completedAt)) {
+            return false;
+        }
+    }
+    for (const roomName of Object.keys(value.cooldowns)) {
+        const cooldown = value.cooldowns[roomName];
+        if (!isRecord(cooldown) || !isFiniteNumber(cooldown.until) || !isFiniteNumber(cooldown.failures)
+            || typeof cooldown.lastReason != 'string') {
+            return false;
+        }
+    }
+    return true;
+}
+function targetOwnershipIsValid(phase, owner, reservation, username) {
+    if (phase == 'discover' || phase == 'validate' || phase == 'escrow' || phase == 'probe') {
+        return owner === undefined && (reservation === undefined || reservation == username);
+    }
+    if (phase == 'claim' || phase == 'bootstrap' || phase == 'stabilize' || phase == 'independent') {
+        return owner == username && (reservation === undefined || reservation == username);
+    }
+    return false;
+}
+function hasRecentNonNegativeTrend(samples, now, minimumSpan = 100, maximumAge = 50) {
+    if (samples.length < 2) {
+        return false;
+    }
+    const earliest = samples[0];
+    const latest = samples[samples.length - 1];
+    return isFiniteNumber(earliest.tick) && isFiniteNumber(earliest.energy)
+        && isFiniteNumber(latest.tick) && isFiniteNumber(latest.energy)
+        && latest.tick <= now && latest.tick >= now - maximumAge
+        && latest.tick - earliest.tick >= minimumSpan
+        && latest.energy >= earliest.energy;
+}
+function nextStabilizingSince(previous, stable, now) {
+    if (!stable) {
+        return undefined;
+    }
+    return previous === undefined ? now : previous;
+}
+function intelTimestampIsFresh(lastVisible, now, maximumAge) {
+    return isFiniteNumber(lastVisible) && lastVisible <= now && lastVisible >= now - maximumAge;
+}
+function shouldLogCampaignDecision(beforePhase, afterPhase, actions) {
+    return beforePhase != afterPhase || actions.some(action => action != CampaignAction.None);
+}
+function routeRoomIsDangerous(evidence, username, highThreatThreshold = 0.25) {
+    if (!evidence.intelFresh) {
+        return true;
+    }
+    return evidence.avoid === true
+        || isFiniteNumber(evidence.unsafeFor) && evidence.unsafeFor > 0
+        || evidence.visibleDangerousHostiles === true
+        || evidence.owner !== undefined && evidence.owner != username
+        || evidence.reservation !== undefined && evidence.reservation != username
+        || isFiniteNumber(evidence.threatLevel) && evidence.threatLevel > highThreatThreshold;
+}
+function spawnMilestonePlaced(spawnCount, spawnSiteCount) {
+    return spawnCount > 0 || spawnSiteCount > 0;
+}
+function spawnCapacitySupportsEscrow(spawnCount, utilization, window, requiredSpawnTicks) {
+    return isFiniteNumber(spawnCount) && spawnCount > 0
+        && isFiniteNumber(utilization) && utilization >= 0 && utilization <= 1
+        && isFiniteNumber(window) && window > 0
+        && isFiniteNumber(requiredSpawnTicks) && requiredSpawnTicks > 0
+        && spawnCount * window * (1 - utilization) >= requiredSpawnTicks;
+}
+function conservativeEscrowEstimate(claimerCost, claimerParts, pioneerCost, pioneerParts, spawnTimePerPart = 3) {
+    const waves = 2;
+    const margin = 1.25;
+    const pioneers = 4;
+    return {
+        energy: Math.ceil((claimerCost + pioneers * pioneerCost) * waves * margin),
+        spawnTicks: Math.ceil((claimerParts + pioneers * pioneerParts) * spawnTimePerPart * waves * margin),
+    };
+}
+function failureCooldown(failures) {
+    const exponent = Math.max(0, failures - 1);
+    return Math.min(CAMPAIGN_POLICY.maxCooldown, CAMPAIGN_POLICY.baseCooldown * Math.pow(2, exponent));
+}
+function cloneCampaign(campaign) {
+    const milestones = {};
+    for (const name of Object.keys(campaign.milestones)) {
+        milestones[name] = Object.assign({}, campaign.milestones[name]);
+    }
+    const cooldowns = {};
+    for (const roomName of Object.keys(campaign.cooldowns)) {
+        cooldowns[roomName] = Object.assign({}, campaign.cooldowns[roomName]);
+    }
+    return Object.assign(Object.assign({}, campaign), { milestones, cooldowns });
+}
+function transitionTo(campaign, phase, now) {
+    campaign.phase = phase;
+    campaign.phaseStartedAt = now;
+}
+function abandon(campaign, snapshot, reason) {
+    transitionTo(campaign, 'abandon', snapshot.now);
+    campaign.failureReason = reason;
+    const actions = [CampaignAction.WouldAbandon];
+    if (snapshot.claimed) {
+        actions.push(CampaignAction.WouldUnclaim);
+    }
+    return { campaign, actions };
+}
+function initializeMilestones(campaign, now) {
+    let currentFound = false;
+    for (const name of MILESTONES) {
+        const milestone = campaign.milestones[name] || {};
+        campaign.milestones[name] = milestone;
+        if (milestone.completedAt !== undefined) {
+            milestone.deadline = undefined;
+        }
+        else if (!currentFound) {
+            if (milestone.deadline === undefined) {
+                milestone.deadline = now + CAMPAIGN_POLICY.bootstrapDeadline;
+            }
+            currentFound = true;
+        }
+        else {
+            milestone.deadline = undefined;
+        }
+    }
+}
+function updateMilestones(campaign, snapshot) {
+    const complete = {
+        claimed: snapshot.claimed,
+        firstHarvest: snapshot.firstHarvest,
+        spawnSitePlaced: snapshot.spawnSitePlaced,
+        spawnComplete: snapshot.spawnComplete,
+        localMinerHauler: snapshot.localMinerHauler,
+        netEnergyNonNegative: snapshot.netEnergyNonNegative,
+    };
+    for (const name of MILESTONES) {
+        const milestone = campaign.milestones[name];
+        if (milestone.completedAt === undefined) {
+            if (!complete[name]) {
+                break;
+            }
+            milestone.completedAt = snapshot.now;
+            milestone.deadline = undefined;
+            campaign.lastProgressAt = snapshot.now;
+        }
+    }
+    initializeMilestones(campaign, snapshot.now);
+}
+function currentMilestone(campaign) {
+    for (const name of MILESTONES) {
+        if (campaign.milestones[name].completedAt === undefined) {
+            return campaign.milestones[name];
+        }
+    }
+    return undefined;
+}
+function transitionCampaign(campaign, snapshot) {
+    const next = cloneCampaign(campaign);
+    const none = () => ({ campaign: next, actions: [CampaignAction.None] });
+    switch (next.phase) {
+        case 'independent':
+            return none();
+        case 'discover':
+            if (snapshot.candidateAvailable && snapshot.candidateRoom && snapshot.parentRoom) {
+                next.targetRoom = snapshot.candidateRoom;
+                next.parentRoom = snapshot.parentRoom;
+                next.startedAt = snapshot.now;
+                next.attempts += 1;
+                next.failureReason = undefined;
+                transitionTo(next, 'validate', snapshot.now);
+            }
+            return none();
+        case 'validate':
+            if (!snapshot.intelFresh || !snapshot.routeFresh) {
+                return { campaign: next, actions: [CampaignAction.WouldProbe] };
+            }
+            if (!snapshot.targetValid) {
+                return abandon(next, snapshot, 'invalid_target');
+            }
+            if (!snapshot.gclAvailable) {
+                return abandon(next, snapshot, 'gcl_unavailable');
+            }
+            if (!snapshot.cpuSupportsColony) {
+                return abandon(next, snapshot, 'cpu_unsupported');
+            }
+            transitionTo(next, 'escrow', snapshot.now);
+            return none();
+        case 'escrow':
+            if (snapshot.parentState === 'critical') {
+                return abandon(next, snapshot, 'parent_critical');
+            }
+            if (snapshot.parentState === 'saving'
+                || snapshot.reserveRatio < CAMPAIGN_POLICY.minimumReserveRatio
+                || snapshot.stockpileTrend <= 0
+                || !snapshot.escrowAffordable
+                || !snapshot.spawnCapacityAvailable
+                || snapshot.spawnUtilization > CAMPAIGN_POLICY.maximumSpawnUtilization
+                || snapshot.cpuBucket < CAMPAIGN_POLICY.minimumCpuBucket) {
+                return none();
+            }
+            transitionTo(next, 'probe', snapshot.now);
+            return { campaign: next, actions: [CampaignAction.ReserveEscrow] };
+        case 'probe':
+            if (snapshot.parentState === 'critical') {
+                return abandon(next, snapshot, 'parent_critical');
+            }
+            if (!snapshot.targetValid) {
+                return abandon(next, snapshot, 'invalid_target');
+            }
+            if (snapshot.dangerousHostiles) {
+                return abandon(next, snapshot, 'dangerous_hostiles');
+            }
+            if (snapshot.routeLost) {
+                return abandon(next, snapshot, 'route_lost');
+            }
+            if (next.phaseStartedAt !== undefined
+                && snapshot.now - next.phaseStartedAt >= CAMPAIGN_POLICY.probeDeadline) {
+                return abandon(next, snapshot, 'probe_deadline');
+            }
+            if (!snapshot.intelFresh || !snapshot.routeFresh || !snapshot.probeComplete) {
+                return { campaign: next, actions: [CampaignAction.WouldProbe] };
+            }
+            transitionTo(next, 'claim', snapshot.now);
+            return { campaign: next, actions: [CampaignAction.WouldClaim] };
+        case 'claim':
+            if (snapshot.parentState === 'critical') {
+                return abandon(next, snapshot, 'parent_critical');
+            }
+            if (snapshot.claimed) {
+                transitionTo(next, 'bootstrap', snapshot.now);
+                next.lastProgressAt = snapshot.now;
+                initializeMilestones(next, snapshot.now);
+                updateMilestones(next, snapshot);
+                return none();
+            }
+            if (next.phaseStartedAt !== undefined
+                && snapshot.now - next.phaseStartedAt >= CAMPAIGN_POLICY.claimDeadline) {
+                return abandon(next, snapshot, 'claim_deadline');
+            }
+            return { campaign: next, actions: [CampaignAction.WouldClaim] };
+        case 'bootstrap': {
+            if (snapshot.parentState === 'critical') {
+                return abandon(next, snapshot, 'parent_critical');
+            }
+            if (snapshot.dangerousHostiles) {
+                return abandon(next, snapshot, 'dangerous_hostiles');
+            }
+            if (snapshot.routeLost) {
+                return abandon(next, snapshot, 'route_lost');
+            }
+            initializeMilestones(next, next.phaseStartedAt === undefined ? snapshot.now : next.phaseStartedAt);
+            updateMilestones(next, snapshot);
+            const milestone = currentMilestone(next);
+            if (!milestone) {
+                transitionTo(next, 'stabilize', snapshot.now);
+                return none();
+            }
+            if (milestone.deadline !== undefined && snapshot.now >= milestone.deadline) {
+                if (snapshot.parentState === 'saving') {
+                    return none();
+                }
+                if (!next.reinforcementUsed) {
+                    next.reinforcementUsed = true;
+                    milestone.deadline += CAMPAIGN_POLICY.bootstrapDeadline;
+                    return { campaign: next, actions: [CampaignAction.WouldReinforce] };
+                }
+                return abandon(next, snapshot, 'bootstrap_deadline');
+            }
+            return none();
+        }
+        case 'stabilize':
+            if (snapshot.parentState === 'critical') {
+                return abandon(next, snapshot, 'parent_critical');
+            }
+            if (snapshot.dangerousHostiles) {
+                return abandon(next, snapshot, 'dangerous_hostiles');
+            }
+            if (snapshot.routeLost) {
+                return abandon(next, snapshot, 'route_lost');
+            }
+            if (snapshot.stabilizedFor >= CAMPAIGN_POLICY.stabilizationWindow) {
+                transitionTo(next, 'independent', snapshot.now);
+                return { campaign: next, actions: [CampaignAction.Complete] };
+            }
+            return none();
+        case 'abandon': {
+            const actions = [CampaignAction.WouldAbandon];
+            if (snapshot.claimed) {
+                actions.push(CampaignAction.WouldUnclaim);
+            }
+            if (next.targetRoom) {
+                const previous = next.cooldowns[next.targetRoom];
+                const failures = (previous ? previous.failures : 0) + 1;
+                next.cooldowns[next.targetRoom] = {
+                    until: snapshot.now + failureCooldown(failures),
+                    failures,
+                    lastReason: next.failureReason || 'unknown',
+                };
+            }
+            transitionTo(next, 'cooldown', snapshot.now);
+            return { campaign: next, actions };
+        }
+        case 'cooldown': {
+            const cooldown = next.targetRoom && next.cooldowns[next.targetRoom];
+            if (!cooldown || snapshot.now >= cooldown.until) {
+                const reset = createCampaign(next.dryRun);
+                reset.cooldowns = next.cooldowns;
+                return { campaign: reset, actions: [CampaignAction.None] };
+            }
+            return none();
+        }
+    }
+}
+
 const CHECK_EXPANSION_FREQUENCY = 1000;
+const TARGET_INTEL_FRESHNESS = 500;
+const ROUTE_INTEL_FRESHNESS = 1000;
+const MAX_CAMPAIGN_PATH_TILES = 250;
+const MIN_COLONIZER_RCL = 3;
 const UNOWNED_MINERAL_BONUS = 100;
 const CATALYST_BONUS = 75;
 const MAX_SCORE_BONUS = _.sum([UNOWNED_MINERAL_BONUS, CATALYST_BONUS]);
 const TOO_CLOSE_PENALTY = 100;
-const defaultExpansionPlannerMemory = () => ({});
+const defaultExpansionPlannerMemory = () => ({
+    campaign: createCampaign(true),
+    stockpileSamples: {},
+});
 let ExpansionPlanner = class ExpansionPlanner {
     constructor() {
         this.memory = Mem.wrap(Memory, 'expansionPlanner', defaultExpansionPlannerMemory);
+        this.recoverCampaignMemory();
     }
     refresh() {
         this.memory = Mem.wrap(Memory, 'expansionPlanner', defaultExpansionPlannerMemory);
+        this.recoverCampaignMemory();
     }
-    handleExpansion() {
-        const allColonies = getAllColonies();
-        // If you already have max number of colonies, ignore
-        if (allColonies.length >= Math.min(Game.gcl.level, MAX_OWNED_ROOMS)) {
-            return;
-        }
-        // If you are on shard3, limit to 3 owned rooms // TODO: use CPU-based limiting metric
-        if (Game.shard.name == 'shard3') {
-            if (allColonies.length >= SHARD3_MAX_OWNED_ROOMS) {
-                return;
-            }
-        }
-        const roomName = this.chooseNextColonyRoom();
-        if (roomName) {
-            const pos = Pathing.findPathablePosition(roomName);
-            DirectiveColonize.createIfNotPresent(pos, 'room');
-            log.notify(`Room ${roomName} selected as next colony! Creating colonization directive.`);
-        }
-    }
-    chooseNextColonyRoom() {
-        // Generate a list of possible colonies to expand from based on level and whether they are already expanding
-        // let possibleIncubators: Colony[] = []; // TODO: support incubation
-        const possibleColonizers = [];
-        for (const colony of getAllColonies()) {
-            // if (colony.level >= DirectiveIncubate.requiredRCL
-            // 	&& _.filter(colony.flags, flag => DirectiveIncubate.filter(flag)).length == 0) {
-            // 	possibleIncubators.push(colony);
-            // }
-            if (colony.level >= DirectiveColonize.requiredRCL
-                && _.filter(colony.flags, flag => DirectiveColonize.filter(flag)).length == 0) {
-                possibleColonizers.push(colony);
-            }
-        }
-        const possibleBestExpansions = _.compact(_.map(possibleColonizers, col => this.getBestExpansionRoomFor(col)));
-        log.debug(JSON.stringify(possibleBestExpansions));
-        const bestExpansion = maxBy(possibleBestExpansions, choice => choice.score);
-        if (bestExpansion) {
-            log.alert(`Next expansion chosen: ${bestExpansion.roomName} with score ${bestExpansion.score}`);
-            return bestExpansion.roomName;
+    recoverCampaignMemory() {
+        if (!campaignMemoryIsValid(this.memory.campaign)) {
+            this.memory.campaign = createCampaign(true);
         }
         else {
-            log.alert(`No viable expansion rooms found!`);
+            this.memory.campaign.dryRun = true;
         }
+        if (this.memory.stabilizingSince !== undefined
+            && (typeof this.memory.stabilizingSince != 'number' || !Number.isFinite(this.memory.stabilizingSince))) {
+            this.memory.stabilizingSince = undefined;
+        }
+        this.sanitizeStockpileSamples();
+    }
+    sanitizeStockpileSamples() {
+        const rawSamples = this.memory.stockpileSamples;
+        if (!rawSamples || typeof rawSamples != 'object' || Array.isArray(rawSamples)) {
+            this.memory.stockpileSamples = {};
+            return;
+        }
+        const sanitized = {};
+        for (const roomName of Object.keys(rawSamples)) {
+            if (!Array.isArray(rawSamples[roomName])) {
+                continue;
+            }
+            const valid = _.filter(rawSamples[roomName], sample => sample && typeof sample == 'object'
+                && typeof sample.tick == 'number' && Number.isFinite(sample.tick)
+                && typeof sample.energy == 'number' && Number.isFinite(sample.energy));
+            valid.sort((left, right) => left.tick - right.tick);
+            const deduped = [];
+            for (const sample of valid) {
+                const previous = deduped[deduped.length - 1];
+                if (previous && previous.tick == sample.tick) {
+                    deduped[deduped.length - 1] = { tick: sample.tick, energy: sample.energy };
+                }
+                else {
+                    deduped.push({ tick: sample.tick, energy: sample.energy });
+                }
+            }
+            if (deduped.length > 0) {
+                sanitized[roomName] = deduped;
+            }
+        }
+        this.memory.stockpileSamples = sanitized;
+    }
+    recordStockpileSamples() {
+        if (Game.time % 25 != 0) {
+            return;
+        }
+        for (const roomName in this.memory.stockpileSamples) {
+            const samples = this.memory.stockpileSamples[roomName]
+                .filter(sample => sample.tick >= Game.time - 500);
+            if (samples.length == 0) {
+                delete this.memory.stockpileSamples[roomName];
+            }
+            else {
+                this.memory.stockpileSamples[roomName] = samples;
+            }
+        }
+        for (const colony of getAllColonies()) {
+            const roomName = colony.room.name;
+            const samples = this.memory.stockpileSamples[roomName] || [];
+            if (!samples.some(sample => sample.tick == Game.time)) {
+                samples.push({
+                    tick: Game.time,
+                    energy: Energetics.stockpileBenchmark(colony).stockpile,
+                });
+            }
+            this.memory.stockpileSamples[roomName] = samples;
+        }
+    }
+    stockpileTrend(roomName) {
+        const samples = this.memory.stockpileSamples[roomName] || [];
+        if (samples.length < 2) {
+            return 0;
+        }
+        const earliest = samples[0];
+        const latest = samples[samples.length - 1];
+        return (latest.energy - earliest.energy) / Math.max(1, latest.tick - earliest.tick);
+    }
+    chooseNextColonyRoom() {
+        const possibleColonizers = _.filter(getAllColonies(), colony => colony.level >= MIN_COLONIZER_RCL);
+        const possibleBestExpansions = _.compact(_.map(possibleColonizers, colony => {
+            const expansion = this.getBestExpansionRoomFor(colony);
+            return expansion ? {
+                roomName: expansion.roomName,
+                parentRoom: colony.room.name,
+                score: expansion.score,
+            } : undefined;
+        }));
+        return maxBy(possibleBestExpansions, choice => choice.score);
     }
     getBestExpansionRoomFor(colony) {
         const allColonyRooms = _.zipObject(_.map(getAllColonies(), col => [col.room.name, true]));
@@ -35969,7 +36497,7 @@ let ExpansionPlanner = class ExpansionPlanner {
                 }
                 // Are there powerful hostile rooms nearby?
                 const adjacentRooms = Cartographer.findRoomsInRange(roomName, 1);
-                if (_.any(adjacentRooms, roomName => Memory.rooms[roomName]["a" /* RMEM.AVOID */])) {
+                if (_.any(adjacentRooms, roomName => Memory.rooms[roomName] && Memory.rooms[roomName]["a" /* RMEM.AVOID */])) {
                     continue;
                 }
                 // Reward new minerals and catalyst rooms
@@ -35985,7 +36513,9 @@ let ExpansionPlanner = class ExpansionPlanner {
                     }
                 }
                 // Update best choices
-                if (score > bestScore && RoomIntel.isRoomAccessible(roomName)) {
+                const targetStatus = Game.map.getRoomStatus(roomName).status;
+                const parentStatus = Game.map.getRoomStatus(colony.room.name).status;
+                if (score > bestScore && targetStatus == parentStatus) {
                     bestScore = score;
                     bestRoom = roomName;
                 }
@@ -35995,11 +36525,241 @@ let ExpansionPlanner = class ExpansionPlanner {
             return { roomName: bestRoom, score: bestScore };
         }
     }
+    intelIsFresh(roomName, maximumAge) {
+        return intelTimestampIsFresh(RoomIntel.lastVisible(roomName), Game.time, maximumAge);
+    }
+    roomIsDangerous(roomName, intelFresh) {
+        const room = Game.rooms[roomName];
+        const roomMemory = Memory.rooms[roomName];
+        const safety = roomMemory && roomMemory["f" /* RMEM.SAFETY */];
+        const controller = room && room.controller;
+        const controllerInfo = !room ? RoomIntel.getControllerInfo(roomName) : undefined;
+        const owner = controller && controller.owner ? controller.owner.username
+            : controllerInfo && controllerInfo.owner;
+        const reservation = controller && controller.reservation ? controller.reservation.username
+            : controllerInfo && controllerInfo.reservation && controllerInfo.reservation.username;
+        return routeRoomIsDangerous({
+            intelFresh,
+            avoid: !!(roomMemory && roomMemory["a" /* RMEM.AVOID */]),
+            owner,
+            reservation,
+            unsafeFor: safety && safety["u" /* RMEM_SAFETY.UNSAFE_FOR */],
+            visibleDangerousHostiles: !!(room && room.dangerousHostiles.length > 0),
+            threatLevel: safety && safety["t" /* RMEM_SAFETY.THREAT_LEVEL */],
+        }, MY_USERNAME);
+    }
+    targetIsValid(roomName, intelFresh, phase) {
+        if (!intelFresh || !RoomIntel.isRoomAccessible(roomName)) {
+            return false;
+        }
+        const room = Game.rooms[roomName];
+        if (room) {
+            const controller = room.controller;
+            const owner = controller && controller.owner ? controller.owner.username : undefined;
+            const reservation = controller && controller.reservation ? controller.reservation.username : undefined;
+            return !!controller && targetOwnershipIsValid(phase, owner, reservation, MY_USERNAME);
+        }
+        const controller = RoomIntel.getControllerInfo(roomName);
+        return !!controller && targetOwnershipIsValid(phase, controller.owner, controller.reservation && controller.reservation.username, MY_USERNAME);
+    }
+    creepHasActiveEvidence(creep, targetRoomName) {
+        if (creep.spawning || creep.memory["C" /* MEM.COLONY */] != targetRoomName) {
+            return false;
+        }
+        const overlordRef = creep.memory["O" /* MEM.OVERLORD */];
+        const overlord = overlordRef ? Overmind.overlords[overlordRef] : undefined;
+        const activeOperation = !!(overlord && overlord.colony && overlord.colony.name == targetRoomName);
+        return !!creep.memory.task || activeOperation;
+    }
+    creepHasTaskInRoom(creep, taskName, roomName) {
+        let task = creep.memory.task;
+        while (task) {
+            if (task.name == taskName && task._target && task._target._pos
+                && task._target._pos.roomName == roomName) {
+                return true;
+            }
+            task = task._parent;
+        }
+        return false;
+    }
+    visibleMilestoneEvidence(targetRoomName) {
+        const empty = {
+            claimed: false,
+            firstHarvest: false,
+            spawnSitePlaced: false,
+            spawnComplete: false,
+            localMinerHauler: false,
+            netEnergyNonNegative: false,
+        };
+        if (!targetRoomName) {
+            return empty;
+        }
+        const room = Game.rooms[targetRoomName];
+        if (!room || !room.controller || !room.controller.my) {
+            return empty;
+        }
+        const roomCreeps = room.find(FIND_MY_CREEPS);
+        const activeMiners = _.filter(roomCreeps, creep => creep.memory.role == Roles.drone
+            && creep.getActiveBodyparts(WORK) > 0 && this.creepHasActiveEvidence(creep, targetRoomName));
+        const activePioneers = _.filter(roomCreeps, creep => creep.memory.role == Roles.pioneer
+            && !creep.spawning && creep.getActiveBodyparts(WORK) > 0
+            && this.creepHasTaskInRoom(creep, 'harvest', targetRoomName));
+        const activeHaulers = _.filter(roomCreeps, creep => creep.memory.role == Roles.transport
+            && creep.getActiveBodyparts(CARRY) > 0 && this.creepHasActiveEvidence(creep, targetRoomName));
+        const depletedSources = _.filter(room.sources, source => source.energy < source.energyCapacity);
+        const harvesters = activeMiners.concat(activePioneers);
+        const firstHarvest = _.any(harvesters, miner => _.any(depletedSources, source => miner.pos.getRangeTo(source.pos) <= 1));
+        const samples = this.memory.stockpileSamples[targetRoomName] || [];
+        const spawnSites = _.filter(room.constructionSites, site => site.structureType == STRUCTURE_SPAWN);
+        return {
+            claimed: true,
+            firstHarvest,
+            spawnSitePlaced: spawnMilestonePlaced(room.spawns.length, spawnSites.length),
+            spawnComplete: room.spawns.length > 0,
+            localMinerHauler: activeMiners.length > 0 && activeHaulers.length > 0,
+            netEnergyNonNegative: hasRecentNonNegativeTrend(samples, Game.time),
+        };
+    }
+    updateStabilizationEvidence() {
+        const campaign = this.memory.campaign;
+        if (campaign.phase != 'stabilize') {
+            this.memory.stabilizingSince = undefined;
+            return;
+        }
+        const evidence = this.visibleMilestoneEvidence(campaign.targetRoom);
+        const room = campaign.targetRoom ? Game.rooms[campaign.targetRoom] : undefined;
+        const stable = evidence.claimed && evidence.firstHarvest && evidence.spawnComplete
+            && evidence.localMinerHauler && evidence.netEnergyNonNegative
+            && !!room && room.dangerousHostiles.length == 0;
+        this.memory.stabilizingSince = nextStabilizingSince(this.memory.stabilizingSince, stable, Game.time);
+    }
+    ensureCampaignEscrow(parent) {
+        const campaign = this.memory.campaign;
+        if (!parent || !campaign.parentRoom
+            || campaign.escrowEnergy > 0
+                && campaign.escrowSpawnTicks > 0
+                && campaign.remainingEscrowEnergy > 0) {
+            return;
+        }
+        const claimerSetup = parent.level > 4 ? Setups.infestors.fastClaim : Setups.infestors.claim;
+        const claimerBody = claimerSetup.generateBody(parent.room.energyCapacityAvailable);
+        const pioneerBody = Setups.pioneer.generateBody(parent.room.energyCapacityAvailable);
+        if (claimerBody.length == 0 || pioneerBody.length == 0) {
+            return;
+        }
+        const estimate = conservativeEscrowEstimate(bodyCost(claimerBody), claimerBody.length, bodyCost(pioneerBody), pioneerBody.length, CREEP_SPAWN_TIME);
+        campaign.escrowEnergy = estimate.energy;
+        campaign.escrowSpawnTicks = estimate.spawnTicks;
+        campaign.remainingEscrowEnergy = estimate.energy;
+    }
+    campaignSnapshot() {
+        const campaign = this.memory.campaign;
+        const colonies = getAllColonies();
+        const ownedRooms = colonies.length;
+        const underConfiguredCap = ownedRooms < MAX_OWNED_ROOMS
+            && (Game.shard.name != 'shard3' || ownedRooms < SHARD3_MAX_OWNED_ROOMS);
+        const gclAvailable = ownedRooms < Game.gcl.level && underConfiguredCap;
+        const choice = campaign.phase == 'discover' && gclAvailable ? this.chooseNextColonyRoom() : undefined;
+        const parentRoomName = campaign.parentRoom || (choice && choice.parentRoom);
+        const targetRoomName = campaign.targetRoom || (choice && choice.roomName);
+        const parent = _.find(colonies, colony => colony.room.name == parentRoomName);
+        this.ensureCampaignEscrow(parent);
+        const benchmark = parent ? Energetics.stockpileBenchmark(parent) : undefined;
+        const targetRoom = targetRoomName ? Game.rooms[targetRoomName] : undefined;
+        const intelFresh = !!targetRoomName && this.intelIsFresh(targetRoomName, TARGET_INTEL_FRESHNESS);
+        const targetValid = !!targetRoomName && this.targetIsValid(targetRoomName, intelFresh, campaign.phase);
+        let routeReachable = false;
+        let routeFresh = false;
+        let routeRooms = [];
+        if (parent && targetRoomName && Game.cpu.bucket >= CAMPAIGN_POLICY.minimumCpuBucket) {
+            const origin = parent.spawns.length > 0 ? parent.spawns[0].pos : parent.controller.pos;
+            const route = Pathing.findPathToRoom(origin, targetRoomName);
+            routeReachable = !route.incomplete && route.path.length <= MAX_CAMPAIGN_PATH_TILES;
+            routeRooms = _.unique([parent.room.name, targetRoomName]
+                .concat(_.map(route.path, pos => pos.roomName)));
+            routeFresh = routeReachable
+                && _.all(routeRooms, roomName => this.intelIsFresh(roomName, ROUTE_INTEL_FRESHNESS));
+        }
+        let dangerousHostiles = !targetRoomName || this.roomIsDangerous(targetRoomName, intelFresh);
+        if (!dangerousHostiles && routeRooms.length > 0) {
+            dangerousHostiles = _.any(routeRooms, roomName => this.roomIsDangerous(roomName, this.intelIsFresh(roomName, ROUTE_INTEL_FRESHNESS)));
+        }
+        const evidence = this.visibleMilestoneEvidence(targetRoomName);
+        const stabilizedFor = this.memory.stabilizingSince === undefined
+            ? 0
+            : Game.time - this.memory.stabilizingSince;
+        let spawnUtilization = 1;
+        let spawnUtilizationObserved = false;
+        const hatcheryUptime = parent && parent.hatchery ? parent.hatchery.memory.stats.uptime : undefined;
+        const statsUptime = parentRoomName && Memory.stats.colonies && Memory.stats.colonies[parentRoomName]
+            && Memory.stats.colonies[parentRoomName].hatchery
+            ? Memory.stats.colonies[parentRoomName].hatchery.uptime
+            : undefined;
+        if (typeof hatcheryUptime == 'number' && Number.isFinite(hatcheryUptime)) {
+            spawnUtilization = hatcheryUptime;
+            spawnUtilizationObserved = true;
+        }
+        else if (typeof statsUptime == 'number' && Number.isFinite(statsUptime)) {
+            spawnUtilization = statsUptime;
+            spawnUtilizationObserved = true;
+        }
+        const spawnCapacityAvailable = !!parent && spawnUtilizationObserved
+            && spawnCapacitySupportsEscrow(parent.spawns.length, spawnUtilization, CAMPAIGN_POLICY.claimDeadline, campaign.escrowSpawnTicks);
+        const remainingEscrow = campaign.remainingEscrowEnergy;
+        const escrowAffordable = !!benchmark && remainingEscrow > 0
+            && benchmark.stockpile >= benchmark.reserveFloor + remainingEscrow;
+        return {
+            now: Game.time,
+            candidateAvailable: !!choice,
+            candidateRoom: choice && choice.roomName,
+            parentRoom: choice && choice.parentRoom,
+            intelFresh,
+            routeFresh,
+            targetValid,
+            parentState: benchmark ? benchmark.state : 'critical',
+            reserveRatio: benchmark ? benchmark.ratio : 0,
+            stockpileTrend: parentRoomName ? this.stockpileTrend(parentRoomName) : 0,
+            escrowAffordable,
+            spawnUtilization,
+            spawnCapacityAvailable,
+            cpuBucket: Game.cpu.bucket,
+            probeComplete: !!targetRoom && routeReachable && routeFresh,
+            claimed: evidence.claimed,
+            firstHarvest: evidence.firstHarvest,
+            spawnSitePlaced: evidence.spawnSitePlaced,
+            spawnComplete: evidence.spawnComplete,
+            localMinerHauler: evidence.localMinerHauler,
+            netEnergyNonNegative: evidence.netEnergyNonNegative,
+            stabilizedFor,
+            dangerousHostiles,
+            routeLost: !routeReachable || !routeFresh,
+            gclAvailable,
+            cpuSupportsColony: Game.cpu.bucket >= CAMPAIGN_POLICY.minimumCpuBucket && underConfiguredCap,
+        };
+    }
+    runCampaignDryRun() {
+        const before = this.memory.campaign;
+        const result = transitionCampaign(before, this.campaignSnapshot());
+        result.campaign.dryRun = true;
+        this.memory.campaign = result.campaign;
+        this.memory.lastDecision = {
+            tick: Game.time,
+            phase: result.campaign.phase,
+            actions: result.actions,
+            reason: result.campaign.failureReason,
+        };
+        if (shouldLogCampaignDecision(before.phase, result.campaign.phase, result.actions)) {
+            log.alert(`[expansion dry-run] ${before.phase} -> ${result.campaign.phase} `
+                + `${JSON.stringify(result.actions)}`);
+        }
+    }
     init() {
     }
     run() {
+        this.recordStockpileSamples();
+        this.updateStabilizationEvidence();
         if (Game.time % CHECK_EXPANSION_FREQUENCY == 17 && getAutonomyLevel() == Autonomy.Automatic) {
-            this.handleExpansion();
+            this.runCampaignDryRun();
         }
     }
 };

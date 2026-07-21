@@ -1,0 +1,141 @@
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+import { log } from '../../console/log';
+import { Roles, Setups } from '../../creepSetups/setups';
+import { Energetics } from '../../logistics/Energetics';
+import { Pathing } from '../../movement/Pathing';
+import { OverlordPriority } from '../../priorities/priorities_overlords';
+import { profile } from '../../profiler/decorator';
+import { Tasks } from '../../tasks/Tasks';
+import { Overlord } from '../Overlord';
+/**
+ * Spawns special-purpose haulers for transporting resources to/from a specified target
+ */
+let HaulingOverlord = class HaulingOverlord extends Overlord {
+    constructor(directive, priority = directive.hasDrops ? OverlordPriority.collectionUrgent.haul :
+        OverlordPriority.tasks.haul) {
+        super(directive, 'haul', priority);
+        this.directive = directive;
+        this.haulers = this.zerg(Roles.transport);
+    }
+    init() {
+        if (!this.colony.storage || _.sum(this.colony.storage.store) > Energetics.settings.storage.total.cap) {
+            return;
+        }
+        // Spawn a number of haulers sufficient to move all resources within a lifetime, up to a max
+        const MAX_HAULERS = 5;
+        // Calculate total needed amount of hauling power as (resource amount * trip distance)
+        const tripDistance = 2 * (Pathing.distance((this.colony.storage || this.colony).pos, this.directive.pos) || 0);
+        const haulingPowerNeeded = Math.min(this.directive.totalResources, this.colony.storage.storeCapacity
+            - _.sum(this.colony.storage.store)) * tripDistance;
+        // Calculate amount of hauling each hauler provides in a lifetime
+        const haulerCarryParts = Setups.transporters.early.getBodyPotential(CARRY, this.colony);
+        const haulingPowerPerLifetime = CREEP_LIFE_TIME * haulerCarryParts * CARRY_CAPACITY;
+        // Calculate number of haulers
+        const numHaulers = Math.min(Math.ceil(haulingPowerNeeded / haulingPowerPerLifetime), MAX_HAULERS);
+        // Request the haulers
+        this.wishlist(numHaulers, Setups.transporters.early);
+    }
+    handleHauler(hauler) {
+        if (_.sum(hauler.carry) == 0) {
+            // Travel to directive and collect resources
+            if (hauler.inSameRoomAs(this.directive)) {
+                // Pick up drops first
+                if (this.directive.hasDrops) {
+                    const allDrops = _.flatten(_.values(this.directive.drops));
+                    const drop = _.find(allDrops, drop => drop.resourceType != 'energy') || allDrops[0];
+                    if (drop) {
+                        hauler.task = Tasks.pickup(drop);
+                        return;
+                    }
+                }
+                // Withdraw from store structure
+                if (this.directive.storeStructure) {
+                    const store = this.directive.store;
+                    let totalDrawn = 0; // Fill to full
+                    for (const resourceType in store) {
+                        if (store[resourceType] > 0) {
+                            if (hauler.task) {
+                                hauler.task = Tasks.withdraw(this.directive.storeStructure, resourceType).fork(hauler.task);
+                            }
+                            else {
+                                hauler.task = Tasks.withdraw(this.directive.storeStructure, resourceType);
+                            }
+                            totalDrawn += store[resourceType];
+                            if (totalDrawn >= hauler.carryCapacity) {
+                                return;
+                            }
+                        }
+                    }
+                    if (hauler.task) {
+                        // If can't fill up, just go ahead and go home
+                        // log.notify(`Can't finish filling up ${totalDrawn} ${JSON.stringify(hauler.task)} ${this.room}`);
+                        return;
+                    }
+                }
+                // Shouldn't reach here
+                log.warning(`${hauler.name} in ${hauler.room.print}: nothing to collect!`);
+            }
+            else {
+                // hauler.task = Tasks.goTo(this.directive);
+                hauler.goTo(this.directive, { pathOpts: { avoidSK: true } });
+            }
+        }
+        else {
+            // Travel to colony room and deposit resources
+            if (hauler.inSameRoomAs(this.colony)) {
+                // Put energy in storage and minerals in terminal if there is one
+                for (const [resourceType, amount] of hauler.carry.contents) {
+                    if (amount == 0)
+                        continue;
+                    if (resourceType == RESOURCE_ENERGY) { // prefer to put energy in storage
+                        if (this.colony.storage && _.sum(this.colony.storage.store) < STORAGE_CAPACITY) {
+                            hauler.task = Tasks.transfer(this.colony.storage, resourceType);
+                            return;
+                        }
+                        else if (this.colony.terminal && _.sum(this.colony.terminal.store) < TERMINAL_CAPACITY) {
+                            hauler.task = Tasks.transfer(this.colony.terminal, resourceType);
+                            return;
+                        }
+                    }
+                    else { // prefer to put minerals in terminal
+                        if (this.colony.terminal && this.colony.terminal.my
+                            && _.sum(this.colony.terminal.store) < TERMINAL_CAPACITY) {
+                            hauler.task = Tasks.transfer(this.colony.terminal, resourceType);
+                            return;
+                        }
+                        else if (this.colony.storage && _.sum(this.colony.storage.store) < STORAGE_CAPACITY) {
+                            hauler.task = Tasks.transfer(this.colony.storage, resourceType);
+                            return;
+                        }
+                    }
+                }
+                // Shouldn't reach here
+                log.warning(`${hauler.name} in ${hauler.room.print}: nowhere to put resources!`);
+            }
+            else {
+                hauler.task = Tasks.goToRoom(this.colony.room.name);
+            }
+        }
+    }
+    run() {
+        for (const hauler of this.haulers) {
+            if (hauler.isIdle) {
+                this.handleHauler(hauler);
+            }
+            hauler.run();
+        }
+        // TODO: fix the way this is done
+        if (this.directive.memory.totalResources == 0 && this.haulers.filter(hauler => _.sum(hauler.carry) > 0).length == 0) {
+            this.directive.remove();
+        }
+    }
+};
+HaulingOverlord = __decorate([
+    profile
+], HaulingOverlord);
+export { HaulingOverlord };
