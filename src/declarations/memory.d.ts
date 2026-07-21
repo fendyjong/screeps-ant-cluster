@@ -36,6 +36,7 @@ interface Memory {
 	resetBucket?: boolean;
 	haltTick?: number;
 	combatPlanner: any;
+	expansionPlanner: any;
 	playerCreepTracker: { // TODO revisit for a better longterm solution
 		[playerName: string]: CreepTracker
 	};

@@ -171,6 +171,7 @@ export class Mem {
 			assimilator       : {},
 			Overmind          : {},
 			combatPlanner     : {},
+			expansionPlanner  : {},
 			profiler          : {},
 			overseer          : {},
 			segmenter         : {},
