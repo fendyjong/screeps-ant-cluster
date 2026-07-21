@@ -1,5 +1,6 @@
 import { findPath, MoveOpts } from './PathFinder';
 import { getTerrainCosts, normalizePos } from './helpers';
+import { PathingMemory, HasPos } from '../types';
 
 const MOVE_PRIORITY: Record<string, number> = {
 	harvester: 1,
@@ -12,7 +13,7 @@ const MOVE_PRIORITY: Record<string, number> = {
 
 const DEFAULT_PRIORITY = 10;
 const STUCK_THRESHOLD = 2;
-const TRAFFIC_THRESHOLD = 100;
+const TRAFFIC_THRESHOLD = 50;
 
 const DIR_OFFSETS: Record<number, { dx: number; dy: number }> = {
 	1: { dx: 0, dy: -1 },
@@ -98,7 +99,7 @@ function recordTraffic(creep: Creep): void {
 	const roomName = creep.room.name;
 	if (!Memory.v1) return;
 	const ns = Memory.v1;
-	if (!ns.pathing) ns.pathing = {};
+	if (!ns.pathing) ns.pathing = {} as PathingMemory;
 	if (!ns.pathing.traffic) ns.pathing.traffic = {};
 	if (!ns.pathing.traffic[roomName]) ns.pathing.traffic[roomName] = {};
 
