@@ -127,9 +127,9 @@ export function moveTo(creep: Creep, target: HasPos | RoomPosition, opts?: MoveO
 	if (!creep.memory._path) creep.memory._path = '';
 	if (!creep.memory._stuckTicks) creep.memory._stuckTicks = 0;
 
-	const stuck = isStuck(creep);
-	if (stuck && Math.random() > 0.5) {
-		creep.memory._path = '';
+	if (isStuck(creep)) {
+		creep.memory._path = undefined;
+		creep.memory._pathTick = undefined;
 	}
 
 	if (!creep.memory._path || creep.memory._path.length === 0) {
