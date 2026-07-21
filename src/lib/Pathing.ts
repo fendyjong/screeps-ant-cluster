@@ -61,6 +61,25 @@ function isStuck(creep: Creep): boolean {
 	return (creep.memory._stuckTicks || 0) > STUCK_THRESHOLD;
 }
 
+function recordBlockedAttempt(creep: Creep): void {
+	const roomName = creep.room.name;
+	if (!Memory.v1) return;
+	const ns = Memory.v1;
+	if (!ns.pathing) ns.pathing = {} as PathingMemory;
+	if (!ns.pathing.traffic) ns.pathing.traffic = {};
+	if (!ns.pathing.traffic[roomName]) ns.pathing.traffic[roomName] = {};
+
+	const key = creep.pos.x + ',' + creep.pos.y;
+	const heatmap = ns.pathing.traffic[roomName];
+	heatmap[key] = (heatmap[key] || 0) + 1;
+
+	if (heatmap[key] >= TRAFFIC_THRESHOLD) {
+		if (!ns.pathing.pendingRoads) ns.pathing.pendingRoads = [];
+		ns.pathing.pendingRoads.push({ roomName, x: creep.pos.x, y: creep.pos.y });
+		heatmap[key] = 0;
+	}
+}
+
 function tryPush(creep: Creep, dir: DirectionConstant): boolean {
 	const offset = DIR_OFFSETS[dir];
 	if (!offset) return false;
@@ -71,7 +90,10 @@ function tryPush(creep: Creep, dir: DirectionConstant): boolean {
 	const blocking = creep.room.lookForAt(LOOK_CREEPS, x, y)[0];
 	if (!blocking) return true;
 
-	if (getPushPriority(creep) >= getPushPriority(blocking)) return false;
+	if (getPushPriority(creep) >= getPushPriority(blocking)) {
+		recordBlockedAttempt(creep);
+		return false;
+	}
 
 	const dirs: DirectionConstant[] = [1, 2, 3, 4, 5, 6, 7, 8];
 	for (const d of dirs) {
@@ -92,6 +114,8 @@ function tryPush(creep: Creep, dir: DirectionConstant): boolean {
 			return true;
 		}
 	}
+
+	recordBlockedAttempt(creep);
 	return false;
 }
 
