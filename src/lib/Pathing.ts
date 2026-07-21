@@ -12,7 +12,7 @@ const MOVE_PRIORITY: Record<string, number> = {
 };
 
 const DEFAULT_PRIORITY = 10;
-const STUCK_THRESHOLD = 2;
+const STUCK_THRESHOLD = 1;
 const TRAFFIC_THRESHOLD = 50;
 
 const DIR_OFFSETS: Record<number, { dx: number; dy: number }> = {
