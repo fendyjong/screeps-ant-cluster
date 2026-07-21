@@ -415,12 +415,12 @@ export function getCutTiles(roomName: string, toProtect: Rectangle[],
 		}
 	}
 	// Visualise Result
-	if (positions.length > 0) {
+	if (visualize && positions.length > 0) {
 		const visual = new RoomVisual(roomName);
 		for (let i = positions.length - 1; i >= 0; i--) {
 			visual.circle(positions[i].x, positions[i].y, {radius: 0.5, fill: '#ff7722', opacity: 0.9});
 		}
-	} else {
+	} else if (positions.length == 0) {
 		return [];
 	}
 	const wholeRoom = bounds.x1 === 0 && bounds.y1 === 0 && bounds.x2 === 49 && bounds.y2 === 49;
