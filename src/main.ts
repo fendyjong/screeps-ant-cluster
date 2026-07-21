@@ -1,132 +1,150 @@
-// src/main.ts
 
-import { tick as queenTick } from './colony/Queen';
-import { process as hatcheryProcess } from './hatchery/Hatchery';
-import * as Harvester from './roles/Harvester';
-import * as Hauler from './roles/Hauler';
-import * as Builder from './roles/Builder';
-import * as Upgrader from './roles/Upgrader';
-import { ensureRoomMemory, ensureCreepMemory, ensureMemoryNs, cleanLegacyMemory, CURRENT_NS } from './lib/Memory';
-import { getTerrainMatrix } from './lib/PathFinder';
-import { shouldRecheck, demolishMisplaced, buildMissing } from './colony/SwapExecutor';
-import { planLayout } from './colony/LayoutPlanner';
-import { planSwap } from './colony/SwapPlanner';
-import * as HUD from './lib/HUD';
-import { trackIncome, getHealth, trackBuild, getCpuBudgets } from './lib/Cashflow';
-import { hostileWatcher, expansionWatcher } from './colony/Watchers';
-import { drainPendingRoads } from './colony/RoadDrainer';
-import { recheckLayout } from './colony/LayoutWatcher';
+//
+// ___________________________________________________________
+//
+//  _____  _    _ _______  ______ _______ _____ __   _ ______
+// |     |  \  /  |______ |_____/ |  |  |   |   | \  | |     \
+// |_____|   \/   |______ |    \_ |  |  | __|__ |  \_| |_____/
+//
+// _______________________ Screeps AI ________________________
+//
+//
+// Overmind repository: github.com/bencbartlett/overmind
+//
 
-const ALWAYS_RUN_ROLES = new Set(['harvester', 'hauler']);
-const PRODUCTION_ROLES = new Set(['builder', 'upgrader']);
 
-function runCreep(creep: Creep, budgetHard: number): void {
-	const role = creep.memory.role;
+// @formatter:off
+/* tslint:disable:ordered-imports */
 
-	if (ALWAYS_RUN_ROLES.has(role)) {
-		// Tier 1: always run
-	} else if (PRODUCTION_ROLES.has(role)) {
-		if (Game.cpu.getUsed() >= budgetHard) return;
+'use strict';
+global.PHASE = 'assimilating';
+global.LATEST_BUILD_TICK = Game.time;
+// Import ALL the things! ==============================================================================================
+import './assimilation/initializer'; // This must always be imported before anything else
+import './console/globals'; // Global functions accessible from CLI
+import './prototypes/Game'; // Game prototypes
+import './prototypes/Creep'; // Creep prototypes
+import './prototypes/PowerCreep'; // PowerCreep prototypes
+import './prototypes/RoomObject'; // RoomObject and targeting prototypes
+import './prototypes/RoomPosition'; // RoomPosition prototypes
+import './prototypes/RoomVisual'; // Prototypes used in Visualizer class
+import './prototypes/Room'; // Non-structure room prototypes
+import './prototypes/RoomStructures'; // IVM-cached structure prototypes
+import './prototypes/Structures'; // Prototypes for accessed structures
+import './prototypes/Miscellaneous'; // Everything else
+import './tasks/initializer'; // This line is necessary to ensure proper compilation ordering...
+import './zerg/CombatZerg'; // ...so is this one... rollup is dumb about generating reference errors
+import {MUON, MY_USERNAME, RL_TRAINING_MODE, USE_SCREEPS_PROFILER} from './~settings';
+import {sandbox} from './utilities/sandbox';
+import {Mem} from './memory/Memory';
+import {OvermindConsole} from './console/Console';
+import {Stats} from './stats/stats';
+import profiler from './profiler/screeps-profiler';
+import _Overmind from './Overmind_obfuscated'; // this should be './Overmind_obfuscated' unless you are me
+import {VersionMigration} from './versionMigration/migrator';
+import {RemoteDebugger} from './debug/remoteDebugger';
+import {ActionParser} from './reinforcementLearning/actionParser';
+// =====================================================================================================================
+
+// Main loop
+function main(): void {
+	// Memory operations: load and clean memory, suspend operation as needed -------------------------------------------
+	Mem.load();									// Load previous parsed memory if present
+	if (!Mem.shouldRun()) return;				// Suspend operation if necessary
+	Mem.clean();								// Clean memory contents
+
+	// Instantiation operations: build or refresh the game state -------------------------------------------------------
+	if (!Overmind || Overmind.shouldBuild || Game.time >= Overmind.expiration) {
+		PHASE = 'build';
+		delete global.Overmind;					// Explicitly delete the old Overmind object
+		Mem.garbageCollect(true);			// Run quick garbage collection
+		global.Overmind = new _Overmind();		// Instantiate the Overmind object
+		Overmind.build();						// Build phase: instantiate all game components
+		LATEST_BUILD_TICK = Game.time;			// Record this tick as having a build reset
 	} else {
-		if (Game.cpu.getUsed() >= budgetHard) return;
+		PHASE = 'refresh';
+		Overmind.refresh();						// Refresh phase: update the Overmind state
 	}
 
-	switch (role) {
-		case 'harvester': Harvester.run(creep); break;
-		case 'hauler':    Hauler.run(creep);    break;
-		case 'builder':   Builder.run(creep);   break;
-		case 'upgrader':  Upgrader.run(creep);  break;
+	// Tick loop cycle: initialize and run each component --------------------------------------------------------------
+	PHASE = 'init';
+	Overmind.init();							// Init phase: spawning and energy requests
+	PHASE = 'run';
+	Overmind.run();								// Run phase: execute state-changing actions
+	PHASE = 'postRun';
+	Overmind.visuals(); 						// Draw visuals
+	Stats.run(); 								// Record statistics
+	Memory.tick++;								// Record successful tick
+
+	// Post-run code: handle sandbox code and error catching -----------------------------------------------------------
+	sandbox();									// Sandbox: run any testing code
+	global.remoteDebugger.run();				// Run remote debugger code if enabled
+	Overmind.postRun();							// Throw errors at end of tick; anything after here might not get run
+}
+
+// Main loop if RL mode is enabled (~settings.ts)
+function main_RL(): void {
+	Mem.clean();
+
+	delete global.Overmind;
+	global.Overmind = new _Overmind();
+
+	ActionParser.run();
+}
+
+// This gets run on each global reset
+function onGlobalReset(): void {
+	global.LATEST_GLOBAL_RESET_TICK = Game.time;
+	global.LATEST_GLOBAL_RESET_DATE = new Date();
+	if (USE_SCREEPS_PROFILER) profiler.enable();
+	Mem.format();
+	OvermindConsole.init();
+	VersionMigration.run();
+	Memory.stats.persistent.lastGlobalReset = Game.time;
+	OvermindConsole.printUpdateMessage();
+	// Update the master ledger of valid checksums
+	if (MY_USERNAME == MUON) {
+		Assimilator.updateValidChecksumLedger();
+	}
+	// Make a new Overmind object
+	global.Overmind = new _Overmind();
+	// Make a remote debugger
+	global.remoteDebugger = new RemoteDebugger();
+}
+
+
+// Global reset function if RL mode is enabled
+function onGlobalReset_RL(): void {
+	Mem.format();
+}
+
+// Decide which loop to export as the script loop
+let _loop: () => void;
+if (RL_TRAINING_MODE) {
+	// Use stripped version for training reinforcment learning model
+	_loop = main_RL;
+} else {
+	if (USE_SCREEPS_PROFILER) {
+		// Wrap the main loop in the profiler
+		_loop = () => profiler.wrap(main);
+	} else {
+		// Use the default main loop
+		_loop = main;
 	}
 }
 
-function runCreeps(room: Room): void {
-	const { hard: budgetHard } = getCpuBudgets();
+export const loop = _loop;
 
-	for (const name in Game.creeps) {
-		const creep = Game.creeps[name];
-		if (creep.memory.roomName !== room.name) continue;
-
-		ensureCreepMemory(creep);
-		runCreep(creep, budgetHard);
-	}
+// Run the appropriate global reset function
+if (RL_TRAINING_MODE) {
+	OvermindConsole.printTrainingMessage();
+	onGlobalReset_RL();
+} else {
+	// Register these functions for checksum computations with the Assimilator
+	Assimilator.validate(main);
+	Assimilator.validate(loop);
+	// Run the global reset code
+	onGlobalReset();
 }
 
-export const loop = (): void => {
-  if (Memory.v1 && !Memory[CURRENT_NS]) {
-    Memory[CURRENT_NS] = Memory.v1;
-    delete Memory.v1;
-  }
 
-  ensureMemoryNs();
-
-  for (const name in Memory.creeps) {
-    if (!Game.creeps[name]) {
-      delete Memory.creeps[name];
-    }
-  }
-
-  if (Game.time % 100 === 0) {
-    cleanLegacyMemory();
-  }
-
-  for (const roomName in Game.rooms) {
-    const room = Game.rooms[roomName];
-    if (!room.controller || !room.controller.my) continue;
-
-    ensureRoomMemory(room);
-
-    queenTick(room);
-
-    const prevTotal = Memory.v1._prevTotalEnergy?.[roomName] ?? -1;
-    const currentTotal = room.energyAvailable + (room.storage ? room.storage.store[RESOURCE_ENERGY] : 0);
-    if (prevTotal >= 0) {
-      trackIncome(roomName, currentTotal, prevTotal);
-    }
-    if (!Memory.v1._prevTotalEnergy) Memory.v1._prevTotalEnergy = {};
-    Memory.v1._prevTotalEnergy[roomName] = currentTotal;
-
-    getTerrainMatrix(room.name);
-    if (Game.time % 100 === 0 || !room.memory.layout || !room.memory.layout.lastUpdated) {
-      const health = getHealth(room);
-      if (health !== 'red' || !room.memory.layout) {
-        const layout = planLayout(room);
-        const swapPlan = planSwap(room, layout);
-        room.memory.layout = { bunker: layout, swap: swapPlan, lastUpdated: Game.time };
-      }
-    }
-
-    // Create construction sites from swap plan
-    if (room.memory.layout && room.memory.layout.swap) {
-      if (shouldRecheck(room)) {
-        demolishMisplaced(room, room.memory.layout.swap);
-      } else if (shouldRecheck(room, 1)) {
-        buildMissing(room, room.memory.layout.swap);
-      }
-    }
-
-    // Drain pending roads from traffic heatmap (up to 5 per tick)
-    drainPendingRoads(room);
-    recheckLayout(room);
-
-    hostileWatcher(room);
-    expansionWatcher(room);
-
-    hatcheryProcess(room);
-
-    runCreeps(room);
-
-    const sites = room.find(FIND_MY_CONSTRUCTION_SITES);
-    let progressDelta = 0;
-    for (const site of sites) {
-      const prev = Memory.v1._prevProgress?.[site.id] || site.progress;
-      progressDelta += Math.max(0, site.progress - prev);
-      if (!Memory.v1._prevProgress) Memory.v1._prevProgress = {};
-      Memory.v1._prevProgress[site.id] = site.progress;
-    }
-    if (progressDelta > 0) {
-      trackBuild(roomName, progressDelta);
-    }
-
-    HUD.run(room);
-  }
-};

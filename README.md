@@ -143,5 +143,66 @@ Memory.v1.hatchery.queue[roomName]       // SpawnRequest[]
 Memory.v1.hatchery.deathWatch[roomName]   // { role: [{name, ttl}] }
 Memory.v1.pathing.terrain[roomName]       // CostMatrix cache
 Memory.v1.pathing.traffic[roomName]       // Movement heatmap
+Memory.v1.debugLog                        // DebugLogEntry[] (circular buffer, last 100)
 Memory[CURRENT_NS].metrics                // CPU, spawn, KPI stats
 ```
+
+## Debug Logging
+
+The bot includes a periodic debug snapshot system (`src/lib/DebugLog.ts`) that captures structured room state every 25 ticks.
+
+### Console commands
+
+```js
+// Print latest debug snapshot as formatted text
+debugLog()
+
+// Get raw debug log entries from Memory
+debugRaw()
+
+// Clear debug log buffer
+Memory.v1.debugLog = []
+```
+
+### What it captures
+
+Each snapshot includes per-room:
+- Energy: available, capacity, storage, income/spawn/build rates
+- Creeps: count by role, dying count, idle count, stuck count
+- Per-creep: name, role, TTL, task, stuck ticks, carry/carryCap
+- Spawn: queue length, busy state, queued roles
+- Defense: tower count/energy, wall/rampart avg hits
+- Hostiles: count, threat level
+- Build: construction sites, backlog, pending roads
+- Traffic: top hotspots from heatmap
+- CPU: used, limit, bucket, soft/hard budgets
+- Total energy across all rooms
+
+### Output format
+
+```
+=== Debug Log @ tick 12345 ===
+CPU: 4.2/20 bucket=5000 soft=8.5 hard=15.0
+Total energy: 45000
+
+--- W4N8 (RCL 5) ---
+  Energy: 300/800 storage=25000
+  Economy: income=12.5 spawn=8.2 build=3.1 health=green
+  Reserve: 5000
+  Creeps: 15 total | idle=2 stuck=0
+    harvester: 4 (dying=0 cpu=0.8)
+    hauler: 3 (dying=1 cpu=1.2)
+    builder: 2 (dying=0 cpu=0.5)
+    upgrader: 6 (dying=0 cpu=2.1)
+  Spawn: queue=1 busy=false [hauler]
+  Defense: towers=3/3 energy=1800 walls=250000 ramparts=180000
+  Hostiles: 0 (none)
+  Build: sites=5 backlog=12000 roads=3
+  Traffic: 33,30=97 40,34=95 29,33=92
+```
+
+### When it runs
+
+- Every 25 ticks when CPU allows (bucket ≥ 3000 and under soft budget)
+- Writes to `Memory.v1.debugLog` circular buffer (max 100 entries)
+- Access via `debugLog()` or `debugRaw()` in game console
