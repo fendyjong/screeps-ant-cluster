@@ -3,6 +3,7 @@ import {Colony, ColonyStage, DEFCON} from '../../Colony';
 import {CreepSetup} from '../../creepSetups/CreepSetup';
 import {Roles, Setups} from '../../creepSetups/setups';
 import {DirectiveNukeResponse} from '../../directives/situational/nukeResponse';
+import {Energetics} from '../../logistics/Energetics';
 import {OverlordPriority} from '../../priorities/priorities_overlords';
 import {BuildPriorities, FortifyPriorities} from '../../priorities/priorities_structures';
 import {profile} from '../../profiler/decorator';
@@ -217,6 +218,15 @@ export class WorkerOverlord extends Overlord {
 					}
 					return numWorkers;
 				});
+			}
+			const stockpile = Energetics.stockpileBenchmark(this.colony);
+			if (this.nukeDefenseRamparts.length == 0 && this.colony.controller.ticksToDowngrade > 2000) {
+				numWorkers = Math.ceil(numWorkers * stockpile.spendFactor);
+				if (stockpile.state == 'saving') {
+					numWorkers = Math.min(numWorkers, 1);
+				} else if (stockpile.state == 'critical') {
+					numWorkers = 0;
+				}
 			}
 		}
 
