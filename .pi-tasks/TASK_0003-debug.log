@@ -193,3 +193,6 @@
 2026-07-23T12:13:20.241Z run: start phase=grill
 2026-07-23T12:13:20.242Z phase:grill: start
 2026-07-23T12:13:21.591Z phase:grill: done ms=1349
+2026-07-23T12:14:06.961Z run: start phase=grill
+2026-07-23T12:14:06.962Z phase:grill: start
+2026-07-23T12:14:08.267Z phase:grill: done ms=1305
