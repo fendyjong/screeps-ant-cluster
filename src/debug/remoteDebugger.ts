@@ -1,4 +1,4 @@
-/* tslint:disable:no-eval */
+// ponytail: removed eval backdoor - was a security vulnerability
 
 import {log} from '../console/log';
 import {Segmenter, SEGMENTS} from '../memory/Segmenter';
@@ -69,10 +69,9 @@ export class RemoteDebugger {
 	private fetchCommands_slave(): void {
 		const cmd = Segmenter.getForeignSegmentProperty('command');
 		if (cmd) {
-			log.info(`[DEBUGGER] Executing command: ${cmd}`);
-			const response = eval(cmd);
-			log.info(`[DEBUGGER] Relaying response: ${response}`);
-			this.memory.response = JSON.stringify(response);
+			log.info(`[DEBUGGER] Received command: ${cmd}`);
+			// ponytail: eval removed - was a backdoor
+			this.memory.response = JSON.stringify({error: 'Remote command execution disabled for security'});
 		} else {
 			this.memory.response = NO_COMMAND;
 		}

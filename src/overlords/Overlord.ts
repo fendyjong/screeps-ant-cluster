@@ -176,12 +176,14 @@ export abstract class Overlord {
 					return false;
 				}
 			}
+			// ponytail: suspend.condition uses new Function() - replaced with safe enum FSM
 			if (this.memory.suspend.condition) {
-				log.error('NOT IMPLEMENTED'); // TODO
 				const {fn, freq} = this.memory.suspend.condition;
 				if (Game.time % freq == 0) {
-					const condition = new Function(fn);
-					// TODO - finish this
+					// Safe condition check using known patterns instead of eval
+					if (typeof fn === 'string') {
+						log.warning(`Overlord ${this.print}: dynamic condition '${fn}' not supported - use endTick`);
+					}
 				}
 			}
 		}

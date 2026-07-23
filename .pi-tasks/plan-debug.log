@@ -1,0 +1,6 @@
+2026-07-23T04:27:19.735Z requirement extraction: 0 grounded requirement(s) kept
+2026-07-23T04:27:53.794Z decompose produced 5 title(s)
+2026-07-23T04:27:53.794Z decompose fidelity: 5/5 titles cited a grounded source; 0 restoration(s)
+2026-07-23T04:28:13.567Z decompose-coverage: COMPLETE — accepting list
+2026-07-23T04:28:28.128Z contract extraction: 0 grounded contract(s) kept from 0 emitted
+2026-07-23T04:28:36.521Z launch-contract extraction: 0 grounded script(s) kept from 0 emitted
