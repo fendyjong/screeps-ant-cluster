@@ -192,45 +192,7 @@ let Colony = class Colony {
     // 	}
     // }
     /**
-     * Registers physical game objects to the colony
-     */
-    registerRoomObjects() {
-        // Create placeholder arrays for remaining properties to be filled in by the Overmind
-        this.flags = []; // filled in by directives
-        this.destinations = []; // filled in by various hive clusters and directives
-        // Register room objects across colony rooms
-        this.controller = this.room.controller; // must be controller since colonies are based in owned rooms
-        this.spawns = _.sortBy(_.filter(this.room.spawns, spawn => spawn.my && spawn.isActive()), spawn => spawn.ref);
-        this.extensions = this.room.extensions;
-        this.storage = this.room.storage && this.room.storage.isActive() ? this.room.storage : undefined;
-        this.links = this.room.links;
-        this.availableLinks = _.clone(this.room.links);
-        this.terminal = this.room.terminal && this.room.terminal.isActive() ? this.room.terminal : undefined;
-        this.factory = this.room.factory && this.room.factory.isActive() ? this.room.factory : undefined;
-        this.towers = this.room.towers;
-        this.labs = _.sortBy(_.filter(this.room.labs, lab => lab.my && lab.isActive()), lab => 50 * lab.pos.y + lab.pos.x); // Labs are sorted in reading order of positions
-        this.powerSpawn = this.room.powerSpawn;
-        this.nuker = this.room.nuker;
-        this.observer = this.room.observer;
-        this.pos = (this.storage || this.terminal || this.spawns[0] || this.controller).pos;
-        // Register physical objects across all rooms in the colony
-        this.sources = _.sortBy(_.flatten(_.map(this.rooms, room => room.sources)), source => source.pos.getMultiRoomRangeTo(this.pos));
-        this.extractors = _(this.rooms)
-            .map(room => room.extractor)
-            .compact()
-            .filter(extractor => (extractor.my && extractor.room.my)
-            || Cartographer.roomType(extractor.room.name) != ROOMTYPE_CONTROLLER)
-            .sortBy(extractor => extractor.pos.getMultiRoomRangeTo(this.pos)).value();
-        this.constructionSites = _.flatten(_.map(this.rooms, room => room.constructionSites));
-        this.tombstones = _.flatten(_.map(this.rooms, room => room.tombstones));
-        this.drops = _.merge(_.map(this.rooms, room => room.drops));
-        this.repairables = _.flatten(_.map(this.rooms, room => room.repairables));
-        this.rechargeables = _.flatten(_.map(this.rooms, room => room.rechargeables));
-        // Register assets
-        this.assets = this.computeAssets();
-    }
-    /**
-     * Version of Colony.registerRoomObjects with additional caching functionality
+     * Registers physical game objects to the colony with caching
      */
     registerRoomObjects_cached() {
         // Create placeholder arrays for remaining properties to be filled in by the Overmind
