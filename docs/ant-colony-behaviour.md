@@ -25,77 +25,153 @@ architectural decisions.
 
 ## 1. Colony Lifecycle
 
-Ant colonies go through three distinct phases, each with different energy
-investment strategies. Understanding this is critical because Screeps RCL
-progression maps almost perfectly onto it.
+Ant colonies progress through distinct phases, each with different energy
+investment trade-offs. Our bot mirrors this lifecycle with emphasis on
+**polygyne budding** — multiple queens, colonies reproduce by fission.
+
+| Phase | Biology | Screeps | Key Principle |
+|-------|---------|---------|---------------|
+| Founding | Queen + nanitics, >90% mortality | RCL 1-2, spawn + 2 harvesters | Survival is existential |
+| Ergonomic | Exponential growth, zero reproduction | RCL 3-7, scale workers proportionally | Growth before reproduction |
+| Reproductive | Budding/fission, queen dispersal | RCL 8+, ExpansionPlanner campaigns | Polygyne = rapid deployment |
+| Death | Queen loss, resource exhaustion | Spawn loss, energy starvation | Design for graceful degradation |
 
 ### 1.1 Founding Stage
 
-A mated queen finds a nesting site, seals herself in (claustral founding),
-and raises her first workers using only her body reserves. She does not
-forage. She lays eggs, tends larvae, and metabolizes her own flight muscles
-for nutrition. This is the most dangerous phase — mortality is extremely
-high. Most queens die here.
+A single mated queen (claustral founding) or multiple cooperating queens
+(pleometrosis) raise the first workers from metabolic reserves alone — no
+foraging. First-generation "nanitics" are small, cheap, generalists.
+Transition to normal workers happens when resource flow stabilizes.
 
-**What the first workers do:** The first generation (called "nanitics") are
-smaller than normal workers. They dig the nest, forage for food, tend the
-queen's next brood, and defend the entrance. Once these workers take over
-all labor, the queen never leaves the nest again.
+**Key insight**: In polygyne colonies there is no claustral phase. New
+colonies **bud** — queen cohort + workers + brood split from the parent.
+Founding mortality drops from >99% to ~10-30%. Our architecture principle:
+**every new room should be a bud, not an independent founding event**.
 
-**Screeps mapping:** RCL 1-2. The spawn is the queen. Energy reserves are
-the queen's body reserves. The first 2 harvesters are the nanitics. Every
-tick of energy income is existential — one missed harvest cycle can cascade
-into colony death.
+**Screeps mapping**: RCL 1-2. The spawn is the queen. First 2 harvesters
+are the nanitics — small generalist bodies (`[WORK, CARRY, MOVE]` = 200
+energy). Every tick is existential. `MINIMUM_CIVILIAN_FLOOR` enforces
+critical colony size.
+
+```javascript
+// Minimum viable colony: 2 harvesters + 1 upgrader, nanitic bodies
+const NANITIC_BODY = [WORK, CARRY, MOVE];
+const MINIMUM_COLONY = { harvesters: 2, upgraders: 1, body: NANITIC_BODY };
+```
+
+Colony size drives specialization. Below ~50 creeps every creep is a
+generalist. Above that, specialization emerges through response thresholds
+(see Section 4) — creeps self-select tasks based on local stimulus
+intensity vs their internal thresholds. This self-organizes without
+central control or a scheduler.
+
+---
 
 ### 1.2 Ergonomic Stage
 
-All energy is invested in producing more workers. No reproductive alates
-( winged males/new queens) are produced. The colony grows exponentially:
-more workers → more food gathered → more workers. This is a positive
-feedback loop.
+All energy into workers. Zero reproduction. Positive feedback loop: more
+workers → more energy → more workers. The colony does NOT invest in
+reproduction until stable. Premature expansion weakens the colony and
+risks collapse.
 
-The colony expands the nest, secures territory, and builds infrastructure.
-Workers begin to specialize — some become foragers, some nurses, some
-defenders, some waste managers. Specialization is not fixed; workers switch
-tasks based on demand (response thresholds, see Section 4).
+**How ant colonies handle disruption (applies to Screeps):**
+- Worker loss → remaining workers switch tasks within hours (threshold plasticity)
+- Food discovery → pheromone cascade recruits foragers in seconds
+- Nest damage → damage signal triggers generalist recruitment
+- Queen loss → polygyne colonies survive (other queens take over); monogyne colonies die
 
-**Key principle:** The colony does NOT invest in reproduction until it is
-stable. Premature reproductive investment weakens the colony and risks
-death. Growth first, reproduction later.
+**Entropy is intentional**: Exploration (scouts, random walks) prevents
+convergence on local optima. Exploitation (specialists, trail reinforcement)
+optimizes throughput. Young colonies explore more; mature ones exploit more.
+Perturbations should spike exploration. This is the exploration/exploitation
+tradeoff familiar from ML.
 
-**Screeps mapping:** RCL 3-7. Every energy surplus should produce more
-creeps. The colony scales workers proportionally to available surplus.
-Construction sites, lab research, and terminal operations are all
-investments in future growth.
+**Screeps mapping**: RCL 3-7. Scale creeps to energy surplus. Development
+(labs, terminal, factory) is investment in future growth, not consumption.
 
-### 1.3 Reproductive Stage
+```javascript
+// Demand-driven spawn: thresholds adjust based on room stimuli
+function computeRoleDemand(room) {
+  const stimulus = {
+    harvest: 1 - room.energyAvailable / room.energyCapacityAvailable,
+    haul: (room.storage?.store[RESOURCE_ENERGY] ?? 0) < 5000 ? 1 : 0,
+    build: Math.min(room.find(FIND_CONSTRUCTION_SITES).length / 5, 1),
+    defend: Memory.warPlan?.threat?.[room.name] || 0,
+  };
+  // Scale demand into target creep counts
+  return Object.fromEntries(
+    Object.entries(stimulus).map(([r, s]) => [r, Math.floor(s * MAX_PER_ROLE[r])])
+  );
+}
+```
 
-The colony is mature and stable. It now produces alates — winged males and
-new queens — which fly away to mate and start new colonies. This is colony
-"budding." The parent colony continues functioning but invests surplus energy
-in dispersal.
+---
 
-**How colonies reproduce in nature:**
-- **Independent founding:** A single mated queen leaves, finds a site,
-  starts alone (highest risk, most common)
-- **Dependent founding (budding):** A queen leaves with a group of workers
-  from the parent colony (lower risk, common in army ants and fire ants)
-- **Budding in polygyne colonies:** Multiple queens coexist; new nests
-  form nearby by budding rather than flying away
+### 1.3 Reproductive Stage (Budding)
 
-**Screeps mapping:** RCL 8 + expansion campaigns. The ExpansionPlanner
-already implements this as staged campaigns with escrow, probe, claim,
-bootstrap, stabilize phases.
+Mature colonies reproduce by **budding** — queen cohorts + workers + brood
+split off to form daughter colonies. This is the core of our architecture.
+
+**Budding vs alternatives**:
+
+| Strategy | Founder mortality | Time to maturity | Screeps equivalent |
+|----------|-------------------|------------------|-------------------|
+| Independent founding | >99% | Years | Claim room with 0 infrastructure |
+| Swarming | <10% | Months | Send creeps in waves |
+| **Budding** | **10-30%** | **Weeks** | **Claim + pre-built spawn + escrow energy** |
+
+**When to bud** (trigger conditions from biology):
+1. Colony size threshold reached (energy stockpile > reserve floor)
+2. Resource saturation (sources consistently full, storage capped)
+3. Viable target identified (intel: safe route, good sources, no hostiles)
+4. Queen cohort ready (GCL slot available)
+
+**The supergene analogy**: Fire ants use a single ~13 Mb chromosome region
+(Gp-9) that locks together queen morphology, worker tolerance, and
+aggression as a co-adapted unit. Our equivalent: expansion flags. When
+`Memory.empire.expansion.candidates` crosses thresholds (source count,
+terrain safety, threat level), it triggers budding with locked-in role
+compositions, body templates, and defense posture.
+
+**Screeps mapping — ExpansionPlanner phases**:
+| Phase | Action | |
+|-------|--------|---|
+| Scout | `Game.map.findRoute`, evaluate room | |
+| Reserve | Reserve controller, prevent counter-claim | |
+| Outpost | Remote miner/hauler pair, container | |
+| Claim | `claimController` + pioneer creeps | |
+| Bootstrap | Spawn, extensions, storage, RCL 1→3 | |
+| Integrate | Link to terminal network, shared logistics | |
+| Specialize | Assign room role (mineral, power, military) | |
+
+---
 
 ### 1.4 Colony Death
 
-Colonies die when:
-- Queen dies (no replacement)
-- Sustained resource depletion
-- Overwhelming predation/parasitism
-- Disease
+| Mode | Screeps Equivalent | Recovery |
+|------|-------------------|----------|
+| Queen death (senescence/predation) | Spawn destroyed | In polygyne: other rooms continue. Rebuild if possible. |
+| Worker collapse | Mass creep death, zero income | Emergency spawn from reserves. Cut non-essential roles. |
+| Resource exhaustion | Sources depleted, no expansion | Trigger scout allocation for new rooms. |
+| Overwhelming attack | Hostile takeover | Safe mode. Request reinforcement from neighbor rooms. |
 
-In Screeps terms: losing all spawns, energy starvation, or hostile takeover.
+**Polygyne advantage**: Losing one room (nest) doesn't kill the colony.
+`colony.manager.plan.economy.survival` triggers: cut non-essential roles,
+funnel energy to spawn reconstruction, request reinforcements. The empire
+continues through the polydomous network. This is our graceful degradation
+model.
+
+---
+
+### 1.5 Design Implications
+
+| # | Principle | Implementation |
+|---|-----------|----------------|
+| 1 | **Budding, not founding** | New rooms deploy with starter kit: pioneer creeps + escrow energy + blueprint |
+| 2 | **Response thresholds drive spawn** | `colony.manager` computes role demand from room-level stimuli, not static ratios |
+| 3 | **Graceful degradation** | Losing one room triggers survival mode, not cascade failure. Rest of empire continues. |
+| 4 | **Expansion = budding** | ExpansionPlanner phases mirror biology: scout → reserve → claim → bootstrap → integrate |
+| 5 | **Exploration/exploitation balance** | Young colonies explore (scouts, generalists). Mature colonies exploit (specialists, trails). Perturbations spike exploration. |
 
 ---
 
