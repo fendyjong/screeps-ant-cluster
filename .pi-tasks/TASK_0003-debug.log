@@ -190,3 +190,6 @@
 2026-07-23T05:25:19.005Z phase:research: done ms=446944
 2026-07-23T05:25:19.006Z phase:grill: start
 2026-07-23T12:13:20.035Z phase:grill: done ms=24481029
+2026-07-23T12:13:20.241Z run: start phase=grill
+2026-07-23T12:13:20.242Z phase:grill: start
+2026-07-23T12:13:21.591Z phase:grill: done ms=1349
