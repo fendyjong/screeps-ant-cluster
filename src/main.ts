@@ -16,6 +16,10 @@ const RUNNERS: Record<TaskName, (creep: Creep) => void> = {
   build: runBuild,
 };
 
+function distributionTotal(d: TaskDistribution): number {
+  return d.supply + d.upgrade + d.build;
+}
+
 /** Drops memory for creeps that no longer exist, so it cannot grow unbounded. */
 function pruneCreepMemory(): void {
   for (const name in Memory.creeps) {
@@ -69,8 +73,9 @@ function runRoom(room: Room): void {
     }
   }
 
-  if (runSpawning(room)) {
-    emit('INFO', 'spawn', { room: room.name });
+  const spawned = runSpawning(room, energy);
+  if (spawned) {
+    emit('INFO', 'spawn', { room: room.name, reason: spawned, alive: distributionTotal(distribution) });
   }
 
   // Colony death: nothing alive, nothing being born, and not enough energy to

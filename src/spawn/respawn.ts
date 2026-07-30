@@ -1,6 +1,8 @@
 import {
-  COLONY_SIZE,
+  COLONY_MAX,
+  COLONY_MIN,
   DEFAULT_TASK,
+  GROWTH_SURPLUS_RATIO,
   IDEAL_BODY,
   IDEAL_BODY_COST,
   MIN_BODY,
@@ -15,18 +17,34 @@ export function bodyFor(energy: number): BodyPartConstant[] | null {
   return null;
 }
 
+export type SpawnReason = 'survival' | 'growth';
+
 /**
- * Dumb fixed-N respawn. Returns true only if a creep was actually spawned.
- * Too little energy is normal at RCL1, not an error — skip quietly and retry.
+ * Quorum-driven spawning. There is no target headcount: below COLONY_MIN the
+ * colony always replaces (survival), and above it the colony only invests in a
+ * new worker while its reserves are satiated. Returns the reason a creep was
+ * spawned, or null if none was.
+ *
+ * Too little energy is normal, not an error — skip quietly and retry.
  */
-export function runSpawning(room: Room): boolean {
+export function runSpawning(
+  room: Room,
+  energy: { available: number; capacity: number },
+): SpawnReason | null {
   const spawn = room.find(FIND_MY_SPAWNS).find(s => !s.spawning);
-  if (!spawn) return false;
+  if (!spawn) return null;
 
-  if (room.find(FIND_MY_CREEPS).length >= COLONY_SIZE) return false;
+  const alive = room.find(FIND_MY_CREEPS).length;
+  if (alive >= COLONY_MAX) return null;
 
-  const body = bodyFor(room.energyAvailable);
-  if (!body) return false;
+  const reason: SpawnReason = alive < COLONY_MIN ? 'survival' : 'growth';
+  if (reason === 'growth') {
+    const ratio = energy.capacity > 0 ? energy.available / energy.capacity : 0;
+    if (ratio < GROWTH_SURPLUS_RATIO) return null;
+  }
+
+  const body = bodyFor(energy.available);
+  if (!body) return null;
 
   const result = spawn.spawnCreep(body, `ant_${Game.time}`, {
     memory: {
@@ -36,5 +54,5 @@ export function runSpawning(room: Room): boolean {
     },
   });
 
-  return result === OK;
+  return result === OK ? reason : null;
 }

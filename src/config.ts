@@ -1,7 +1,25 @@
 import { TaskName } from './types';
 
-/** N — target creep count per room. */
-export const COLONY_SIZE = 4;
+/**
+ * Colony size is no longer a fixed target — it emerges from a growth stimulus.
+ *
+ * Real colonies regulate worker production by satiation feedback: full reserves
+ * suppress recruitment, unmet needs attract labor, and negative feedback stops
+ * overinvestment once a need is met. So we spawn only while energy reserves sit
+ * satiated, which is the colony's signal that it can support more brood.
+ *
+ * The loop closes itself: spawning drains energy below the surplus ratio, so
+ * growth pauses until foragers refill the reserve. If added creeps cost more
+ * than they bring in, the ratio never recovers and growth stops on its own.
+ */
+/** Survival floor — always replace below this, regardless of reserves. */
+export const COLONY_MIN = 2;
+
+/** Safety ceiling, so a runaway feedback loop cannot exhaust CPU. */
+export const COLONY_MAX = 10;
+
+/** Reserves must be at least this full before the colony invests in growth. */
+export const GROWTH_SURPLUS_RATIO = 0.95;
 
 /**
  * K — ticks between telemetry snapshots. Distinct from COLONY_SIZE.

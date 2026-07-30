@@ -401,6 +401,57 @@ stimuli.
 A forager can become a nurse. A nurse can become a defender. The colony
 adapts by adjusting the distribution of thresholds across the population.
 
+### 4.2.1 Inactive workers are a feature, not waste
+
+Roughly **40% of workers in a colony are persistently inactive**, and this is not
+a failure of the allocation system — it is load-bearing. Charbonneau, Sasaki and
+Dornhaus showed experimentally in *Temnothorax rugatulus* that inactive workers
+act as a **reserve labor force**: when active workers are removed they are
+replaced within about a week, whereas removed inactive workers are not replaced.
+Modelling work reaches the same conclusion from the other direction — colonies
+whose workers have **variable** response thresholds persist longer than colonies
+with uniform thresholds, because the high-threshold individuals are still
+available when the active ones fatigue. The trade is explicit: lower short-term
+productivity, higher long-term persistence.
+
+**Observed in our colony (2026-07-30, tick ~86120):** a creep whose jittered
+profile put *every* threshold above *every* available stimulus sat parked on one
+task, moving only when the exploration roll fired. That is this reserve caste
+emerging for free out of threshold jitter — no special-casing required.
+
+**One divergence worth correcting:** real inactive ants *rest*. Ours keeps
+executing its last task at a negative margin, burning CPU and occupying tiles.
+A genuine idle state would be both more faithful and cheaper.
+
+Sources: [PLOS One](https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0184074),
+[Scientific Reports](https://www.nature.com/articles/srep20846)
+
+### 4.2.2 Growth regulation: satiation feedback, not a target headcount
+
+Colonies do not hold a target worker count. Production is governed by **closed-loop
+satiation feedback**: successful foraging amplifies recruitment, while met needs
+suppress it — well-fed larvae emit less hunger signal, and full reserves reduce
+foraging recruitment. Negative feedback exists specifically to prevent
+overinvestment in a satisfied need. At the individual level the loop is mediated
+by **crop load**: how full a recipient ant is controls food flow rate, and how
+full a forager is controls its trip frequency.
+
+**Applied here (M2):** the colony has no target size. Below a survival floor it
+always replaces; above it, it spawns only while reserves sit satiated — the
+signal that it can afford more brood. The loop closes itself, because spawning
+drains the reserve below the surplus ratio and growth pauses until foragers
+refill it. If added workers cost more than they return, the ratio never recovers
+and growth stops without anyone deciding to stop it.
+
+**Observed:** with a fixed N=4 the colony sat at 300/300 energy indefinitely —
+visible surplus it structurally could not use. Under satiation-driven spawning it
+grew to the safety ceiling of 10 while *still* holding 300/300, confirming the
+surplus was real and that ten workers remain within carrying capacity.
+
+Sources: [J Exp Biol](https://journals.biologists.com/jeb/article/211/14/2224/17598/Carbohydrate-regulation-in-relation-to-colony),
+[Individual crop loads (PMC)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5862530/),
+[Harvester ant foraging as a closed-loop excitable system (PMC)](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6294393/)
+
 **Screeps mapping:** This maps to role priority bands + body scaling.
 The Queen (colony manager) computes target counts based on demand. If
 demand shifts (e.g., invasion → more defenders needed), targets shift
