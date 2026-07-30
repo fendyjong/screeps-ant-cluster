@@ -37,6 +37,20 @@ function pruneCreepMemory(): void {
       const memory = Memory.creeps[name];
       const record = memory.work;
       const fitness = record && record.ticks > 0 ? record.value / record.ticks : 0;
+
+      // How this creep ended, which is the one question five spawn-side fixes
+      // never answered. A creep last seen with a low `ticksToLive` aged out; one
+      // last seen with hundreds of ticks remaining was removed some other way,
+      // and the difference decides whether the collapses are demographic at all.
+      const lastTTL = record?.lastTTL ?? -1;
+      if (lastTTL > 50) {
+        emit('WARN', 'creep-died-young', { creep: name, lastTTL, lived: record?.ticks ?? 0 });
+      }
+      const deaths = Memory.deathTTLs ?? (Memory.deathTTLs = []);
+      deaths.push(lastTTL);
+      if (deaths.length > 40) deaths.shift();
+      Memory.deathsThisWindow = (Memory.deathsThisWindow ?? 0) + 1;
+
       retire(memory.thresholds, memory.traits, fitness);
       delete Memory.creeps[name];
     }
@@ -268,12 +282,28 @@ function runRoom(room: Room): void {
       const dying = lives.filter(t => t >= start && t < start + HORIZON).length;
       worstDeficit = Math.max(worstDeficit, dying - spawnPerHorizon);
     }
+    const deaths = Memory.deathTTLs ?? [];
+    const young = deaths.filter(v => v > 50).length;
     emit('INFO', 'demography', {
       room: room.name,
       alive: lives.length,
+      deathsSampled: deaths.length,
+      // Deaths that ACTUALLY happened over the last interval, measured backward.
+      // The forward-looking version was worthless during a collapse: it reads the
+      // TTLs of creeps currently alive, and a colony mid-collapse is busy spawning
+      // replacements with a full 1500 ticks, so the survivors look healthy while
+      // the old cohort dies off around them. It was measuring the wrong
+      // population. Deaths already counted cannot lie about that.
+      deathsPerWindow: Memory.deathsThisWindow ?? 0,
+      diedYoung: young,
+      medianDeathTTL: deaths.length
+        ? [...deaths].sort((a, b) => a - b)[Math.floor(deaths.length / 2)]
+        : -1,
       worstDeficit: Math.round(worstDeficit * 100) / 100,
       spawnPerHorizon: Math.round(spawnPerHorizon * 100) / 100,
     });
+
+    Memory.deathsThisWindow = 0;
 
     const blocks = Memory.spawnBlocks ?? {};
     if (Object.keys(blocks).length > 0) {

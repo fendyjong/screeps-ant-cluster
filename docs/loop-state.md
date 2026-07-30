@@ -25,6 +25,7 @@ efficiency.
 | 32 | require full-size body outside survival | bodies all-3-part → 27/28 at 12-part | **worked** for composition; output 2.67@28-29, NOT an improvement |
 | 33 | `COLONY_MAX` derived from spawn capacity (25 → 20) | 2.67@28-29 → **4.47@22**; per-creep 0.094 → **0.203** | **worked**; colony was past carrying capacity |
 | 34 | cap on real bodies + clustering-derived ceiling (→18) | 4.47@22 → 3.89@19; per-creep 0.203 → 0.205 | **falsified**; metric was invalid, ceiling reverted, body cap kept |
+| 35 | diagnosis only: TTL-at-death + backward death rate | baseline: 0/40 died young, median TTL 1 | **unverified**; second bad metric killed, baseline established |
 
 # Loop state — progressive ant supercolony
 
@@ -1974,3 +1975,51 @@ touched selection.
 healthy and clearly positive before a collapse, it is the first honest handle on the mechanism.
 If it is positive in both, the demographic theory of these collapses has no support yet and
 should be set aside rather than patched again.
+
+### 2026-07-31 — iteration 35 — second bad metric killed; a real baseline finally exists
+
+**No change shipped. This iteration bought a diagnosis and two retired metrics**, which is worth
+more than a sixth speculative spawn fix would have been.
+
+**`worstDeficit` is rejected, and it failed in the opposite direction to its predecessor.** It
+reads **0 in all 1049 healthy samples and 0 through an entire collapse** (population 22 → 21 →
+17 → 13 → 9 → 3). Two reasons, both disqualifying:
+1. `spawnPerHorizon` is 13.89 creeps per 500 ticks while a 21-creep colony loses about 7, so the
+   metric needs **two-thirds of the colony to die inside 500 ticks** before it registers anything.
+2. More fundamentally it is **forward-looking**: it inspects the TTLs of creeps currently alive.
+   A colony mid-collapse is spawning replacements with a full 1500 ticks, so the survivors look
+   perfectly healthy while the old cohort dies off around them. **It was measuring the wrong
+   population.** Deaths must be counted backward, never projected forward.
+
+**One genuine finding from it, though:** in steady state the spawn delivers ~2x the death rate.
+Spawn throughput is not the steady-state constraint, which retrospectively explains why five
+spawn-policy fixes changed the blockers without changing the outcome.
+
+**And the contradiction that pins the mechanism down.** During the fall `spawn-busy` ran 93-98%
+while population dropped 20 → 3 in 400 ticks — 4.25 deaths per 100 ticks against a capacity of
+2.78. So deaths *do* outrun the spawn during a collapse, while sitting at ~1.4 per 100 in steady
+state. The spike is real; every metric so far has simply been blind to it.
+
+**Baseline established, in the right order this time.** New instrumentation records
+`ticksToLive` at death. Over 40 sampled deaths in a healthy period: **`diedYoung` = 0,
+`medianDeathTTL` = 1** — every creep ages out, nothing is removed early. Combined with the
+earlier tombstone evidence, deaths are conclusively old age.
+
+Crucially this is a **healthy-period baseline only**, because the instrumentation landed after
+the collapse. It is not an answer. Per the rule that caught the last error, the baseline had to
+exist before the event so the comparison means something — that is now true.
+
+**Also added:** `deathsPerWindow`, a backward-looking count of deaths that actually occurred since
+the previous snapshot. Steady state should sit near 1.4 per 100 ticks against a spawn capacity of
+2.78; a collapse should show it spiking past 2.78.
+
+**Next iteration — the test is now unambiguous.** Read `deathsPerWindow` and `diedYoung` across a
+collapse:
+ - `deathsPerWindow` spiking above 2.78 with `diedYoung` still 0 confirms a genuine age-cohort
+   die-off, and the remedy is de-synchronisation, not spawn policy.
+ - `diedYoung` rising during the fall means creeps are being removed some other way and the whole
+   demographic line is wrong.
+ - If neither moves, the population metric itself is suspect — though actual creep count was
+   verified against telemetry this iteration (21 = 21), so that is unlikely.
+If it resolves quickly, spend the remainder on **the growth term**, which is untouched and does
+not depend on this.

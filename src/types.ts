@@ -61,7 +61,7 @@ declare global {
      * at the moment each unit of work happened, so scarce-but-critical work
      * outweighs abundant busywork.
      */
-    work?: { value: number; ticks: number; lastStore?: number };
+    work?: { value: number; ticks: number; lastStore?: number; lastTTL?: number };
 
     /** Room this creep calls home, for remote foraging round trips. */
     home?: string;
@@ -96,6 +96,12 @@ declare global {
 
     /** What has been seen of neighbouring rooms, built up by foragers. */
     spawnBlocks?: Record<string, number>;
+
+    /** Rolling sample of ticksToLive at death, to tell aging from removal. */
+    deathTTLs?: number[];
+
+    /** Deaths counted since the last snapshot, for a backward-looking rate. */
+    deathsThisWindow?: number;
     remotes?: Record<
       string,
       { sources: number; hostile: boolean; lastSeen: number; lastHarvest?: number }

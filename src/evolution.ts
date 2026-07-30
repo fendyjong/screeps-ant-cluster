@@ -182,6 +182,12 @@ export function recordWork(creep: Creep): void {
   const record = creep.memory.work ?? (creep.memory.work = { value: 0, ticks: 0 });
   record.ticks += 1;
 
+  // Remembered so the pruner can report how a creep actually ended. Read after
+  // the fact this is the only trace left: once a creep leaves `Game.creeps` the
+  // object is gone, so the last living observation has to be banked while it is
+  // still available.
+  record.lastTTL = creep.ticksToLive ?? 0;
+
   const carried = creep.store.getUsedCapacity(RESOURCE_ENERGY);
   if (record.lastStore !== undefined && carried < record.lastStore) {
     record.value += record.lastStore - carried;
