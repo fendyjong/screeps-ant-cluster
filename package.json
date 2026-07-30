@@ -1,28 +1,20 @@
 {
-  "name": "Overmind",
+  "name": "progressive-ant-supercolony",
   "version": "0.6.0",
-  "description": "Overmind Screeps AI",
-  "author": "Ben Bartlett",
+  "description": "Decentralized ant-colony Screeps AI",
+  "author": "Fendy Jong",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/bencbartlett/Overmind.git"
-  },
-  "homepage": "https://github.com/bencbartlett/Overmind#readme",
-  "bugs": {
-    "url": "https://github.com/bencbartlett/Overmind/issues"
-  },
   "scripts": {
     "build": "tsc -p .",
     "lint": "tslint \"src/**/*.ts\"",
     "clean": "rm -rf tsc-out && rm -rf dist",
-    "obfuscate": "tsc && javascript-obfuscator tsc-out/Overmind.js --output src/Overmind_obfuscated.js --compact false --self-defending true --string-array true --string-array-threshold 1 --string-array-encoding rc4 && javascript-obfuscator tsc-out/assimilation/Assimilator.js --output src/assimilation/Assimilator_obfuscated.js --compact false --self-defending true --string-array true --string-array-threshold 1 --string-array-encoding rc4",
     "compile": "rollup -c",
     "push-main": "rollup -c --environment DEST:main",
     "push-seasonal": "rollup -c --environment DEST:seasonal",
     "push-pserver": "rollup -c --environment DEST:pserver",
     "push-screepsplus": "rollup -c --environment DEST:screepsplus",
-    "deploy": "npm run compile && cp dist/main.js screeps.com/default/main.js && cp dist/main.js screeps.com/seasonal/main.js && cp dist/main.js 127_0_0_1___21025/pserver/main.js"
+    "deploy": "npm run compile && cp dist/main.js screeps.com/default/main.js && cp dist/main.js screeps.com/seasonal/main.js && cp dist/main.js 127_0_0_1___21025/pserver/main.js",
+    "deploy:pserver": "npm run compile && cp dist/main.js 127_0_0_1___21025/pserver/main.js"
   },
   "engines": {
     "node": "^20.11"
@@ -33,7 +25,6 @@
     "@types/lodash": "3.10.2",
     "@types/node": "^20.11.16",
     "@types/screeps": "^3.3.7",
-    "javascript-obfuscator": "^4.1.0",
     "rollup": "^2.6.0",
     "rollup-plugin-progress": "^1.1.1",
     "rollup-plugin-screeps": "^1.0.0",
@@ -42,11 +33,5 @@
     "tslint": "^5.20.0",
     "typedoc": "^0.14.2",
     "typescript": "5.3.3"
-  },
-  "dependencies": {
-    "@tensorflow/tfjs": "^1.2.11",
-    "columnify": "1.5.4",
-    "onnxjs": "^0.1.6",
-    "source-map": "0.7.3"
   }
 }

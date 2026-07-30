@@ -4,3 +4,11 @@
 /127_0_0_1___21025/
 /Overmind_dev
 .tokensave
+/tsc-out/
+/dist/
+/piolium/
+/specs/
+/test/
+/tests/
+/graphify-out/
+.env
