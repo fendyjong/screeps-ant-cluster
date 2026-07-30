@@ -47,6 +47,10 @@ import { generateProfile } from './creep/thresholds';
  * optimised away.
  */
 
+function clamp(value: number): number {
+  return Math.max(THRESHOLD_MIN, Math.min(THRESHOLD_MAX, value));
+}
+
 export interface Gene {
   thresholds: ThresholdProfile;
   fitness: number;
@@ -69,6 +73,25 @@ function pool(): GenePool {
     memory.genes = [];
     memory.version = FITNESS_VERSION;
   }
+
+  // Adding a task widens the profile without invalidating fitness — the scores
+  // still mean what they meant. Rather than discarding the pool (and with it
+  // every generation of accumulated selection), seed the new dimension from the
+  // gene's own `supply` threshold: remote foraging is a gathering task, so a
+  // gene eager to supply is plausibly eager to fetch energy abroad. The jitter
+  // gives the new axis immediate diversity for selection to act on, instead of
+  // every gene starting identical there.
+  for (const gene of memory.genes) {
+    for (const task of TASK_NAMES) {
+      const value = gene.thresholds[task];
+      if (typeof value !== 'number' || !isFinite(value)) {
+        const seed = gene.thresholds.supply;
+        const base = typeof seed === 'number' && isFinite(seed) ? seed : THRESHOLD_BASE;
+        gene.thresholds[task] = clamp(base + (Math.random() * 2 - 1) * THRESHOLD_JITTER);
+      }
+    }
+  }
+
   return memory as GenePool;
 }
 
@@ -107,10 +130,6 @@ export function retire(thresholds: ThresholdProfile | undefined, fitness: number
   p.genes.sort((a, b) => b.fitness - a.fitness);
   if (p.genes.length > GENE_POOL_SIZE) p.genes.length = GENE_POOL_SIZE;
   p.generation += 1;
-}
-
-function clamp(value: number): number {
-  return Math.max(THRESHOLD_MIN, Math.min(THRESHOLD_MAX, value));
 }
 
 function mutate(parent: ThresholdProfile): ThresholdProfile {

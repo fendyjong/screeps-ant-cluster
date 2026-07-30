@@ -5,6 +5,7 @@ import { applyCongestion, computeStimuli, readEnergy, readRoom } from './creep/s
 import { decide } from './creep/decide';
 import { ensureProfile } from './creep/thresholds';
 import { run as runBuild } from './creep/tasks/build';
+import { run as runRemote } from './creep/tasks/remote';
 import { run as runSupply } from './creep/tasks/supply';
 import { run as runUpgrade } from './creep/tasks/upgrade';
 import { MIN_BODY_COST, RECRUIT_LIMIT_PER_TICK, SNAPSHOT_INTERVAL } from './config';
@@ -18,10 +19,11 @@ const RUNNERS: Record<TaskName, (creep: Creep, value: number) => void> = {
   supply: runSupply,
   upgrade: runUpgrade,
   build: runBuild,
+  remote: runRemote,
 };
 
 function distributionTotal(d: TaskDistribution): number {
-  return d.supply + d.upgrade + d.build;
+  return d.supply + d.upgrade + d.build + d.remote;
 }
 
 /** Drops memory for creeps that no longer exist, so it cannot grow unbounded. */
@@ -49,19 +51,19 @@ function runRoom(room: Room): void {
   // Occupancy is read from last tick's committed tasks, before anyone decides,
   // so every creep sees the same congestion picture and the damping cannot
   // depend on iteration order.
-  const occupancy: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
+  const occupancy: TaskDistribution = { supply: 0, upgrade: 0, build: 0, remote: 0 };
   for (const creep of creeps) {
     const held = creep.memory.task;
     if (held) occupancy[held] += 1;
   }
   const stimuli = applyCongestion(raw, occupancy, snapshot);
 
-  const distribution: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
+  const distribution: TaskDistribution = { supply: 0, upgrade: 0, build: 0, remote: 0 };
   const switches: Record<string, number> = {};
   // Recruitment is a rate, not a step change: only so many creeps may join a
   // given task per tick, so a stimulus crossing every threshold at once can no
   // longer move the whole colony in a single tick.
-  const joined: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
+  const joined: TaskDistribution = { supply: 0, upgrade: 0, build: 0, remote: 0 };
   let deferred = 0;
 
   for (const creep of creeps) {

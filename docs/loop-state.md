@@ -695,3 +695,54 @@ threshold that never fires is indistinguishable from a system that never fails.
 `COLONY_MAX` with deaths spread out rather than sawtoothing — then resume the open candidates
 (room scouting + reservation; pheromone-weighted pathfinding; idle state for
 all-negative-margin creeps).
+
+### 2026-07-30 — iteration 12 — remote foraging (polydomy, first half)
+
+**Prompted by the human:** "single room too crowded". Confirmed, and far worse than
+suspected. Verified against constants on disk (`SOURCE_ENERGY_CAPACITY = 3000`,
+`ENERGY_REGEN_TIME = 300`, `HARVEST_POWER = 2`): one source sustains 10 energy/tick and
+exactly **5 WORK parts**. W5N8 has 2 sources → a hard ceiling of **20 energy/tick and 10
+useful WORK parts however large the colony grows**. It was fielding **74 WORK parts —
+7.4× oversubscribed**, with ~64 contributing nothing. This is the mechanical cause of the
+slow controller progress and the population oscillation.
+
+**Researched:** polydomy. A colony cannot outgrow its central place; the biological answer is
+a central nest plus subnests spread across the foraging territory, adopted specifically to
+raise food encounter and exploitation rates. Notably colony size does *not* predict foraging
+distance — colonies reorganise spatially rather than simply ranging further, so growth past
+carrying capacity is a structural change rather than a scaling one. Folded into research doc
+§7.1.1 with the measured numbers.
+
+**Shipped: `remote` as a fourth task** (`src/creep/tasks/remote.ts`), deliberately a task and
+not a dedicated role, so remote foraging competes for labor through the same threshold
+mechanism as everything else — no central allocation. Its stimulus is home-room
+oversubscription: `(workParts − sources × WORK_PER_SOURCE) / (sources × WORK_PER_SOURCE)`,
+so remote becomes attractive exactly when extra WORK at home would be idle. Creeps record
+what they see (`Memory.remotes`), prefer the best room actually observed, and explore
+unvisited neighbours otherwise.
+
+**Gene pool preserved rather than reset — the human's call, and it was the right one.**
+Adding a task widens the profile but does not change what fitness *means*, so scores stay
+comparable and discarding would have thrown away every generation of selection for nothing.
+The new axis is seeded per gene from its own `supply` threshold plus jitter: remote foraging
+is a gathering task, so a gene eager to supply is plausibly eager to fetch energy abroad, and
+the jitter gives the axis immediate diversity for selection to act on.
+
+`ensureProfile` needed the same treatment and would otherwise have silently undone the whole
+thing — it validated that a profile contained *every* task key, so on the first tick after
+deploy every living creep's inherited profile would have been judged corrupt and regenerated
+at random. It now patches missing keys instead of discarding.
+
+**Result:** gene pool intact at **generation 950** (not reset), `remote` thresholds spread
+0.49–0.79 across the pool, fitness risen **0.525 → 0.68** as remote work began contributing
+value. Creeps have crossed into **three adjacent rooms** (W5N7, W6N8, W5N9) with 15 on the
+remote task. Six unowned adjacent sources are now reachable, no Source Keeper lairs.
+
+**Next iteration:**
+1. **Verify remote foraging actually pays.** Watch whether home `energyAvailable` and
+   controller progress rise now that income is not capped at 20/tick. Travel is overhead —
+   confirm the round trip is worth it rather than assuming.
+2. **Reservation doubles it.** Neutral sources hold 1500 vs a reserved room's 3000, so
+   reserving takes remote sources from 5 to 10 energy/tick each. Needs no GCL, only a CLAIM
+   part (650 energy against 1800 capacity).
+3. Pheromone-weighted pathfinding; idle state for all-negative-margin creeps.

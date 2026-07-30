@@ -98,6 +98,23 @@ export const CAPACITY_UPGRADE = 999;
 export const CAPACITY_BUILD_PER_SITE = 2;
 
 /**
+ * Remote foraging capacity. Each remote source sustains 5 WORK parts
+ * (SOURCE_ENERGY_NEUTRAL_CAPACITY 1500 / ENERGY_REGEN_TIME 300 / HARVEST_POWER 2),
+ * so a handful of foragers per known source is the productive level.
+ */
+export const CAPACITY_REMOTE = 6;
+
+/** Carry this much before walking home; shorter trips waste the journey. */
+export const REMOTE_MIN_ENERGY_TO_RETURN = 100;
+
+/**
+ * WORK parts one home source sustains: SOURCE_ENERGY_CAPACITY / ENERGY_REGEN_TIME
+ * / HARVEST_POWER = 3000/300/2. Beyond this, extra WORK in the home room is
+ * simply idle, which is what makes remote foraging worth its travel overhead.
+ */
+export const WORK_PER_SOURCE = 5;
+
+/**
  * Nest expansion (research doc §7.4: population controls nest area, not the
  * reverse). One extension per this many workers, capped by what the RCL allows.
  * At 25 creeps that asks for 9, against the 10 permitted at RCL 3.

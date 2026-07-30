@@ -1,6 +1,6 @@
-export type TaskName = 'supply' | 'upgrade' | 'build';
+export type TaskName = 'supply' | 'upgrade' | 'build' | 'remote';
 
-export const TASK_NAMES: TaskName[] = ['supply', 'upgrade', 'build'];
+export const TASK_NAMES: TaskName[] = ['supply', 'upgrade', 'build', 'remote'];
 
 /** Per-task stimulus intensity, each normalized to 0..1. */
 export type Stimuli = Record<TaskName, number>;
@@ -37,6 +37,13 @@ declare global {
      * outweighs abundant busywork.
      */
     work?: { value: number; ticks: number };
+
+    /** Room this creep calls home, for remote foraging round trips. */
+    home?: string;
+
+    /** Room it is currently foraging, remembered so it does not oscillate at
+     *  the border. */
+    remoteRoom?: string;
   }
 
   interface Memory {
@@ -54,6 +61,9 @@ declare global {
      * a dense 50x50 grid per room would be 2500 entries of pure overhead.
      */
     traffic?: Record<string, Record<string, number>>;
+
+    /** What has been seen of neighbouring rooms, built up by foragers. */
+    remotes?: Record<string, { sources: number; hostile: boolean; lastSeen: number }>;
 
     /** Tick of the last growth spawn, used to stagger the population's ages. */
     lastGrowthSpawn?: number;

@@ -1,11 +1,13 @@
 import {
   BUILD_SATURATION_SITES,
   CAPACITY_BUILD_PER_SITE,
+  CAPACITY_REMOTE,
   CAPACITY_SUPPLY,
   CAPACITY_UPGRADE,
   CONGESTION_FACTOR,
   MIN_BODY_COST,
   UPGRADE_BASELINE,
+  WORK_PER_SOURCE,
 } from '../config';
 import { Stimuli, TASK_NAMES, TaskName } from '../types';
 
@@ -14,6 +16,10 @@ export interface RoomSnapshot {
   energyCapacityAvailable: number;
   hasController: boolean;
   constructionSiteCount: number;
+  /** Sources in the home room — sets the room's hard income ceiling. */
+  sourceCount: number;
+  /** WORK parts the colony is fielding, to compare against that ceiling. */
+  workParts: number;
 }
 
 /**
@@ -55,6 +61,10 @@ export function readRoom(room: Room): RoomSnapshot {
     energyCapacityAvailable: energy.capacity,
     hasController: room.controller !== undefined && room.controller.my,
     constructionSiteCount: room.find(FIND_CONSTRUCTION_SITES).length,
+    sourceCount: room.find(FIND_SOURCES).length,
+    workParts: room
+      .find(FIND_MY_CREEPS)
+      .reduce((sum, c) => sum + c.body.filter(p => p.type === WORK).length, 0),
   };
 }
 
@@ -81,10 +91,17 @@ export function computeStimuli(s: RoomSnapshot): Stimuli {
     supply = 0;
   }
 
+  // Remote foraging becomes attractive exactly when the home room is
+  // oversubscribed: past WORK_PER_SOURCE per source, extra WORK parts sit idle
+  // and the only way to raise income is more territory (research doc §7.1.1).
+  const sustainable = s.sourceCount * WORK_PER_SOURCE;
+  const surplusWork = sustainable > 0 ? (s.workParts - sustainable) / sustainable : 0;
+
   return {
     supply: clamp01(supply),
     upgrade: s.hasController ? UPGRADE_BASELINE : 0,
     build: clamp01(s.constructionSiteCount / BUILD_SATURATION_SITES),
+    remote: clamp01(surplusWork),
   };
 }
 
@@ -105,6 +122,7 @@ export function applyCongestion(
     supply: CAPACITY_SUPPLY,
     upgrade: CAPACITY_UPGRADE,
     build: snapshot.constructionSiteCount * CAPACITY_BUILD_PER_SITE,
+    remote: CAPACITY_REMOTE,
   };
 
   const damped = {} as Stimuli;

@@ -31,6 +31,7 @@ export function decide(
     supply: stimuli.supply - thresholds.supply,
     upgrade: stimuli.upgrade - thresholds.upgrade,
     build: stimuli.build - thresholds.build,
+    remote: stimuli.remote - thresholds.remote,
   };
 
   if (EXPLORATION_ENABLED && roll < EXPLORATION_CHANCE) {
