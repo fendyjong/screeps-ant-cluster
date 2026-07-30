@@ -14,7 +14,7 @@
     "push-pserver": "rollup -c --environment DEST:pserver",
     "push-screepsplus": "rollup -c --environment DEST:screepsplus",
     "deploy": "npm run compile && cp dist/main.js screeps.com/default/main.js && cp dist/main.js screeps.com/seasonal/main.js && cp dist/main.js 127_0_0_1___21025/pserver/main.js",
-    "deploy:pserver": "npm run compile && cp dist/main.js 127_0_0_1___21025/pserver/main.js"
+    "deploy:pserver": "npm run compile && cp dist/main.js 127_0_0_1___21025/default/main.js"
   },
   "engines": {
     "node": "^20.11"
