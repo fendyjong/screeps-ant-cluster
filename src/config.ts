@@ -617,3 +617,19 @@ export const PRESPAWN_TRAVEL_TICKS = 15;
  * extra bodies — about 7%, bounded and self-correcting.
  */
 export const PRESPAWN_JITTER_TICKS = 200;
+
+/**
+ * How long a room stays off the foraging list after hostiles are seen in it.
+ *
+ * This is the fix for the actual collapse trigger, which was never demographic.
+ * Invader cores — NPC structures that periodically spawn hostile creeps — sit in
+ * W4N7 and W5N7. Foragers walked into them and died on arrival: recorded deaths
+ * include creeps that lived 27, 31 and 56 ticks against a 1500-tick lifespan,
+ * which is exactly the travel time from the spawn to a neighbouring room.
+ *
+ * Two creep lifetimes. Long enough that a wave of invaders is gone before the
+ * colony tries again, short enough that a room is not written off permanently
+ * over one bad visit — a room abandoned forever would quietly shrink the
+ * colony's territory every time an NPC wandered through.
+ */
+export const HOSTILE_AVOID_TICKS = 3000;

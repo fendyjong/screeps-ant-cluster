@@ -104,7 +104,13 @@ declare global {
     deathsThisWindow?: number;
     remotes?: Record<
       string,
-      { sources: number; hostile: boolean; lastSeen: number; lastHarvest?: number }
+      {
+        sources: number;
+        hostile: boolean;
+        lastSeen: number;
+        lastHarvest?: number;
+        hostileSeen?: number;
+      }
     >;
 
     /** Tick of the last growth spawn, used to stagger the population's ages. */

@@ -235,6 +235,78 @@ export function runLinks(room: Room): void {
   }
 }
 
+/**
+ * Proposes towers, the colony's only possible defence.
+ *
+ * This was deprioritised on a wrong conclusion, and the correction is worth
+ * recording where the code lives. Deaths were declared "confirmed non-hostile"
+ * from a single snapshot that found no enemies — taken, it turns out, between
+ * invader waves. Instrumenting time-of-death showed the truth: creeps dying with
+ * a median of 573 ticks left, some after only 27, 31 and 56 ticks of a 1500-tick
+ * life, and `hostile-room` firing 25 times for **W5N8 itself**. Invader cores in
+ * W4N7 and W5N7 spawn waves that walk into the home room, and a colony with no
+ * towers has literally nothing to answer with.
+ *
+ * A tower deals `TOWER_POWER_ATTACK` 600 at `TOWER_OPTIMAL_RANGE` 5, falling to
+ * 150 by range 20 — all verified on disk — for 10 energy a shot. Nothing else the
+ * colony can build fights at all.
+ *
+ * Placed beside the spawn: that is what the invaders come for, it is where the
+ * energy to refill is, and `TOWER_FALLOFF_RANGE` 20 covers most of a 50-tile room
+ * from near the middle of the nest.
+ */
+export function runTowerPlan(room: Room): boolean {
+  if (Game.time % NEST_PLAN_INTERVAL !== 0) return false;
+
+  const level = room.controller?.level ?? 0;
+  const allowed = CONTROLLER_STRUCTURES.tower[level] ?? 0;
+  if (allowed < 1) return false;
+
+  const placed =
+    room.find(FIND_STRUCTURES).filter(s => s.structureType === STRUCTURE_TOWER).length +
+    room.find(FIND_CONSTRUCTION_SITES).filter(s => s.structureType === STRUCTURE_TOWER).length;
+  if (placed >= allowed) return false;
+
+  const spawn = room.find(FIND_MY_SPAWNS)[0];
+  if (!spawn) return false;
+
+  const spot = freeTileNear(room, spawn.pos, 5);
+  if (!spot) return false;
+
+  return room.createConstructionSite(spot, STRUCTURE_TOWER) === OK;
+}
+
+/**
+ * Fires every loaded tower at the closest hostile.
+ *
+ * Closest rather than weakest: damage falls off with range, so the nearest target
+ * is both the one taking the most damage per shot and the one about to reach the
+ * spawn. Healing and repair are deliberately left out — this exists because
+ * creeps are being killed, and splitting the energy between jobs while under
+ * attack helps neither.
+ */
+export function runTowers(room: Room): number {
+  const towers = room
+    .find(FIND_STRUCTURES)
+    .filter(
+      (s): s is StructureTower =>
+        s.structureType === STRUCTURE_TOWER &&
+        s.my &&
+        s.store.getUsedCapacity(RESOURCE_ENERGY) >= TOWER_ENERGY_COST,
+    );
+  if (towers.length === 0) return 0;
+
+  const hostiles = room.find(FIND_HOSTILE_CREEPS);
+  if (hostiles.length === 0) return 0;
+
+  let fired = 0;
+  for (const tower of towers) {
+    const target = tower.pos.findClosestByRange(hostiles);
+    if (target && tower.attack(target) === OK) fired += 1;
+  }
+  return fired;
+}
+
 export interface NestPlan {
   placed: boolean;
   have: number;

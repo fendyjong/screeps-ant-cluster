@@ -1,4 +1,5 @@
-import { NEST_SPAWN_RESERVE, REMOTE_COMMIT_TICKS } from '../../config';
+import { HOSTILE_AVOID_TICKS, NEST_SPAWN_RESERVE, REMOTE_COMMIT_TICKS } from '../../config';
+import { emit } from '../../telemetry';
 import { readEnergy } from '../stimuli';
 import { ensureTraits, recordWork } from '../../evolution';
 
@@ -126,24 +127,70 @@ function moveOffExit(creep: Creep, toward?: RoomPosition): boolean {
   return true;
 }
 
+/**
+ * Records what a forager can see, including what will kill it.
+ *
+ * The previous version checked `FIND_HOSTILE_CREEPS` only, which misses the thing
+ * that actually matters: an **invader core** is a structure that keeps spawning
+ * hostiles. Between waves the room looks empty and safe, so the colony kept
+ * sending creeps back into it. Measured consequence — creeps that lived 27, 31
+ * and 56 ticks of a 1500-tick lifespan, which is the travel time to a
+ * neighbouring room and no more.
+ *
+ * `hostileSeen` is remembered separately from `hostile` because danger has to
+ * outlive the sighting. A room is only observed while one of our creeps is
+ * standing in it, and if that creep dies immediately the observation is both
+ * brief and the last one made.
+ */
 function noteRoom(room: Room): void {
   const intel = Memory.remotes ?? (Memory.remotes = {});
+  const previous = intel[room.name];
+
+  const enemies = room.find(FIND_HOSTILE_CREEPS).length > 0;
+  const core = room
+    .find(FIND_HOSTILE_STRUCTURES)
+    .some(s => s.structureType === STRUCTURE_INVADER_CORE);
+  const dangerous = enemies || core;
+
   intel[room.name] = {
     sources: room.find(FIND_SOURCES).length,
-    hostile: room.find(FIND_HOSTILE_CREEPS).length > 0,
+    hostile: dangerous,
     lastSeen: Game.time,
+    lastHarvest: previous?.lastHarvest,
+    hostileSeen: dangerous ? Game.time : previous?.hostileSeen,
   };
+
+  if (dangerous) {
+    emit('WARN', 'hostile-room', { room: room.name, core, enemies });
+  }
 }
 
+/** True while a room is still within its danger window. */
+function recentlyHostile(room: string): boolean {
+  const seen = (Memory.remotes ?? {})[room]?.hostileSeen;
+  return seen !== undefined && Game.time - seen < HOSTILE_AVOID_TICKS;
+}
+
+/**
+ * Picks a room to forage. Danger is checked BEFORE novelty, which it was not.
+ *
+ * The old version drew uniformly from unvisited rooms first and only applied the
+ * hostility filter to rooms it already knew. So a room that had killed foragers
+ * was excluded — but the colony would happily send the next creep into an
+ * unvisited room next door holding an invader core, and by the time that was
+ * recorded the creep was dead. Exploration is worth paying for; walking into a
+ * known danger to rediscover it is not.
+ */
 function chooseRemote(home: string): string | undefined {
   const exits = Object.values(Game.map.describeExits(home) ?? {}) as string[];
-  if (exits.length === 0) return undefined;
+  const safe = exits.filter(room => !recentlyHostile(room));
+  if (safe.length === 0) return undefined;
 
   const intel = Memory.remotes ?? {};
-  const unvisited = exits.filter(r => !intel[r]);
+  const unvisited = safe.filter(r => !intel[r]);
   if (unvisited.length > 0) return unvisited[Math.floor(Math.random() * unvisited.length)];
 
-  const known = exits
+  const known = safe
     .filter(r => intel[r] && intel[r].sources > 0 && !intel[r].hostile)
     .sort((a, b) => intel[b].sources - intel[a].sources);
   return known[0];
@@ -167,6 +214,16 @@ function endTrip(creep: Creep): void {
 export function run(creep: Creep, value: number): void {
   const home = creep.memory.home ?? (creep.memory.home = creep.room.name);
   noteRoom(creep.room);
+
+  // Standing in a dangerous room is how foragers died: they arrived, the room
+  // was hostile, and they kept working until something killed them. Leave first
+  // and re-decide from safety — a partial load delivered beats a full one lost.
+  if (creep.room.name !== home && recentlyHostile(creep.room.name)) {
+    delete creep.memory.remoteRoom;
+    creep.moveTo(new RoomPosition(25, 25, home));
+    recordWork(creep);
+    return;
+  }
 
   // Commitment is set only when heading home with a load (see `beginReturn`),
   // never on the outbound leg.

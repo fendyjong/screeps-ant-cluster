@@ -34,6 +34,27 @@ export function run(creep: Creep, value: number): void {
   // Only source-side links qualify. Feeding the controller link directly would be
   // a creep walking to the controller to hand energy to the thing whose whole job
   // is to spare it that walk.
+  // Towers before anything else. An empty tower is a wall with extra steps, and
+  // the colony has been losing creeps to invaders that reach the home room.
+  const towers = creep.room
+    .find(FIND_STRUCTURES)
+    .filter(
+      (s): s is StructureTower =>
+        s.structureType === STRUCTURE_TOWER &&
+        (s as StructureTower).my &&
+        (s as StructureTower).store.getFreeCapacity(RESOURCE_ENERGY) > 0,
+    );
+  if (towers.length > 0) {
+    const tower = creep.pos.findClosestByPath(towers);
+    if (tower) {
+      creep.memory.taskState = { ...creep.memory.taskState, targetId: tower.id };
+      const res = creep.transfer(tower, RESOURCE_ENERGY);
+      if (res === ERR_NOT_IN_RANGE) creep.moveTo(tower);
+      recordWork(creep);
+      return;
+    }
+  }
+
   const controllerPos = creep.room.controller?.pos;
   const sources = creep.room.find(FIND_SOURCES);
   const sourceLinks = creep.room

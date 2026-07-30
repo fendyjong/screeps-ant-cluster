@@ -1,5 +1,12 @@
 import { decayTraffic, depositTraffic, proposeRoads } from './pheromone';
-import { runLinkPlan, runLinks, runNestExpansion, runStoragePlan } from './spawn/nest';
+import {
+  runLinkPlan,
+  runLinks,
+  runNestExpansion,
+  runStoragePlan,
+  runTowerPlan,
+  runTowers,
+} from './spawn/nest';
 import { runSpawning } from './spawn/respawn';
 import { applyCongestion, computeStimuli, readEnergy, readRoom } from './creep/stimuli';
 import { decide } from './creep/decide';
@@ -233,6 +240,15 @@ function runRoom(room: Room): void {
 
   // The granary. Proposed before extensions matter, because a colony that
   // cannot store cannot bank a surplus and its growth tracks its worst tick.
+  // Defence runs before anything else in the room: everything else is pointless
+  // if the workforce is being killed while it works.
+  const fired = runTowers(room);
+  if (fired > 0) emit('WARN', 'tower-fired', { room: room.name, towers: fired });
+
+  if (runTowerPlan(room)) {
+    emit('INFO', 'tower-plan', { room: room.name, level: room.controller?.level ?? 0 });
+  }
+
   runLinks(room);
 
   // Links: the one structure that raises delivery without adding a creep, which

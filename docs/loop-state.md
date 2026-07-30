@@ -27,6 +27,7 @@ efficiency.
 | 34 | cap on real bodies + clustering-derived ceiling (→18) | 4.47@22 → 3.89@19; per-creep 0.203 → 0.205 | **falsified**; metric was invalid, ceiling reverted, body cap kept |
 | 35 | diagnosis only: TTL-at-death + backward death rate | baseline: 0/40 died young, median TTL 1 | **unverified**; second bad metric killed, baseline established |
 | 36 | source→controller link pair (build + transfer + withdraw + fill) | 3.95/0.188@21 → 4.40/**0.205**@21-22 | **unverified** (inside noise); pair confirmed moving energy |
+| 37 | **invader detection + hostile-room avoidance + towers** | `diedYoung` 0 → 27, medianDeathTTL 1 → 573 | **THE collapse cause found**; towers built, untested |
 
 # Loop state — progressive ant supercolony
 
@@ -2078,3 +2079,56 @@ still exploring), remote 0.86 — unchanged, as expected, since nothing here tou
 two are wasted at the controller) — consider whether `structure.destroy()` on the duplicate is
 worth 5000 energy of rebuild elsewhere, or simply leave it. After that, the growth term proper:
 reaching RCL 7 grants a second spawn and doubles the demographic ceiling.
+
+### 2026-07-31 — iteration 37 — the collapses were never demographic. They were being killed.
+
+**A conclusion recorded in this file for several iterations is WRONG and is withdrawn:**
+"deaths are old age, not combat — do not reopen without new evidence." It was based on a single
+snapshot that found no hostiles and one tombstone at `creepTicksToLive` 1. That snapshot was taken
+between invader waves.
+
+**The instrumentation from iteration 35 caught it on the first collapse it observed.** Across the
+fall, `diedYoung` went **0 → 4 → 10 → 17 → 27** and `medianDeathTTL` jumped **1 → 573**. Individual
+records are unambiguous: creeps that lived **27, 31 and 56 ticks** of a 1500-tick lifespan. That
+is the travel time from the spawn to a neighbouring room and no further.
+
+**Cause: NPC invader cores in W4N7 and W5N7**, structures that periodically spawn hostile creeps.
+Between waves the rooms look empty, which is exactly why every earlier check found nothing.
+`hostile-room` then fired **25 times for W5N8 — the home room itself.** The waves were reaching
+the nest, and a colony with no towers has nothing whatever to answer with.
+
+**This misdirected roughly eight iterations.** Deficit stagger, pre-spawn, deficit-scaled growth
+reserve, lead-time jitter, the full-body requirement, two ceiling derivations and two rejected
+metrics were all built on the assumption that the colony was killing itself demographically. The
+spawn-side work was not worthless — the poverty trap and the reserve throttling replacement were
+real defects — but none of it addressed the cause, and the "80,000 ticks without a collapse"
+attributed to the body cap was almost certainly just a quiet stretch between invader waves. That
+attribution is withdrawn too.
+
+**The lesson generalises, and it is not the one I would have guessed.** Every wrong turn here came
+from a metric that could not see the thing that mattered: max-of-buckets measured discreteness,
+`worstDeficit` measured the wrong population, and "no hostiles present" measured one instant of a
+periodic process. **A snapshot cannot falsify a periodic phenomenon.** Time-of-death was the first
+metric that recorded the event itself rather than the state around it, and it solved in one
+observation what eight iterations of state-inspection could not.
+
+**Changed, three parts of one fix:**
+1. `noteRoom` now detects `STRUCTURE_INVADER_CORE` via `FIND_HOSTILE_STRUCTURES`, not just hostile
+   creeps — the core is what makes a room permanently dangerous, and it is visible when the
+   spawned creeps are not. Danger is remembered as `hostileSeen` so it outlives the sighting.
+2. `chooseRemote` checks danger **before** novelty. It previously drew from unvisited rooms at
+   random with no hostility filter at all, so the colony would send a creep into an unvisited room
+   holding a core and only learn from the corpse. Foragers already standing in a hostile room now
+   leave rather than working until something kills them.
+3. **Towers**, the only thing the colony can build that fights: `TOWER_POWER_ATTACK` 600 at
+   optimal range, 150 at range 20, 10 energy a shot — all verified on disk. Supply fills them
+   first, because an empty tower is a wall with extra steps.
+
+**Result: both towers built and loaded 1000/1000, population recovered to 22.** No hostile-room,
+died-young or tower-fired events in the five minutes since — the wave has passed. **The towers are
+therefore UNTESTED.** They are not credited with anything until one fires and the colony holds.
+
+**Next:** watch for `tower-fired` and whether `diedYoung` stays at 0 through the next wave. If
+deaths continue with towers loaded, the towers are misplaced or the invaders outrange them, and
+`HOSTILE_AVOID_TICKS` (3000, two creep lifetimes) may need to outlast `INVADER_CORE_EXPAND_TIME`
+(2000-4000 by level) instead.
