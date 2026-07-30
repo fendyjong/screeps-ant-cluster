@@ -10,6 +10,7 @@ import {
   DEFAULT_TASK,
   GROWTH_MIN_RESERVE,
   SPAWN_STAGGER_TICKS,
+  SURVIVAL_STAGGER_TICKS,
   MAX_BODY_UNITS,
   IDEAL_BODY,
   IDEAL_BODY_COST,
@@ -111,14 +112,16 @@ export function runSpawning(
 
   const reason: SpawnReason = alive < survivalFloor ? 'survival' : 'growth';
 
+  // Both paths stagger; only the interval differs. Survival used to skip the
+  // stagger altogether, which rebuilt the population as one synchronised cohort
+  // and guaranteed the next mass die-off a lifetime later.
+  const stagger = reason === 'growth' ? SPAWN_STAGGER_TICKS : SURVIVAL_STAGGER_TICKS;
+  const last = Memory.lastGrowthSpawn ?? -stagger;
+  if (Game.time - last < stagger) return null;
+
   if (reason === 'growth') {
     // Absolute, not a share of capacity — see GROWTH_MIN_RESERVE.
     if (energy.available < GROWTH_MIN_RESERVE) return null;
-
-    // Stagger growth so the population does not become a single age-cohort that
-    // dies together. Survival spawning skips this entirely.
-    const last = Memory.lastGrowthSpawn ?? -SPAWN_STAGGER_TICKS;
-    if (Game.time - last < SPAWN_STAGGER_TICKS) return null;
   }
 
   const body = bodyFor(energy.available);
@@ -132,6 +135,8 @@ export function runSpawning(
     },
   });
 
-  if (result === OK && reason === 'growth') Memory.lastGrowthSpawn = Game.time;
+  // Track the last spawn of EITHER kind, so survival births stagger against
+  // each other rather than only against growth births.
+  if (result === OK) Memory.lastGrowthSpawn = Game.time;
   return result === OK ? reason : null;
 }

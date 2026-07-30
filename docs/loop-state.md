@@ -1187,3 +1187,36 @@ Verification commands must not pipe the thing whose exit status is the verificat
 Three of these needed an absolute where a ratio was used; two needed a ratio where an absolute
 was used. The question that catches all five: **when the thing this is measured against
 changes, does this threshold still mean what I intended?**
+
+### 2026-07-31 — iteration 21 — the rescue mechanism was scheduling the next emergency
+
+**Collapse to 1 creep, despite iteration 20's survival floor.** The floor itself worked: 8
+survival spawns fired and the colony recovered 1 → 18 workers unaided, and energy was never
+the blocker (559 available against a 200 minimum). So the rescue succeeded — but the crash
+still happened, and the reason is a genuine feedback trap I built.
+
+**Creeps only die of old age here (1500 ticks), so a mass die-off can ONLY be cohort
+synchronisation.** Survival spawning deliberately bypassed the stagger so a dying colony could
+rebuild at full speed — and that rebuilt the entire population inside one short window,
+producing a fresh synchronised cohort which then aged out together a lifetime later. Observed
+spawn gaps during recovery: 27, 44, 105, 88, 57, 50, 50 ticks — the whole workforce reborn in
+roughly 400 ticks against a 1500-tick lifespan.
+
+So the sequence was: crash → unstaggered rescue → new cohort → crash 1500 ticks later. **The
+mechanism that saved the colony was scheduling its next emergency.** Iteration 11's stagger
+fix only ever applied to growth spawning, so it could not break the loop.
+
+**Fix: `SURVIVAL_STAGGER_TICKS = 15`.** Survival spawning now staggers too, just four times
+faster than growth. Fast enough to rescue (nine creeps in ~135 ticks against a 1500-tick
+lifespan), spread enough to break the resonance. Also corrected the bookkeeping: the last-spawn
+timestamp now records births of *either* kind, so survival births stagger against each other
+rather than only against growth births.
+
+**Result over 51 samples: population 12–25, average 21.4**, with no crash across the
+observation window. Energy cycling 56–1718.
+
+**The general shape, which is worth more than the fix.** An emergency response that restores
+the prior state can restore the *pathology* along with it. The stagger existed precisely to
+prevent synchronisation; exempting the emergency path from it meant every emergency undid the
+protection. Worth asking of any recovery mechanism: does this restore health, or does it
+restore the conditions that caused the failure?

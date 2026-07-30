@@ -80,6 +80,23 @@ export const GROWTH_MIN_RESERVE = 400;
 export const SPAWN_STAGGER_TICKS = 60;
 
 /**
+ * Stagger used while below the survival floor. Shorter than normal, but not zero.
+ *
+ * Survival spawning originally ignored the stagger entirely so a dying colony
+ * could rebuild at full speed. That rescued it — and rebuilt the whole
+ * population inside one short window, i.e. a fresh synchronised cohort that then
+ * aged out together 1500 ticks later. Observed repeatedly: 25 creeps to 1 in
+ * ~400 ticks, rescue, then the same crash a lifetime afterwards. The mechanism
+ * that saves the colony was scheduling its next emergency.
+ *
+ * Creeps only die of old age here, so cohort synchronisation is the *only* way a
+ * mass die-off can happen. Keeping a short gap during recovery spreads birthdays
+ * enough to break the resonance while still refilling roughly four times faster
+ * than normal growth.
+ */
+export const SURVIVAL_STAGGER_TICKS = 15;
+
+/**
  * Quorum control. Real colonies avoid over-recruiting to one source because
  * arriving ants congest it — they collide, slow down, and some turn back. That
  * negative feedback caps recruitment at the productive level (research doc §4.3).
