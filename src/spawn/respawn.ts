@@ -162,7 +162,32 @@ export function runSpawning(
   // Both paths stagger; only the interval differs. Survival used to skip the
   // stagger altogether, which rebuilt the population as one synchronised cohort
   // and guaranteed the next mass die-off a lifetime later.
-  const stagger = reason === 'growth' ? SPAWN_STAGGER_TICKS : SURVIVAL_STAGGER_TICKS;
+  // Stagger scales with how far below strength the colony is.
+  //
+  // A fixed 60-tick gap was measured killing the colony outright. Spawn-block
+  // telemetry across a collapse (tick 813800-814300):
+  //
+  //   creeps 25 -> 20 -> 15 -> 10 -> 7 -> 3 in ~500 ticks
+  //   blocker through the entire fall: stagger-growth (28, 44, 48 ticks per 100)
+  //   too-poor: 0 until the very bottom, once the foragers were already dead
+  //
+  // Replacing 25 losses at one per 60 ticks needs 1500 ticks; they died in 500.
+  // The rule that exists to prevent cohorts also forbade recovering from one, so
+  // every die-off ran all the way to the floor. Energy was a consequence of the
+  // crash, never its cause — which is why three earlier diagnoses that read the
+  // bottom of the crash were all wrong.
+  //
+  // Dividing by the deficit keeps the original purpose intact where it matters
+  // and drops it where it is lethal. One creep short is ordinary turnover and
+  // still spreads births across a lifetime (60 ticks); fifteen short is an
+  // emergency and spawns near-continuously (4 ticks). No new threshold is
+  // introduced, so there is no edge to get wrong: the deficit spans 1..COLONY_MAX
+  // and the stagger spans 60..2 ticks, saturating harmlessly because a 6-part
+  // body already occupies the spawn for ~18 ticks. Past that point `spawn-busy`
+  // is the limit, which is a physical constraint rather than a policy one.
+  const deficit = Math.max(1, COLONY_MAX - alive);
+  const base = reason === 'growth' ? SPAWN_STAGGER_TICKS : SURVIVAL_STAGGER_TICKS;
+  const stagger = Math.ceil(base / deficit);
   const last = Memory.lastGrowthSpawn ?? -stagger;
   if (Game.time - last < stagger) return block(`stagger-${reason}`);
 

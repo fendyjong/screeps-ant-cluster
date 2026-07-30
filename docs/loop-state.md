@@ -17,6 +17,7 @@ efficiency.
 | 26 | reserve only rooms actually harvested (`lastHarvest`) | reserver spawns 4.25/min → 0.75/min | worked (−82% waste); did NOT stop collapses |
 | 26b | instrument spawn-block reasons (telemetry only) | — | **decisive**: energy never blocks reproduction |
 | 27 | **fitness = energy delivered**, not stimulus-while-busy | 1.85@25-26 → **2.29@25** | **worked** (+24%); best fitness unfroze after ~7500 gens |
+| 28 | stagger scales with deficit (`base / deficit`) | stagG during decline 24-48 → **0** | worked as designed; did NOT stop collapses |
 
 # Loop state — progressive ant supercolony
 
@@ -1605,3 +1606,62 @@ creep generation of selection. Re-measure before treating 2.29 as the new baseli
 never blocks reproduction, so the plateau is now a one-constant problem with a well-supported
 design behind it — §12.4 finds the growth-versus-reproduction trade-off in the biology, and
 §12.2 reached the same consumption/investment split from economics.
+
+### 2026-07-31 — iteration 28 — the collapse diagnosed from evidence, and only half solved
+
+**The instrumentation paid for itself.** A collapse finally occurred with spawn-block telemetry
+live, and it reads unambiguously (ticks 813800-814300):
+
+| tick | creeps | at-cap | too-poor | spawn-busy | **stagger-growth** |
+|---|---|---|---|---|---|
+| 813800 | 25 | 48 | 0 | 51 | 0 |
+| 813900 | 20 | 0 | 0 | 70 | **28** |
+| 814000 | 15 | 0 | 0 | 54 | **44** |
+| 814100 | 10 | 0 | 0 | 51 | **48** |
+| 814200 | 7 | 0 | 0 | 97 | 0 |
+| 814300 | 3 | 0 | **47** | 32 | 0 |
+
+Through the entire fall the blocker was `stagger-growth`. `SPAWN_STAGGER_TICKS = 60` throttles
+replacement to one creep per 60 ticks, so replacing 25 losses needs 1500 ticks — they died in
+500. **The rule that exists to prevent cohorts also forbade recovering from one.** Trap (d)
+exactly: the emergency response restored the pathology.
+
+`too-poor` appears only at the very bottom, after the foragers were already dead. **Energy was a
+consequence of the crash, never its cause** — which is precisely why three earlier diagnoses were
+wrong. Each read the state at the bottom of the crash and concluded scarcity. Recorded here so it
+is not repeated: reading a failure at its worst moment tells you what it decayed into, not what
+started it.
+
+**Changed:** stagger now divides by the deficit — `Math.ceil(base / Math.max(1, COLONY_MAX - alive))`.
+One creep short is ordinary turnover and still spreads births across a lifetime (60 ticks);
+fifteen short is an emergency and spawns near-continuously (4 ticks). No new threshold, so no
+edge to get wrong: deficit spans 1..25, stagger spans 60..2, saturating harmlessly because a
+6-part body already occupies the spawn ~18 ticks.
+
+**Result: it did what it was designed to do and did not fix the problem.** `stagger-growth`
+during declines went from 24-48 ticks per 100 to **0**. But the colony collapsed again anyway,
+and the remaining blockers at the bottom are `spawn-busy` (up to 97 at 4 creeps — one spawn is
+physically saturated) and `too-poor`.
+
+**The trigger is now isolated, and it is not spawning at all.** At tick 822500 there were 15
+creeps; 100 ticks later, 4. Eleven deaths in 100 ticks is not an age distribution aging out — it
+is a cohort dying together. The stagger governed how *deep* the crash ran; something else decides
+*when* it starts.
+
+**A risk this change introduces, stated before it bites.** Faster rebuild produces a *tighter*
+cohort, which is the same trap in a new costume — the mechanism that rescues the colony schedules
+its next emergency. Recovery speed and birth spread are in direct tension and cannot both be
+maximised by tuning one constant.
+
+**Not confirmed: the 2.29 figure from iteration 27.** This window measured 2.03 energy/tick, but
+headcount fell 25 → 18 across it and full-size bodies fell 25 → 10, so it is not comparable and
+neither confirms nor refutes 2.29. Both readings are withheld until a clean window at stable
+headcount exists. No favourable sample is being banked.
+
+**Next iteration — pre-spawn replacements on time-to-live.** The real fix dissolves the tension
+rather than tuning it: trigger replacement when a creep's `ticksToLive` falls below the time
+needed to spawn and position its successor, instead of waiting for it to die. Deaths then never
+produce a population dip, and cohort structure stops mattering because replacement is continuous
+rather than reactive. `CREEP_SPAWN_TIME` is 3 ticks per part — verify against
+`@screeps/common/lib/constants.js` on disk before using it. This is standard practice in mature
+Screeps bots and directly targets the mechanism the telemetry just isolated.
