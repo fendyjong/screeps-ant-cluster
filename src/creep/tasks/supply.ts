@@ -7,9 +7,13 @@ export function run(creep: Creep): void {
     return;
   }
 
-  const sinks = creep.room.find(FIND_MY_STRUCTURES).filter(
+  // FIND_STRUCTURES + explicit `my`, not FIND_MY_STRUCTURES — the latter came
+  // back empty on this server, so supply could never find a delivery target and
+  // the spawn was never refilled.
+  const sinks = creep.room.find(FIND_STRUCTURES).filter(
     (s): s is StructureSpawn | StructureExtension =>
       (s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION) &&
+      (s as StructureSpawn).my === true &&
       (s as StructureSpawn).store.getFreeCapacity(RESOURCE_ENERGY) > 0,
   );
 

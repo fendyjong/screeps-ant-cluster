@@ -20,11 +20,15 @@ export interface RoomSnapshot {
  * Reading the structures is unambiguous and cannot silently degrade this way.
  */
 export function readEnergy(room: Room): { available: number; capacity: number } {
+  // Uses FIND_STRUCTURES + an explicit `my` check rather than FIND_MY_STRUCTURES:
+  // the latter returned an empty list on this server (readEnergy reported a
+  // capacity of 0 for a room holding a spawn, which must report 300).
   const stores = room
-    .find(FIND_MY_STRUCTURES)
+    .find(FIND_STRUCTURES)
     .filter(
       (s): s is StructureSpawn | StructureExtension =>
-        s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION,
+        (s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION) &&
+        (s as StructureSpawn).my === true,
     );
 
   let available = 0;

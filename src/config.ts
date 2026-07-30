@@ -3,8 +3,13 @@ import { TaskName } from './types';
 /** N — target creep count per room. */
 export const COLONY_SIZE = 4;
 
-/** K — ticks between telemetry snapshots. Distinct from COLONY_SIZE. */
-export const SNAPSHOT_INTERVAL = 10;
+/**
+ * K — ticks between telemetry snapshots. Distinct from COLONY_SIZE.
+ * The server runs at ~20ms/tick (~50 ticks/sec), so 10 emitted five snapshots a
+ * second and swamped SigNoz. At 100 it is roughly one every two seconds, which
+ * still resolves a 1500-tick creep generation (~30s) into ~15 samples.
+ */
+export const SNAPSHOT_INTERVAL = 100;
 
 /** Threshold profiles are drawn from BASE ± JITTER, per task, at spawn. */
 export const THRESHOLD_BASE = 0.5;
