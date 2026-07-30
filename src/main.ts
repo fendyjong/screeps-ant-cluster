@@ -1,5 +1,5 @@
 import { runSpawning } from './spawn/respawn';
-import { computeStimuli, readEnergy, readRoom } from './creep/stimuli';
+import { applyCongestion, computeStimuli, readEnergy, readRoom } from './creep/stimuli';
 import { decide } from './creep/decide';
 import { ensureProfile } from './creep/thresholds';
 import { run as runBuild } from './creep/tasks/build';
@@ -31,10 +31,22 @@ function pruneCreepMemory(): void {
 
 function runRoom(room: Room): void {
   const energy = readEnergy(room);
-  const stimuli = computeStimuli(readRoom(room));
+  const raw = computeStimuli(readRoom(room));
+  const creeps = room.find(FIND_MY_CREEPS);
+
+  // Occupancy is read from last tick's committed tasks, before anyone decides,
+  // so every creep sees the same congestion picture and the damping cannot
+  // depend on iteration order.
+  const occupancy: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
+  for (const creep of creeps) {
+    const held = creep.memory.task;
+    if (held) occupancy[held] += 1;
+  }
+  const stimuli = applyCongestion(raw, occupancy);
+
   const distribution: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
 
-  for (const creep of room.find(FIND_MY_CREEPS)) {
+  for (const creep of creeps) {
     // One creep throwing must not cost every other creep its tick.
     try {
       const thresholds = ensureProfile(creep);

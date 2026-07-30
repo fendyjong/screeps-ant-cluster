@@ -32,6 +32,20 @@ export const COLONY_MAX = 25;
 export const GROWTH_SURPLUS_RATIO = 0.95;
 
 /**
+ * Quorum control. Real colonies avoid over-recruiting to one source because
+ * arriving ants congest it — they collide, slow down, and some turn back. That
+ * negative feedback caps recruitment at the productive level (research doc §4.3).
+ *
+ * Without it, a saturated stimulus recruits the entire colony. Observed at tick
+ * 131800: 23 of 24 creeps piled onto `supply`, a task needing about two. Harmless
+ * at four creeps, ruinous at twenty-five.
+ *
+ * Each creep already committed to a task divides that task's apparent intensity,
+ * so the Nth worker sees a weaker signal than the first.
+ */
+export const CONGESTION_FACTOR = 0.35;
+
+/**
  * K — ticks between telemetry snapshots. Distinct from COLONY_SIZE.
  * The server runs at ~20ms/tick (~50 ticks/sec), so 10 emitted five snapshots a
  * second and swamped SigNoz. At 100 it is roughly one every two seconds, which

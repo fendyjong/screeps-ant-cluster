@@ -479,6 +479,24 @@ This naturally limits recruitment to the productive level.
 manager. +1 hauler per 5k stored energy. +1 builder per 20k construction
 backlog. The "recruitment cascade" is the spawn queue ramping up.
 
+**Measured here (2026-07-30).** Quorum control is not optional at scale. With a
+saturating supply stimulus and no congestion term, a colony of 24 put **23 creeps
+on `supply`** (tick 131800) — a task needing roughly two — while `build` and
+`upgrade` went unstaffed. The same code was harmless at four creeps, because
+four is below the point where over-recruitment costs anything.
+
+Damping each stimulus by the number of creeps already committed to it
+(`stimulus / (1 + occupancy × CONGESTION_FACTOR)`) reproduces the biological
+effect: the late-arriving worker perceives a weaker signal than the first, so
+recruitment self-caps near the productive level. After the change, an energy dip
+to 167 drew 7 creeps to supply instead of 23, and all three tasks stayed staffed
+(supply 7 / upgrade 12 / build 6).
+
+Occupancy must be sampled from the *previous* tick's committed tasks, before any
+creep decides this tick. Counting as they decide would make the damping depend on
+iteration order, so the first creep polled would see no congestion and the last
+would see all of it.
+
 ### 4.4 Resource Flow
 
 In a mature colony, energy flows through a pipeline:

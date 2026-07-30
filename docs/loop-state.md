@@ -246,3 +246,43 @@ mixed: supply 1–4, upgrade 3–7, build 0–3, all three tasks active simultan
    sites, or let the colony propose them (a scoped step toward M3/M4).
 3. **Give all-negative-margin creeps a genuine idle state** rather than working at a loss
    (research doc §4.2.1).
+
+### 2026-07-30 — iteration 3
+
+**Experiment: is satiation feedback actually self-limiting?** Raised `COLONY_MAX` 10 → 25 to
+find where growth would level off on its own.
+
+**Hypothesis FALSIFIED.** The colony grew straight to 25 and pinned there, still holding
+300/300 energy. Growth is bound by the ceiling, not by the stimulus.
+
+**Root cause:** the surplus signal is measured against a fixed 300-energy reserve, which
+says nothing about whether the colony can support more workers. A full spawn reads as
+"satiated" whether the colony has 4 creeps or 25, so the gate never closes. The metric does
+not scale with colony size — an honest design flaw in M2, not a tuning problem.
+
+**Second finding, more severe.** At tick 131800 the snapshot read
+`creeps 24, energy 102, {supply:23, upgrade:1, build:0}` — **23 of 24 creeps on one task**
+needing about two, while build and upgrade starved. The saturating supply stimulus recruits
+the entire colony. Harmless at N=4; ruinous at N=25. This is exactly the missing quorum
+control the design spec predicted M1 would lack (§4.3).
+
+**Improved: congestion-based quorum control.** Each stimulus is now damped by how many
+creeps already hold that task — `stimulus / (1 + occupancy × CONGESTION_FACTOR)`, factor
+0.35. Occupancy is sampled from the previous tick's committed tasks *before* any creep
+decides, so damping cannot depend on iteration order.
+
+**Result (before → after):** an energy dip that previously drew 23/24 creeps now draws 7.
+Labor stays spread across all three tasks under load — at energy 167: supply 7, upgrade 12,
+build 6. Peak supply observed since: 12 of 25. Folded into research doc §4.3 with the
+before/after numbers.
+
+**Next iteration — the growth metric is the open problem:**
+1. `GROWTH_SURPLUS_RATIO` against a fixed 300 reserve cannot regulate colony size. It needs
+   a signal reflecting *marginal* return — e.g. whether reserves are still rising with the
+   current population, or per-creep income over a window — so growth halts when added
+   workers stop paying for themselves. Until then `COLONY_MAX` is doing the regulating and
+   should be treated as a real cap, not a safety net.
+2. `energyCapacity` remains 300 (no extensions), so bodies stay at the 200e minimum. This is
+   the hard growth ceiling and still needs a human decision: hand-place extension sites, or
+   let the colony propose them.
+3. Idle state for all-negative-margin creeps (research doc §4.2.1) — still unaddressed.

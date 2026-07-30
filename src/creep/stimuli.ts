@@ -1,5 +1,10 @@
-import { BUILD_SATURATION_SITES, MIN_BODY_COST, UPGRADE_BASELINE } from '../config';
-import { Stimuli } from '../types';
+import {
+  BUILD_SATURATION_SITES,
+  CONGESTION_FACTOR,
+  MIN_BODY_COST,
+  UPGRADE_BASELINE,
+} from '../config';
+import { Stimuli, TASK_NAMES, TaskName } from '../types';
 
 export interface RoomSnapshot {
   energyAvailable: number;
@@ -78,4 +83,23 @@ export function computeStimuli(s: RoomSnapshot): Stimuli {
     upgrade: s.hasController ? UPGRADE_BASELINE : 0,
     build: clamp01(s.constructionSiteCount / BUILD_SATURATION_SITES),
   };
+}
+
+/**
+ * Damps each stimulus by how many creeps already hold that task — the colony's
+ * stand-in for physical congestion at a work site. A creep deciding late sees a
+ * weaker signal than the one that arrived first, which caps recruitment near the
+ * productive level instead of letting a saturated stimulus draft everybody.
+ *
+ * Pure: occupancy in, damped stimuli out.
+ */
+export function applyCongestion(
+  stimuli: Stimuli,
+  occupancy: Record<TaskName, number>,
+): Stimuli {
+  const damped = {} as Stimuli;
+  for (const task of TASK_NAMES) {
+    damped[task] = stimuli[task] / (1 + occupancy[task] * CONGESTION_FACTOR);
+  }
+  return damped;
 }
