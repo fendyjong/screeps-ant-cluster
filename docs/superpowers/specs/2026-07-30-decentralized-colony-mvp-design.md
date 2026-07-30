@@ -68,27 +68,27 @@ src/
                            zero out the tick for everyone else); also prunes
                            Memory.creeps entries for creeps that no longer exist
   creep/
-    stimuli.ts           — pure fn: room state → per-task stimulus values
-    thresholds.ts        — per-creep threshold profile, generated once at spawn
-                           with jitter; regenerated on the fly if missing/corrupt
-    decide.ts            — pure fn: (stimuli, thresholds, currentTask) → chosen task
+    stimuli.ts          — pure fn: room state → per-task stimulus values
+    thresholds.ts       — per-creep threshold profile, generated once at spawn with
+                          jitter; regenerated on the fly if missing/corrupt
+    decide.ts           — pure fn: (stimuli, thresholds, currentTask) → chosen task
     tasks/
-      supply.ts           — run(creep): gather energy, deliver to spawn/extensions
-      upgrade.ts           — run(creep): gather energy, deliver to controller
-      build.ts             — run(creep): gather energy, work active construction sites
+      supply.ts         — run(creep): gather energy, deliver to spawn/extensions
+      upgrade.ts        — run(creep): gather energy, deliver to controller
+      build.ts          — run(creep): gather energy, work active construction sites
   spawn/
-    respawn.ts            — dumb fixed-N respawner; stamps a fresh jittered
-                            threshold profile into memory at spawn time
-  visuals.ts               — per-creep room.visual task label; shared color constants
-  telemetry.ts             — emits structured JSON lines via console.log (snapshot on a
-                             tick cadence, events immediately); see Observability
-  types.ts                 — Stimuli, ThresholdProfile, TaskName; augments the global
-                             CreepMemory interface via declaration merging
+    respawn.ts          — dumb fixed-N respawner; stamps a fresh jittered threshold
+                          profile into memory at spawn time
+  visuals.ts            — per-creep room.visual task label; shared color constants
+  telemetry.ts          — emits '[ANT]'-prefixed JSON lines via console.log (snapshot
+                          on a tick cadence, events immediately); see Observability
+  types.ts              — Stimuli, ThresholdProfile, TaskName; augments the global
+                          CreepMemory interface via declaration merging
 
 tools/
-  log-shipper/            — NOT game code and NOT part of the bundle. Plain Node 20
-                             script: tails the private server's log files, parses the
-                             bot's JSON lines, POSTs them to SigNoz over OTLP/HTTP.
+  log-shipper/          — NOT game code and NOT part of the bundle. Plain Node 20
+                          script: tails the private server's log files, keeps the
+                          '[ANT]' lines, POSTs them to SigNoz over OTLP/HTTP.
 ```
 
 No `Overseer`/`Colony`/`Overlord`/`Task`-class-hierarchy equivalents. No generic
@@ -148,9 +148,10 @@ worth keeping the functions pure anyway since it costs nothing and makes the log
 easier to reason about by hand.
 
 Exact constants (jitter magnitude, switch buffer, exploration probability, the
-affordability point where the supply stimulus saturates) are implementation-time tuning
-parameters, not architectural decisions — this spec fixes the *mechanism*, not the numbers.
-Pick reasonable starting values during implementation and adjust by observation.
+affordability point where the supply stimulus saturates, and the telemetry snapshot cadence
+K) are implementation-time tuning parameters, not architectural decisions — this spec fixes
+the *mechanism*, not the numbers. Pick reasonable starting values during implementation and
+adjust by observation.
 
 ### What to expect when watching it
 
@@ -180,7 +181,12 @@ creep's own.
 Memory.creeps[name] = {
   task: 'supply' | 'upgrade' | 'build',
   thresholds: { supply: number, upgrade: number, build: number },
-  taskState: { targetId?: Id<Source | ConstructionSite>, phase?: 'gathering' | 'delivering' }
+  taskState: {
+    // Source while gathering; the delivery target while delivering — which is a
+    // spawn/extension for `supply`, the controller for `upgrade`, a site for `build`.
+    targetId?: Id<Source | ConstructionSite | StructureSpawn | StructureExtension | StructureController>,
+    phase?: 'gathering' | 'delivering'
+  }
 }
 ```
 
@@ -219,19 +225,24 @@ route is closed too (see Deploy plan).
 ### Pipeline
 
 ```
-bot console.log(JSON)  →  server writes to its log files  →  tools/log-shipper
-                          [.screepsrc: log_console = true]     (tails, parses)
-                                                            →  OTLP/HTTP → SigNoz
-                                                               service.name = screeps
+bot console.log('[ANT]' + JSON)  →  server log files  →  tools/log-shipper
+                                    [log_console = true]   (tails, filters, parses)
+                                                        →  OTLP/HTTP → SigNoz
+                                                           service.name = screeps
 ```
 
+- **Every telemetry line is prefixed with a fixed sentinel, `[ANT]`.** The server's console
+  forwarding is server-wide, not per-user — `mods.json` registers a `simplebot`, and any
+  other player script in the world logs into the same stream. Without a discriminator the
+  shipper cannot tell our lines from theirs. The sentinel is what it filters on, and
+  anything not carrying it is ignored.
 - `.screepsrc` currently has `log_console = false`; setting it to `true` makes the server
   forward console output into its rotating logs under `logdir` (`logs/`). This is a server
   config change and needs a server restart — which the world reset requires anyway, so
   they happen together.
 - `tools/log-shipper` is a plain Node 20 script (`fetch` is built in, so no dependencies):
-  tail → filter to this bot's JSON lines → POST OTLP-JSON to `/v1/logs`. It must handle
-  the server's log rotation (`log_rotate_keep = 5`).
+  tail → keep `[ANT]` lines → parse → POST OTLP-JSON to `/v1/logs`. It must handle the
+  server's log rotation (`log_rotate_keep = 5`).
 - SigNoz is already running on this machine and its OTLP endpoints are live: gRPC on
   `4317` and HTTP on `4318`, published on portctl-managed host ports (`17817` / `17818`
   at time of writing; UI on `17800`, `signoz.local.zeven.day`). Per the portctl rule, the
@@ -261,18 +272,27 @@ severity filtering works rather than requiring string matching on the body:
 |---|---|---|---|
 | `DEBUG` | 5 | gray | Per-creep decision detail; off or sampled by default (chatty) |
 | `INFO` | 9 | green | Snapshots, spawns, task switches — the normal signal |
-| `WARN` | 13 | orange | Recoverable trouble: corrupt threshold profile regenerated, task target vanished, spawn starved of energy |
+| `WARN` | 13 | orange | Recoverable trouble: corrupt threshold profile regenerated, task target vanished |
 | `ERROR` | 17 | red | Colony starvation, and anything caught by the main-loop try/catch |
 
 `SeverityText` is the level string itself.
 
+Note what is deliberately *absent* from `WARN`: a spawn with too little energy. At RCL1 the
+spawn caps at 300e, so it is starved most of the time by design — warning on it every tick
+would drown the stream. Transient starvation stays silent (see Spawning); sustained
+starvation is the bootstrap-death case and already surfaces at `ERROR`.
+
+`DEBUG` is **off by default**, gated behind a single compile-time constant. It emits per
+creep per tick, which at N=4 is already four times the volume of everything else combined;
+turn it on only while investigating a specific decision, then turn it back off.
+
 ### What gets emitted
 
-- **Snapshot** (`INFO`), every N ticks (throttled — `JSON.stringify` costs CPU in Screeps):
+- **Snapshot** (`INFO`), every K ticks (throttled — `JSON.stringify` costs CPU in Screeps):
   tick, room, creep count, energy available/capacity, all three stimulus values, and **task
   distribution** (count of creeps per task). The distribution series is the single most
   important signal in the whole milestone — it is literally the shape of labor
-  reallocating over time.
+  reallocating over time. (K is a tuning parameter, distinct from the creep count N.)
 - **Events**, immediately: spawn and death (`INFO`), task switch with from/to and the
   margins that caused it (`INFO`), recoverable faults (`WARN`), colony starvation and
   uncaught creep exceptions (`ERROR`).
@@ -288,9 +308,14 @@ is needed to keep official-server activity out of SigNoz.
 `log_console = true` forwards console output, but **which** file it lands in
 (`engine_runner1.log`, `engine_main.log`, or process stdout) has not been confirmed — user
 scripts execute in the runner process, and the engine log currently carries only
-`Game time set to N` lines. Confirm empirically once the flag is flipped. If that path
-proves unusable, the fallback is polling the server's CLI socket (`localhost:21026`, see
-Deploy plan) and reading `Memory.stats` directly instead of parsing logs.
+`Game time set to N` lines. Confirm empirically once the flag is flipped.
+
+If that path proves unusable, the fallback is the CLI socket (`localhost:21026`, see Deploy
+plan), polled from outside and reading the bot's memory rather than parsing logs. Note this
+is a **design change, not a config change**: it requires the bot to also mirror each
+snapshot into a memory key, which M1 as specified does not do (the Memory shape below holds
+only `Memory.creeps[name]`). Treat it as a contingency to design if needed, not a switch to
+flip.
 
 ## Error handling
 
@@ -355,8 +380,13 @@ blind — it destroys the existing world, so it gets a look before it runs.
 
 1. Server-side changes above (config edit, restart, world reset).
 2. `npm run build` (type-check) → `npm run deploy:pserver` → Steam client syncs
-   automatically.
-3. Start `tools/log-shipper` and confirm lines are arriving in SigNoz.
+   automatically. This comes *after* the reset, since the reset clears the world (and the
+   stored user code with it).
+3. **Respawn in the game UI** — place the initial spawn. A wiped world has no spawn, and
+   nothing in M1 places one; the bot has nothing to run against until this is done by hand.
+   Same category as placing construction sites: a manual act on the environment, not
+   something the colony does for itself.
+4. Start `tools/log-shipper` and confirm `[ANT]` lines are arriving in SigNoz.
 
 ## Migration / prerequisite steps
 
@@ -383,11 +413,16 @@ Since Overmind is fully scrapped:
    - The `obfuscate` script targets `tsc-out/Overmind.js`, which will no longer exist;
      `javascript-obfuscator` becomes an unused devDependency along with it.
 5. Repo cleanup (tracked-but-shouldn't-be; separate from the rewrite but blocking a clean
-   starting point): remove `tsc-out/`, `dist/`, `piolium/`, the old audit files in
-   `specs/`, and `test/` (singular — a security-scan scaffold) from git. `tests/` (plural)
-   goes too: its only file, `ExpansionCampaign.test.ts`, tests a module being deleted with
-   `src/`. Untrack `graphify-out/` but keep it locally. Add all of the above to
-   `.gitignore`.
+   starting point). Remove from git: `tsc-out/`, `dist/`, `piolium/`, `/specs/`, and
+   `test/`.
+   - `/specs/` means the **repo-root** directory holding three stale audit reports
+     (`AUDIT_REPORT.md`, `AUDIT_CODE_QUALITY.md`, `AUDIT_PRIORITIZED_ACTIONS.md`). It is
+     *not* `docs/superpowers/specs/`, which holds this document and must be kept.
+   - `test/` is the singular directory (a security-scan scaffold). `tests/` (plural) goes
+     too, but for a different reason: its only file, `ExpansionCampaign.test.ts`, tests a
+     module being deleted along with `src/`.
+   - Untrack `graphify-out/` but keep it on disk.
+   - Add all of the above to `.gitignore`.
 
 ## Future milestones (out of scope here, separate specs)
 
