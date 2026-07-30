@@ -95,7 +95,11 @@ declare global {
     traffic?: Record<string, Record<string, number>>;
 
     /** What has been seen of neighbouring rooms, built up by foragers. */
-    remotes?: Record<string, { sources: number; hostile: boolean; lastSeen: number }>;
+    spawnBlocks?: Record<string, number>;
+    remotes?: Record<
+      string,
+      { sources: number; hostile: boolean; lastSeen: number; lastHarvest?: number }
+    >;
 
     /** Tick of the last growth spawn, used to stagger the population's ages. */
     lastGrowthSpawn?: number;

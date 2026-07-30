@@ -235,6 +235,15 @@ function runRoom(room: Room): void {
   drawCreepLabels(room);
 
   if (Game.time % SNAPSHOT_INTERVAL === 0) {
+    // Why the colony declined to reproduce over the last interval. Three
+    // collapses have been misattributed; this replaces the next hypothesis
+    // with evidence.
+    const blocks = Memory.spawnBlocks ?? {};
+    if (Object.keys(blocks).length > 0) {
+      emit('INFO', 'spawn-blocks', { room: room.name, ...blocks });
+      Memory.spawnBlocks = {};
+    }
+
     emitSnapshot(
       room,
       { home: room.find(FIND_MY_CREEPS).length, total: creeps.length },

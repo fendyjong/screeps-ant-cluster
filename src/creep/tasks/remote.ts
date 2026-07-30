@@ -299,6 +299,15 @@ export function run(creep: Creep, value: number): void {
   if (result === ERR_NOT_IN_RANGE) creep.moveTo(source, AVOID_BORDER);
   recordWork(creep, result === OK, value);
 
+  // Record that this room is genuinely being worked, not merely walked through.
+  // Reservation is priced per room and only pays where foraging actually
+  // happens, so "seen" is the wrong evidence — see `reservationTargets`.
+  if (result === OK) {
+    const intel = Memory.remotes ?? (Memory.remotes = {});
+    const entry = intel[creep.room.name];
+    if (entry) entry.lastHarvest = Game.time;
+  }
+
   // Re-read the store: `carried` was sampled before this tick's harvest, so
   // using it here lags the decision by a tick and can miss the threshold.
   // How full to fill before hauling home is this creep's own heritable trait.

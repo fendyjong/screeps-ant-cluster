@@ -14,6 +14,8 @@ efficiency.
 | 25 | granary: storage placement + sink + withdraw path | 1.70@27 → 1.97@26 | over-read; single sample |
 | 25b | route deliveries by need (`NEST_PRIORITY_FILL`) | 1.76@24-27 | fixed my own collapse; no gain |
 | 25c | `NEST_SPAWN_RESERVE` replaces capacity fraction | 1.70 → 1.85@25-26 | population and body size fixed; output marginal |
+| 26 | reserve only rooms actually harvested (`lastHarvest`) | reserver spawns 4.25/min → 0.75/min | worked (−82% waste); did NOT stop collapses |
+| 26b | instrument spawn-block reasons (telemetry only) | — | **decisive**: energy never blocks reproduction |
 
 # Loop state — progressive ant supercolony
 
@@ -1500,3 +1502,53 @@ it. Two of these three failures were unreachable-by-construction (`granary ?? ne
 **Next remains the fitness function.** Nothing here changed that assessment: output is still
 ~1.85 against ~35 available, the colony sits at equilibrium, and per §9.5.4 no stimulus in the
 system measures growth.
+
+### 2026-07-31 — iteration 26 — stopped guessing, instrumented instead
+
+**Three collapses had been attributed to three different causes and "fixed" three times without
+stopping them.** Pulling the full population series instead of another five-sample window showed
+the signature was never an oscillation: **long stable stretches at 25-27 for 20-30k ticks, then a
+sudden near-total wipe to 1-5, then fast recovery.**
+
+Ruled out by direct check, not by argument: no hostile creeps in our rooms, no damaged creeps,
+no damaged structures, tombstones only in W6N5 which is not ours. Not an attack. Telemetry
+`creeps` was also verified against db.json ground truth (25 = 25), so the collapses are real and
+not a metric artifact — a failure mode this project has had before.
+
+**One real defect found and fixed: the colony reserved rooms nobody foraged.** `reservationTargets`
+qualified rooms on "seen", and a creep merely passing through records a room. Measured cost:
+**929 reserver spawns at 1250 energy each = 1,161,250 energy, 59% of everything ever delivered to
+the controller**, while the single live reserver held W5N7 whose source sat untouched at
+3000/3000. Reservation is worth +5 energy/tick on a foraged room and costs 2.08 energy/tick to
+hold, so on an unforaged room it is a pure loss. Now gated on `lastHarvest` within one
+`CREEP_LIFE_TIME`. Reserver spawns fell **4.25/min to 0.75/min (-82%)**.
+
+**But it did not stop the collapses**, which continued throughout the measurement window. Stated
+plainly: the reserver waste was real and worth fixing on its own arithmetic, and it was not the
+cause. That is three wrong attributions in a row.
+
+**So the next collapse gets evidence.** Added spawn-block telemetry — every `return null` in
+`runSpawning` now records why. Telemetry-only, which this loop's own rules exempt from the
+one-change limit, and it immediately paid for itself.
+
+**Steady-state result, and it invalidates today's whole line of attack:**
+
+| block reason | ticks per 100 |
+|---|---|
+| `at-cap` (alive >= COLONY_MAX) | 23-58 |
+| `spawn-busy` | 40-68 |
+| `too-poor` | **0** |
+| `growth-reserve` | 0-18 |
+
+`at-cap` plus `spawn-busy` accounts for essentially every tick. **Energy is never what stops
+reproduction.** The granary, the nest reserve and the delivery routing were all aimed at a
+constraint that was not binding — which is why none of them moved output. I should have measured
+what was blocking before assuming it was scarcity.
+
+**And the plateau now has a concrete mechanism: `COLONY_MAX = 25` is a hard ceiling**, hit on
+~40% of all ticks. The colony cannot grow past 25 workers by construction. §9.5.4 argued the
+system has no growth term; this is where that abstraction touches the code.
+
+**Next iteration:** the fitness fix is still queued and still right. But read the spawn-block
+histogram during a collapse first — the instrumentation is live and the answer will be in it.
+Do not ship another hypothesis about the collapses without that data.
