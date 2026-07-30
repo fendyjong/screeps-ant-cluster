@@ -202,6 +202,31 @@ antennae and respond.
 | Queen pheromone | Signal queen health and fertility | Persistent | Queen's metabolic state |
 | Territorial pheromone | Mark colony boundaries | Days | Patrol routes |
 
+**Territory marking is cheap compared to occupation, and that asymmetry decides
+strategy.** Marking a boundary costs patrol effort; occupying and defending a
+site costs a nest. Colonies therefore hold far more *territory* than they hold
+*nests* — the marked range is the foraging range, not the built range.
+
+**Measured here (2026-07-30).** Screeps reproduces the asymmetry almost exactly,
+verified on disk against `@screeps/common/lib/constants.js`:
+
+| | reserving a room | claiming a room |
+|---|---|---|
+| source yield | 3000 cap → 10 energy/tick each | identical |
+| cost | one 650-energy `[CLAIM, MOVE]` creep, ~1.1 energy/tick amortised | a **15000-energy** spawn built remotely |
+| ongoing obligation | none; lapses harmlessly | controller **downgrades** in 20000 ticks (`CONTROLLER_DOWNGRADE` at RCL 1) unless continuously upgraded |
+| requires GCL | no | yes |
+
+Reservation buys the *entire* energy benefit of a room for ~1/700th of the
+capital cost and no standing obligation. Claiming buys the same energy plus a
+second controller for GCL growth and eventual independence — genuinely valuable,
+but a different kind of investment rather than a bigger version of the same one.
+
+The colony consequently does what ants do: **mark wide, build narrow.** It
+forages and reserves its whole neighbourhood while maintaining one nest, and
+claiming becomes worthwhile only when the goal shifts from income to
+independence.
+
 **Trail pheromone mechanics:**
 1. Forager finds food source
 2. On return trip, forager deposits trail pheromone on every tile walked

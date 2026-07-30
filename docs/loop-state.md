@@ -931,3 +931,44 @@ which would put 4 of the 6 remote sources at double yield.
    sources, controller and eventually spawn — structurally larger than reservation, and the
    remote-foraging plumbing now works, which was the blocker.
 3. Pheromone-weighted pathfinding; idle state for all-negative-margin creeps.
+
+### 2026-07-30 — iteration 17 — reserve all four neighbours
+
+**Observed.** Both fixes from the previous turn confirmed: population stable **14–23**
+(avg 19.5 across 64 samples), average energy **300 → 780** with peaks at 1503, `upgrade`
+recovered from 0–2 to **3–6**, zero ERRORs. Most telling, **`remote` is now the dominant
+task at 7–14 creeps** — foraging finally outweighs home work, which is correct when home
+sources sustain only 10 WORK parts.
+
+Reservation is self-sustaining: 2 reservers alive, W5N9 held, a replacement en route to W6N8
+after the first lapsed. Reservers live 600 ticks and add 1 reservation tick each per tick, so
+they roughly break even and must be replaced continuously — working as designed, if narrowly.
+
+**Researched: reserve versus claim economics**, verified on disk. This settles the "should we
+claim now that the gate is open" question with numbers rather than instinct:
+
+| | reserve | claim |
+|---|---|---|
+| source yield | 10 energy/tick each | identical |
+| cost | 650-energy creep, ~1.1/tick amortised | **15000-energy spawn**, built remotely |
+| obligation | none, lapses harmlessly | controller downgrades in 20000 ticks unless upgraded |
+| GCL needed | no | yes |
+
+Reservation buys the entire energy benefit for ~1/700th of the capital cost. Claiming buys the
+same energy *plus* a second controller for GCL and eventual independence — a different
+investment, not a larger version of the same one. Folded into research doc §2.1 alongside the
+biology: colonies mark far more territory than they occupy, because marking costs patrol
+effort while occupation costs a nest. **Mark wide, build narrow.**
+
+**Improved: `RESERVE_MAX` 2 → 4.** The colony forages all four neighbours but reserved only
+two, so half its remote sources ran at the neutral 1500 cap. Reserving the rest is about
+**+20 energy/tick** for two more reservers costing ~2.2/tick between them — by far the best
+ratio available, and much cheaper than claiming.
+
+**Next iteration:**
+1. Confirm all four reservations actually establish and hold, and that total income rises.
+   Reservers lapse if not replaced promptly, so watch for gaps.
+2. **Claiming remains the largest milestone** and the gate is open — but it is an
+   independence play, not an income one. Worth doing when the goal is a second nest rather
+   than more energy.
+3. Pheromone-weighted pathfinding; idle state for all-negative-margin creeps.

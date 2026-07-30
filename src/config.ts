@@ -164,8 +164,21 @@ export const RESERVE_ENABLED = true;
 export const RESERVER_BODY: BodyPartConstant[] = [CLAIM, MOVE];
 export const RESERVER_COST = 650;
 
-/** At most one reserver per remote room, and only rooms actually worth holding. */
-export const RESERVE_MAX = 2;
+/**
+ * How many neighbouring rooms to hold reservations on.
+ *
+ * Raised 2 -> 4: the colony forages all four neighbours but was only reserving
+ * two, so half its remote sources ran at the neutral 1500 cap instead of 3000.
+ * Reserving the rest is about +20 energy/tick for two more reservers costing
+ * ~2.2/tick between them.
+ *
+ * This is also why reservation beats claiming right now. Claiming yields the same
+ * source income but additionally needs a 15000-energy spawn built remotely, and
+ * an owned controller downgrades (CONTROLLER_DOWNGRADE 20000 ticks at RCL 1)
+ * unless continuously upgraded. Reservation buys the same energy for a 650-energy
+ * creep and no ongoing obligation.
+ */
+export const RESERVE_MAX = 4;
 
 /**
  * WORK parts one home source sustains: SOURCE_ENERGY_CAPACITY / ENERGY_REGEN_TIME
