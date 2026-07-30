@@ -181,6 +181,13 @@ export const RESERVER_COST = 650;
 export const RESERVE_MAX = 4;
 
 /**
+ * Fraction of COLONY_MAX that must exist as actual workers before the colony
+ * spends anything on reservers. Reservations only pay off if there are foragers
+ * left to exploit the rooms they protect.
+ */
+export const RESERVE_WORKFORCE_FRACTION = 0.6;
+
+/**
  * WORK parts one home source sustains: SOURCE_ENERGY_CAPACITY / ENERGY_REGEN_TIME
  * / HARVEST_POWER = 3000/300/2. Beyond this, extra WORK in the home room is
  * simply idle, which is what makes remote foraging worth its travel overhead.

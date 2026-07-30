@@ -4,6 +4,7 @@ import {
   RESERVER_COST,
   RESERVE_ENABLED,
   RESERVE_MAX,
+  RESERVE_WORKFORCE_FRACTION,
   COLONY_MAX,
   COLONY_MIN,
   DEFAULT_TASK,
@@ -68,13 +69,25 @@ export function runSpawning(
   const spawn = room.find(FIND_MY_SPAWNS).find(s => !s.spawning);
   if (!spawn) return null;
 
-  const alive = room.find(FIND_MY_CREEPS).length;
+  // Count WORKERS, not bodies. Reservers cannot harvest, haul, build or upgrade,
+  // so counting them as population let the growth gate believe the colony was at
+  // full strength while its actual workforce starved.
+  const mine = Object.values(Game.creeps).filter(c => (c.memory.home ?? c.room.name) === room.name);
+  const alive = mine.filter(c => c.memory.caste !== 'reserver').length;
   if (alive >= COLONY_MAX) return null;
 
   // Reservers are a morphological caste — a [CLAIM, MOVE] body cannot harvest —
   // so they are spawned explicitly rather than emerging from thresholds. See
   // creep/tasks/reserve.ts for why this is the one deliberate exception.
-  if (RESERVE_ENABLED && alive >= COLONY_MIN && energy.available >= RESERVER_COST) {
+  //
+  // Gated behind a healthy workforce, and deliberately so. Reservers previously
+  // spawned ahead of workers whenever 650 energy was available; with four rooms
+  // to hold and a 600-tick reserver lifetime some room almost always wanted one,
+  // so the spawn produced reservers instead of workers and the colony collapsed
+  // to 5. A reservation is worthless if there is nobody left to forage the room
+  // it protects.
+  const workforceHealthy = alive >= Math.ceil(COLONY_MAX * RESERVE_WORKFORCE_FRACTION);
+  if (RESERVE_ENABLED && workforceHealthy && energy.available >= RESERVER_COST) {
     const targets = reservationTargets();
     const existing = Object.values(Game.creeps).filter(c => c.memory.caste === 'reserver');
     const unheld = targets.find(room => !existing.some(c => c.memory.remoteRoom === room));

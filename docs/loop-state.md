@@ -987,3 +987,42 @@ later iteration, deliberately not bundled here.
 Energy average dipped 780 → 543 as four reservers were paid for (650 each, ~4.3 energy/tick
 amortised across all four) against a projected +20/tick gain. Net positive but worth
 confirming over a longer window before treating the payoff as established.
+
+### 2026-07-30 — iteration 17b — reservers were starving the workforce
+
+**Caught by the regime monitor within minutes of the RESERVE_MAX 2 → 4 change:** colony
+collapsed to 5 creeps. Cause was entirely in the spawn logic I had written, two bugs
+compounding:
+
+1. **Reservers spawned ahead of workers.** The reserver branch sat before the worker path and
+   returned early, gated only on `energy.available >= 650`. It also bypassed
+   `SPAWN_STAGGER_TICKS`. With four rooms to hold and a 600-tick reserver lifetime, some room
+   almost always wanted one — so the spawn produced reservers more or less continuously
+   instead of workers.
+2. **Reservers counted as population.** `alive` came from `room.find(FIND_MY_CREEPS)`, which
+   includes reservers. A `[CLAIM, MOVE]` creep cannot harvest, haul, build or upgrade, so the
+   growth gate believed the colony was at full strength while its actual workforce starved.
+
+**Fix:** count workers only (excluding the reserver caste), and gate reserver spawning behind
+`RESERVE_WORKFORCE_FRACTION = 0.6` of `COLONY_MAX`. A reservation is worthless if there is
+nobody left to forage the room it protects.
+
+**Result:** recovered to **27 creeps — 24 workers, 3 reservers** — with two rooms still held.
+Population 11–25 (avg 18.4).
+
+**Pattern worth naming, since this is now the fourth instance.** Every collapse this session
+came from the same shape of error: a quantity that looked safe in isolation but was measured
+against the wrong denominator.
+- growth gate: share of *capacity* rather than an absolute reserve
+- body size: *available* energy rather than sustainable income
+- road threshold: an *absolute* traffic count rather than a share of current traffic
+- reserver spawning: *all bodies* rather than working bodies
+
+Each was fine until the denominator moved. The check to apply before shipping any threshold:
+**what happens to this when the thing it is measured against changes?**
+
+**Next iteration:** reservations still only hold 2 of 4 rooms and sit at break-even (1 CLAIM
+part adds 1/tick against 1/tick decay), so a room drops the moment its reserver dies. A
+`[CLAIM, CLAIM, MOVE]` body would build a buffer. Also unverified: whether reservation has
+actually raised sustained income — average energy is 477 here versus 543-780 earlier, though
+that is confounded by the collapse and recovery.
