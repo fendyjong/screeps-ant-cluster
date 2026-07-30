@@ -18,6 +18,8 @@ efficiency.
 | 26b | instrument spawn-block reasons (telemetry only) | — | **decisive**: energy never blocks reproduction |
 | 27 | **fitness = energy delivered**, not stimulus-while-busy | 1.85@25-26 → **2.29@25** | **worked** (+24%); best fitness unfroze after ~7500 gens |
 | 28 | stagger scales with deficit (`base / deficit`) | stagG during decline 24-48 → **0** | worked as designed; did NOT stop collapses |
+| 29a | *(settled)* confirm iteration 27's fitness change | 1.85@25-26 → **4.57@25-26** | **worked**; 2.29 was an understatement taken mid-reset |
+| 29 | pre-spawn: "alive" = outlives spawn+travel lead time | 4.57@25-26 → 3.91 & 5.02@26-27 | **no-gain** in steady state (by design); pop floor 24 → 25 |
 
 # Loop state — progressive ant supercolony
 
@@ -1665,3 +1667,55 @@ produce a population dip, and cohort structure stops mattering because replaceme
 rather than reactive. `CREEP_SPAWN_TIME` is 3 ticks per part — verify against
 `@screeps/common/lib/constants.js` on disk before using it. This is standard practice in mature
 Screeps bots and directly targets the mechanism the telemetry just isolated.
+
+### 2026-07-31 — iteration 29 — the fitness change confirmed, and a noise floor established
+
+**Settled the outstanding measurement, and it was better than claimed.** A clean window (6129
+ticks, headcount 25-26 stable, full bodies) measured **4.57 energy/tick**. The unconfirmed
+2.29 from iteration 27 was not an overclaim but an *understatement*: it was taken shortly after
+`FITNESS_VERSION 3` wiped the pool, when genes were still random. With ~60k ticks of selection
+since, output against the 1.85@25-26 baseline is roughly **2.5x**, and against the 2.91@24
+historic best about **1.6x**. Delivering energy as the objective is the single largest change
+this project has made.
+
+**Trajectory — evolution went somewhere, decisively.** Across the whole post-reset run:
+fitMean **0.332 → 2.089** (6.3x). supplyMean 0.50 → **0.12** with spread 0.094 → **0.042**;
+remoteMean 0.87 with spread **0.036**; upgradeSpread 0.095 → 0.090. So supply and remote have
+converged hard while upgrade is still exploring. Reading the direction correctly matters here
+because thresholds invert: supply at 0.12 means creeps adopt supply almost unconditionally. The
+colony has learned that keeping the nest fed dominates, which is consistent with the delivery
+objective — a supplier's energy reliably lands somewhere, an upgrader's only lands if it reaches
+the controller with something in hand.
+
+**Changed: replacement now happens before death, not after it.** Rather than adding a branch or
+letting population exceed the cap, the definition of "alive" was corrected: a creep counts only
+if it will still be alive by the time a replacement could reach the work — `MAX_BODY_UNITS *
+BODY_UNIT.length * CREEP_SPAWN_TIME + PRESPAWN_TRAVEL_TICKS`, i.e. 12 parts x 3 + 15 = **51
+ticks** (`CREEP_SPAWN_TIME` verified as 3/part on disk). A creep inside its final lead time stops
+counting, a deficit of one appears, and the ordinary growth path builds the successor so it
+matures as its predecessor expires. Threshold range check: `ticksToLive` spans 0-1500 and 51 sits
+well inside it; at the observed ~60-tick birth spacing at most one creep occupies the window at a
+time, so the deficit stays at one and the 60-tick stagger is preserved.
+
+**Result: no-gain in steady state, which is the correct outcome.** Population floor rose from 24
+to **25 and never below** (avg 26.17). Output measured 3.91 then 5.02 against 4.57 before — no
+detectable change. That is what the design predicted: pre-spawning buys *collapse resilience*,
+and no cohort event occurred in these windows. Predicted steady-state cost is 0.40 energy/tick
+(replacing ~51 ticks early), which is below the noise floor and therefore unmeasurable here.
+
+**A methodological result worth more than the change itself: the noise floor is ±1.1 energy/tick
+over 6000-tick windows.** Two consecutive post-change windows read 3.91 and 5.02 with nothing
+different between them. **Any claimed improvement below ~1.1 energy/tick is not evidence.** This
+retroactively vindicates withholding the 1.97 figure in iteration 25 and the 2.29 in 27 — both
+were inside the noise band. From here, a single window can only support a claim if the effect
+exceeds that spread; otherwise take two.
+
+**Still unexplained: what synchronises the cohort.** Current TTL spread is near-perfectly uniform
+(0, 26, 95, 146, ..., 1442 — ~60-tick gaps), so no cohort exists right now and the colony is
+healthy. Pre-spawning should make a future die-off survivable rather than fatal, but that remains
+**unverified until one occurs**. Do not record it as working until a cohort event is observed
+passing through without a crash.
+
+**Next: the growth term.** `at-cap` still accounts for 15-57 ticks per 100 while `too-poor` stays
+at 0 — the colony is bounded by a constant, not by its economy, and now delivers ~4.5-5.0
+energy/tick with which to fund expansion.

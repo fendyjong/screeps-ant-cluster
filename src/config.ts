@@ -524,3 +524,14 @@ export const COLORS = {
  * capacity, a number with no relationship to what spawning needs.
  */
 export const NEST_SPAWN_RESERVE = MAX_BODY_UNITS * BODY_UNIT_COST;
+
+/**
+ * Travel margin added to spawn time when deciding a creep is as good as dead.
+ *
+ * A replacement is only useful if it reaches the work its predecessor was doing,
+ * so the lead time is spawn duration plus the walk out. Sources and the
+ * controller sit within about fifteen ticks of the spawn in W5N8; over-estimating
+ * costs a slightly earlier birth, under-estimating leaves a gap in coverage, so
+ * the asymmetry favours the larger number.
+ */
+export const PRESPAWN_TRAVEL_TICKS = 15;

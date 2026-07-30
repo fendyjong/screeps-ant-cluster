@@ -1463,6 +1463,7 @@ and the measured effect — including when the effect was nil.
 | Food storage / repletes | *Myrmecocystus* | adopted, no gain yet | granary built; holds ~0, see §4.3.0 |
 | Colony-level objective | superorganism selection | **adopted** | fitness now counts delivered energy; output 1.85 → 2.29/tick, best fitness unfroze |
 | Investment vs consumption | economies | **open** | the growth term; highest value |
+| Pre-emptive replacement (lead-time births) | animal life-history / standard Screeps practice | adopted | population floor 24 → 25; no steady-state output change, benefit is conditional on cohort events |
 
 ### 12.4 What a superorganism actually optimises
 

@@ -17,6 +17,7 @@ import {
   IDEAL_BODY_COST,
   MIN_BODY,
   MIN_BODY_COST,
+  PRESPAWN_TRAVEL_TICKS,
 } from '../config';
 import { breed } from '../evolution';
 
@@ -121,7 +122,36 @@ export function runSpawning(
   // so counting them as population let the growth gate believe the colony was at
   // full strength while its actual workforce starved.
   const mine = Object.values(Game.creeps).filter(c => (c.memory.home ?? c.room.name) === room.name);
-  const alive = mine.filter(c => c.memory.caste !== 'reserver').length;
+
+  // "Alive" means *still alive by the time a replacement could reach the work* —
+  // not merely breathing right now.
+  //
+  // Replacing a creep only after it dies guarantees a gap: the colony notices at
+  // TTL 0, then spends ~36 ticks spawning a full body and another ~15 walking it
+  // out, so every death costs about fifty creep-ticks of missing labour. Worse,
+  // it makes replacement *reactive*, which is what let a synchronised die-off
+  // outrun the spawn: 11 deaths inside 100 ticks against a spawn that produces
+  // one creep at a time.
+  //
+  // Counting a nearly-dead creep as already gone fixes both without a new branch
+  // and without letting the population exceed its cap. A creep inside its final
+  // lead time stops counting, a deficit of one appears, and the ordinary growth
+  // path spawns the successor so it matures just as its predecessor expires.
+  // Population stops sawtoothing between 24 and 25 and simply sits at 25.
+  //
+  // It also composes with the deficit-scaled stagger rather than fighting it: one
+  // creep dying is a deficit of one and keeps the full 60-tick spread, while a
+  // cohort entering its last ticks together produces a large deficit and
+  // near-continuous spawning, which is exactly the intended response.
+  //
+  // `ticksToLive` is undefined while a creep is still being spawned; that is a
+  // creep about to start its life, so it counts.
+  const leadTime = MAX_BODY_UNITS * BODY_UNIT.length * CREEP_SPAWN_TIME + PRESPAWN_TRAVEL_TICKS;
+  const alive = mine.filter(
+    c =>
+      c.memory.caste !== 'reserver' &&
+      (c.ticksToLive === undefined || c.ticksToLive > leadTime),
+  ).length;
   if (alive >= COLONY_MAX) return block('at-cap');
 
   // Survival floor scales with target size, so a large colony reacts to decline
