@@ -1352,3 +1352,53 @@ energy cycling 337-1200 and all four tasks staffed. At the deepest dip (337) rem
 **Next iteration:** re-measure GCL rate now that population is stable — the 1.25 reading was
 taken at 11 workers and is not comparable to the 2.91 baseline taken at ~24. Only compare
 output at similar headcount, otherwise the metric measures population rather than efficiency.
+
+### 2026-07-31 — iteration 25 — the colony had no granary, and could never build one
+
+Triggered by the user observing GCL had not moved past 2. It had not: **1,822,616 of the
+5,278,032 needed for GCL 3 (34.5%)**, roughly 2.03M ticks away at the rate then measured.
+
+**Measured, at 27 creeps (comparable to the 2.91-at-24 baseline):** upgrade output **1.70
+energy/tick against ~35 available — 4.9% capture.** So the earlier 1.25 reading was not purely
+a population artifact; per-worker efficiency really had degraded.
+
+**Cause: the colony owned exactly one spawn and 30 extensions.** No storage, no containers, no
+links, no towers — and only two `createConstructionSite` calls existed in the entire codebase,
+for roads and extensions. There was no code path that could ever build any of them. RCL 5
+allows 1 storage, 5 containers, 2 links, 2 towers.
+
+Two consequences, and the second was the bigger one:
+- Total energy capacity was 1800. A Screeps source refills on a fixed 300-tick timer regardless
+  of whether anyone draws from it, so income the colony could not absorb was never harvested.
+- `gather.ts` only ever harvested. Upgraders mined their own energy at `HARVEST_POWER` 2 per
+  WORK per tick — ~50 ticks per 100-energy load — so they spent most of their lives not
+  upgrading.
+
+**Shipped:** `runStoragePlan` in `spawn/nest.ts`, storage as a sink in `supply`/`remote`, and
+`gatherEnergy(creep, fromStore)` letting upgraders withdraw instantly. Storage built in under a
+minute — the energy was already there, with nowhere to go.
+
+**First attempt failed and the failure was informative.** Overflow-only filling left storage at
+**0 for 5319 ticks**: spawning drains spawn+extensions at ~4.4 energy/tick, so they always had
+free capacity and nothing ever spilled over. A leaky bucket never overflows. Fixed by splitting
+income by origin — local suppliers feed the nest, remote foragers bank.
+
+**Result: 1.70 to 1.97 energy/tick at comparable headcount (27 to 26).** Storage still reads ~0,
+which is correct: it is a conduit, not a reservoir. The binding constraint moved from buffer
+capacity to foraging inflow.
+
+**Also withdrew a claim made earlier in this iteration.** "3,153 energy stranded in creeps" was
+presented as hoarding; it is ~126 of 200 capacity per creep, ordinary working inventory. The
+number was real, the interpretation was not.
+
+**Next iteration — the biggest remaining defect, now unblocked.** `fitnessOf` is
+`record.value / record.ticks` where `value` is *the stimulus of the task being performed*, added
+whenever `productive` is true. It never mentions energy. Two branches in `remote.ts` scored
+`productive = true` while delivering nothing — walking home, and arriving at a full nest — so a
+creep that foraged far, returned, deposited nothing and died full scored maximum fitness for its
+whole life. ~4000 generations have been selecting for busywork. One of those branches is now
+fixed; the objective function is not. Fitness should count energy actually delivered.
+
+This was deliberately NOT done first: with only 1800 of capacity and no granary, delivery-based
+fitness would have scored nearly every creep zero and destroyed the selection gradient. The
+granary had to exist before delivery could be the objective. It exists now.

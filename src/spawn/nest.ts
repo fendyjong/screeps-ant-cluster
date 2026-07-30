@@ -74,6 +74,51 @@ function findExtensionSpot(room: Room, origin: RoomPosition): RoomPosition | nul
   return null;
 }
 
+/**
+ * Proposes the colony's granary.
+ *
+ * A colony with no store lives tick to tick. Measured here: spawn plus 30
+ * extensions hold 1800 energy, while the fleet was carrying 3294 — nearly twice
+ * the room's whole capacity — because foragers came home to a full nest and had
+ * nowhere to unload. Only 4.9% of available income reached the controller; the
+ * rest rode around inside creeps until they died. Storage holds 1,000,000 and
+ * does not decay, so it converts "income the colony cannot absorb" into
+ * "income the colony banks".
+ *
+ * The biology is the reason this is a structure rather than a policy. Honeypot
+ * ants (Myrmecocystus) solve exactly this problem: foragers return during a
+ * glut, and the colony has no way to use the food now, so repletes hang from the
+ * ceiling as living vessels and are tapped during dearth. Seed harvesters
+ * (Pogonomyrmex) do the same with granary chambers. A colony that cannot store
+ * cannot buffer a boom against a bust, and its growth is limited by its worst
+ * moment rather than its average one.
+ *
+ * Placed adjacent to the spawn, where both the supply chain and the returning
+ * foragers already converge.
+ */
+export function runStoragePlan(room: Room): boolean {
+  if (Game.time % NEST_PLAN_INTERVAL !== 0) return false;
+
+  const level = room.controller?.level ?? 0;
+  if ((CONTROLLER_STRUCTURES.storage[level] ?? 0) < 1) return false;
+
+  const spawn = room.find(FIND_MY_SPAWNS)[0];
+  if (!spawn) return false;
+
+  const built = room
+    .find(FIND_STRUCTURES)
+    .some(s => s.structureType === STRUCTURE_STORAGE);
+  const pending = room
+    .find(FIND_CONSTRUCTION_SITES)
+    .some(s => s.structureType === STRUCTURE_STORAGE);
+  if (built || pending) return false;
+
+  const spot = findExtensionSpot(room, spawn.pos);
+  if (!spot) return false;
+
+  return room.createConstructionSite(spot, STRUCTURE_STORAGE) === OK;
+}
+
 export interface NestPlan {
   placed: boolean;
   have: number;

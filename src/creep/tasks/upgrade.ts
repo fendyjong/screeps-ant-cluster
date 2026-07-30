@@ -4,7 +4,10 @@ import { recordWork } from '../../evolution';
 /** Gather energy, then push it into the controller. */
 export function run(creep: Creep, value: number): void {
   if (updatePhase(creep) === 'gathering') {
-    gatherEnergy(creep);
+    // Upgraders are the granary's consumer: drawing a full load in one tick
+    // instead of mining it over ~50 is what turns an upgrader into something
+    // that actually upgrades.
+    gatherEnergy(creep, true);
     recordWork(creep, creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0, value);
     return;
   }

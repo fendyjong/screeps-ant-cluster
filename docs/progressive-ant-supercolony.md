@@ -585,6 +585,51 @@ This naturally limits recruitment to the productive level.
 manager. +1 hauler per 5k stored energy. +1 builder per 20k construction
 backlog. The "recruitment cascade" is the spawn queue ramping up.
 
+### 4.3.0 A colony that cannot store is limited by its worst tick
+
+Before storage existed, this colony's entire energy capacity was the spawn (300)
+plus 30 extensions (50 each) — 1800. Income it could not absorb within about
+fifty ticks was simply never harvested, because a Screeps source refills on a
+fixed 300-tick timer whether or not anyone drew from it. Measured consequence:
+**1.70 energy/tick reached the controller against roughly 35 available**, and the
+colony had spent 1.79M of the 5.28M control points needed for GCL 3 with no
+prospect of closing the gap.
+
+Ants solved this with dedicated storage castes and chambers. *Myrmecocystus*
+repletes hang from the nest ceiling as living vessels, gorged during a glut and
+tapped during dearth; *Pogonomyrmex* seed harvesters keep granary chambers. The
+principle is the same in both: **a colony without a buffer grows at the rate of
+its worst moment rather than its average one.**
+
+Two mechanisms were needed, and the second was found only by measuring the first.
+
+1. *The store itself.* One `STRUCTURE_STORAGE` holds 1,000,000 and does not
+   decay — verified against `CONTROLLER_STRUCTURES.storage` (1 from RCL 4) and
+   `STORAGE_CAPACITY` in `@screeps/common/lib/constants.js`.
+2. *A dedicated inflow.* Filling the store from nest overflow was tried first and
+   **failed outright** — it sat at 0 for 5319 ticks, because spawning drains the
+   nest at ~4.4 energy/tick, so spawn and extensions always had room and nothing
+   ever spilled over. A leaky bucket never overflows. Income was split by origin
+   instead: local suppliers feed the nest, remote foragers bank. That is also the
+   more honest reading of the biology — a returning forager's load is surplus
+   precisely because the nest was being fed while it was away.
+
+The throughput argument for the store is separate from the buffering one and
+turned out to matter more. Harvesting is rate-limited to `HARVEST_POWER` (2) per
+WORK part per tick, so a 2-WORK creep spends ~50 ticks filling a 100-energy
+store; a withdraw is one instant transfer. An upgrader that mines its own energy
+spends most of its life not upgrading. **Central-place foraging theory predicts
+exactly this**: as travel and handling time rise, delivery rate falls even though
+the resource is unlimited.
+
+Measured: upgrade output 1.70 to 1.97 energy/tick at comparable headcount. The
+store itself holds ~0 in steady state, which is the correct outcome rather than a
+fault — it is operating as a conduit, and the binding constraint has moved from
+buffer capacity to foraging inflow.
+
+Sources: [AntWiki — Myrmecocystus](https://www.antwiki.org/wiki/Myrmecocystus),
+[Encyclopedia of Social Insects — food storage](https://link.springer.com/referenceworkentry/10.1007/978-3-030-28102-1_60)
+
 ### 4.3.1 A shortage must push foraging outward, not inward
 
 An intuitive crisis response — send everyone to the nearest food — is actively

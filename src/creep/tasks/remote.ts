@@ -210,11 +210,34 @@ export function run(creep: Creep, value: number): void {
         (s as StructureSpawn).my === true &&
         (s as StructureSpawn).store.getFreeCapacity(RESOURCE_ENERGY) > 0,
     );
-    const sink = creep.pos.findClosestByPath(sinks, AVOID_BORDER);
+    // Foreign income banks; local income feeds the nest.
+    //
+    // Overflow-only was measured and failed: storage sat at 0 for 5319 ticks
+    // because spawn and extensions are a leaky bucket — spawning drains them at
+    // ~4.4 energy/tick, so they always had room and nothing ever spilled over.
+    // A granary needs a dedicated inflow, not a spillway.
+    //
+    // Splitting it by origin gives it one without any new bookkeeping: local
+    // suppliers keep the nest topped up for spawning, and remote foragers —
+    // whose loads are surplus by definition, since the nest was already being
+    // fed while they were away — deposit to the granary, which upgraders then
+    // draw on instantly instead of mining at 2 energy/tick.
+    const granary = creep.room
+      .find(FIND_STRUCTURES)
+      .find(
+        (s): s is StructureStorage =>
+          s.structureType === STRUCTURE_STORAGE &&
+          (s as StructureStorage).my === true &&
+          (s as StructureStorage).store.getFreeCapacity(RESOURCE_ENERGY) > 0,
+      );
+
+    const sink = granary ?? creep.pos.findClosestByPath(sinks, AVOID_BORDER);
+
     if (!sink) {
-      // Home is full: the haul succeeded even though there is nowhere to put it.
+      // Genuinely nowhere to put it — nest full and no granary yet. Not a
+      // success: the trip delivered nothing.
       endTrip(creep);
-      recordWork(creep, true, value);
+      recordWork(creep, false, value);
       return;
     }
 

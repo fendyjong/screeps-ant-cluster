@@ -1,5 +1,5 @@
 import { decayTraffic, depositTraffic, proposeRoads } from './pheromone';
-import { runNestExpansion } from './spawn/nest';
+import { runNestExpansion, runStoragePlan } from './spawn/nest';
 import { runSpawning } from './spawn/respawn';
 import { applyCongestion, computeStimuli, readEnergy, readRoom } from './creep/stimuli';
 import { decide } from './creep/decide';
@@ -215,6 +215,12 @@ function runRoom(room: Room): void {
   const nest = runNestExpansion(room, creeps.length, energy);
   if (nest && nest.placed) {
     emit('INFO', 'nest-expand', { room: room.name, have: nest.have, wanted: nest.wanted });
+  }
+
+  // The granary. Proposed before extensions matter, because a colony that
+  // cannot store cannot bank a surplus and its growth tracks its worst tick.
+  if (runStoragePlan(room)) {
+    emit('INFO', 'storage-plan', { room: room.name, level: room.controller?.level ?? 0 });
   }
 
   const evo = evolutionStats();

@@ -21,7 +21,21 @@ export function run(creep: Creep, value: number): void {
       (s as StructureSpawn).store.getFreeCapacity(RESOURCE_ENERGY) > 0,
   );
 
-  const target = creep.pos.findClosestByPath(sinks);
+  // Spawn and extensions first — they gate spawning, so they are worth more
+  // full than the granary is. The granary takes the overflow, which is the
+  // whole point of having one: before it existed, a supplier arriving at a full
+  // nest simply stopped, and its load rode around until the creep died.
+  const target =
+    creep.pos.findClosestByPath(sinks) ??
+    creep.room
+      .find(FIND_STRUCTURES)
+      .find(
+        (s): s is StructureStorage =>
+          s.structureType === STRUCTURE_STORAGE &&
+          (s as StructureStorage).my === true &&
+          (s as StructureStorage).store.getFreeCapacity(RESOURCE_ENERGY) > 0,
+      );
+
   if (!target) {
     recordWork(creep, false, value);
     return;
