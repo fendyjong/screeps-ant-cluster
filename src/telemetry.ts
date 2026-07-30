@@ -36,6 +36,7 @@ export function emitSnapshot(
   stimuli: Stimuli,
   distribution: TaskDistribution,
   energy: { available: number; capacity: number },
+  switches: Record<string, number>,
 ): void {
   emit('INFO', 'snapshot', {
     room: room.name,
@@ -46,5 +47,10 @@ export function emitSnapshot(
     energyCapacity: energy.capacity,
     stimuli,
     distribution,
+    // Aggregated rather than one event per switch: at ~50 ticks/sec with 25
+    // creeps, per-switch events were 94% of all telemetry and almost entirely
+    // exploration noise. The counts preserve the signal (how much churn, and
+    // why) at ~1/500th the volume.
+    switches,
   });
 }

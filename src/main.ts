@@ -47,6 +47,7 @@ function runRoom(room: Room): void {
   const stimuli = applyCongestion(raw, occupancy, snapshot);
 
   const distribution: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
+  const switches: Record<string, number> = {};
 
   for (const creep of creeps) {
     // One creep throwing must not cost every other creep its tick.
@@ -58,7 +59,11 @@ function runRoom(room: Room): void {
       if (decision.switched) {
         // A new task starts with a clean slate — the old target is meaningless.
         creep.memory.taskState = {};
-        emit('INFO', 'task-switch', {
+        switches[decision.reason] = (switches[decision.reason] ?? 0) + 1;
+        // Per-switch detail is DEBUG-only: it is the single loudest event in the
+        // system and is mostly exploration noise. The snapshot carries the
+        // aggregate counts; turn DEBUG on only to inspect specific decisions.
+        emit('DEBUG', 'task-switch', {
           creep: creep.name,
           from: previous ?? null,
           to: decision.task,
@@ -121,7 +126,7 @@ function runRoom(room: Room): void {
   drawCreepLabels(room);
 
   if (Game.time % SNAPSHOT_INTERVAL === 0) {
-    emitSnapshot(room, stimuli, distribution, energy);
+    emitSnapshot(room, stimuli, distribution, energy, switches);
   }
 }
 

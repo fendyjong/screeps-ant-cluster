@@ -378,3 +378,26 @@ becomes dynamic. Audit any remaining one.
    capacity; confirm in telemetry rather than assuming.
 3. **Idle state for all-negative-margin creeps** (research doc §4.2.1) — still unaddressed.
 4. **M3 pheromone routing** — the next milestone proper, still untouched.
+
+### 2026-07-30 — iteration 5b: telemetry volume
+
+The human flagged SigNoz flooding. Measured rather than guessed: **task-switch was 1502 of
+1592 records (94%)** over 5 minutes, and screeps was the 2nd-noisiest service on the shared
+instance at 318 records/min (behind hermes at 598).
+
+Cause: exploration. At ~50 ticks/sec with 25 creeps and a 2% per-creep-per-tick exploration
+roll, that is ~25 switches/sec, nearly all of it uninformative noise.
+
+**Fix:** switch counts are now aggregated by reason into the periodic snapshot
+(`"switches":{"explore":1}`), and per-switch events were demoted to `DEBUG`, which is off by
+default. The signal — how much churn and why — is preserved; only the per-event spam is gone.
+
+**Result:** 318 → **64 records/min**, 4th on the instance. No signal lost.
+
+Note: `spawn` events are now the largest remaining share (~40/min). That is legitimate at
+this tick speed — creeps live 1500 ticks ≈ 30 real seconds, so the colony genuinely turns
+over ~25 creeps every 30s. If volume needs cutting further, fold spawn counts into the
+snapshot the same way.
+
+**General lesson:** any per-creep, per-tick event is unshippable at 50 ticks/sec. Aggregate
+into the periodic snapshot by default; keep per-event detail behind DEBUG.
