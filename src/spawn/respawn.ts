@@ -1,4 +1,5 @@
 import {
+  BODY_UNIT,
   BODY_UNIT_COST,
   RESERVER_BODY,
   RESERVER_COST,
@@ -32,10 +33,15 @@ export function bodyFor(energy: number): BodyPartConstant[] | null {
   if (energy < MIN_BODY_COST) return null;
 
   const units = Math.min(Math.floor(energy / BODY_UNIT_COST), MAX_BODY_UNITS);
+  if (units < 1) return MIN_BODY;
+
+  // Parts are grouped by type rather than interleaved: damage consumes parts in
+  // order, so keeping MOVE last means a wounded creep keeps its mobility longest.
   const body: BodyPartConstant[] = [];
-  for (let i = 0; i < units; i++) body.push(WORK);
-  for (let i = 0; i < units; i++) body.push(CARRY);
-  for (let i = 0; i < units; i++) body.push(MOVE);
+  for (const part of [WORK, CARRY, MOVE] as BodyPartConstant[]) {
+    const perUnit = BODY_UNIT.filter(p => p === part).length;
+    for (let i = 0; i < perUnit * units; i++) body.push(part);
+  }
   return body;
 }
 

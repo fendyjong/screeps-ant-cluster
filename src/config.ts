@@ -421,6 +421,24 @@ export const IDEAL_BODY: BodyPartConstant[] = [WORK, WORK, CARRY, CARRY, MOVE, M
 export const IDEAL_BODY_COST = 400;
 
 /**
+ * Body unit, shaped to what the colony actually lacks rather than a tidy 1:1:1.
+ *
+ * Two measurements drove this. WORK was **2.3x oversupplied** — 90 parts against
+ * the ~40 the home and remote sources can sustain — so most of it sat idle while
+ * still being paid for on every replacement. And the fleet was **MOVE-starved**,
+ * 180 non-MOVE parts against 90 MOVE, which means half speed anywhere without
+ * roads. Only the home room has roads, so that penalty fell entirely on remote
+ * foraging, the colony's dominant task.
+ *
+ * `[WORK, CARRY, CARRY, MOVE, MOVE, MOVE]` costs 350 for three non-MOVE parts
+ * and three MOVE, so a creep runs at full speed off-road. Two units give 2 WORK,
+ * 4 CARRY, 6 MOVE for 700 energy — against the previous 800 for 4 WORK, 4 CARRY,
+ * 4 MOVE. Cheaper, identical hauling capacity, half the idle WORK, and full
+ * speed where it matters.
+ */
+export const BODY_UNIT: BodyPartConstant[] = [WORK, CARRY, CARRY, MOVE, MOVE, MOVE];
+
+/**
  * Bodies scale with available energy instead of stopping at a fixed template.
  *
  * `bodyFor` previously returned IDEAL_BODY (400 energy, 2 WORK) and never grew,
@@ -433,7 +451,7 @@ export const IDEAL_BODY_COST = 400;
  * One [WORK, CARRY, MOVE] unit costs 200 and keeps a 1:1 MOVE ratio, so the
  * creep stays at full speed off-road. MAX_CREEP_SIZE is 50 parts, hence 16 units.
  */
-export const BODY_UNIT_COST = 200;
+export const BODY_UNIT_COST = 350;
 
 /**
  * Cap on body size, and it is an ECONOMIC limit rather than a mechanical one.
@@ -451,7 +469,7 @@ export const BODY_UNIT_COST = 200;
  * capacity-ratio growth gate: scaling something to what is momentarily available
  * rather than to what can be sustained.
  */
-export const MAX_BODY_UNITS = 4;
+export const MAX_BODY_UNITS = 2;
 
 export const COLORS = {
   hud: '#c9c9c9',

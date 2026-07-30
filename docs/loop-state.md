@@ -1220,3 +1220,41 @@ the prior state can restore the *pathology* along with it. The stagger existed p
 prevent synchronisation; exempting the emergency path from it meant every emergency undid the
 protection. Worth asking of any recovery mechanism: does this restore health, or does it
 restore the conditions that caused the failure?
+
+### 2026-07-31 — iteration 22 — the bodies were the wrong shape
+
+**Measured with GCL rate, not buffer level.** Over 2136 ticks: **2.91 energy/tick of upgrade
+output** — slightly *below* the 3.08 baseline, so neither reservation nor the trait genome
+raised throughput. Reservation coverage had fallen to 1 of 4.
+
+Against that, creep replacement costs **11.6 energy/tick**. The colony spends roughly **4x more
+energy replacing its own workforce than it delivers to its controller.** That is the actual
+bottleneck, and it had been sitting on the candidate list for several iterations while I chased
+reservation.
+
+**Two defects in the body, both measured rather than assumed:**
+- **WORK 2.3x oversupplied** — 90 parts against ~40 that home (2 sources) and remote (6
+  sources) can sustain. Idle capability, paid for on every replacement.
+- **MOVE-starved** — 180 non-MOVE parts against 90 MOVE. Screeps charges 2 fatigue per
+  non-MOVE part off-road and 1 on roads, so the fleet ran at **half speed anywhere without
+  roads**. Only the home room has roads, so the penalty landed squarely on remote foraging,
+  the colony's dominant task.
+
+**Improved: body unit `[WORK, CARRY, MOVE]` → `[WORK, CARRY, CARRY, MOVE, MOVE, MOVE]`**, max
+2 units. Result per creep: 2 WORK / 4 CARRY / 6 MOVE at 700 energy, against 4 WORK / 4 CARRY /
+4 MOVE at 800. Cheaper, identical hauling capacity, half the idle WORK, and full off-road speed
+instead of half. Parts are also now grouped with MOVE last, since damage consumes parts in
+order and a wounded creep should keep mobility longest.
+
+Replacement drops 12.8 → 11.2 energy/tick on the arithmetic, but the larger effect should be
+indirect: foragers that travel at full speed off-road complete round trips in roughly half the
+time, so the same fleet delivers more.
+
+**Prediction to check next iteration:** upgrade output should rise above 2.91/tick. If it does
+not, the freed energy is going somewhere other than the controller and the next place to look
+is build spending (roads and extensions) rather than the body.
+
+**Caution recorded:** WORK now totals ~48 across the fleet against ~40 sustainable — still a
+margin, but a much thinner one. If reservation coverage collapses (unreserved remote sources
+sustain half as much WORK), the fleet could become genuinely WORK-limited. Watch harvest
+throughput alongside upgrade output.
