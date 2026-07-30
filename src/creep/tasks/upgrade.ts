@@ -1,17 +1,22 @@
 import { gatherEnergy, updatePhase } from './gather';
+import { recordWork } from '../../evolution';
 
 /** Gather energy, then push it into the controller. */
 export function run(creep: Creep): void {
   if (updatePhase(creep) === 'gathering') {
     gatherEnergy(creep);
+    recordWork(creep, creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0);
     return;
   }
 
   const controller = creep.room.controller;
-  if (!controller) return;
+  if (!controller) {
+    recordWork(creep, false);
+    return;
+  }
 
   creep.memory.taskState = { ...creep.memory.taskState, targetId: controller.id };
-  if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE) {
-    creep.moveTo(controller);
-  }
+  const result = creep.upgradeController(controller);
+  if (result === ERR_NOT_IN_RANGE) creep.moveTo(controller);
+  recordWork(creep, result === OK || result === ERR_NOT_IN_RANGE);
 }

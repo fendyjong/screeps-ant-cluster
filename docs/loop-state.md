@@ -537,3 +537,63 @@ or in reach:
    target is already chosen when the gate opens.
 3. Pheromone-weighted pathfinding (other half of M3); idle state for all-negative-margin
    creeps (§4.2.1).
+
+### 2026-07-30 — iteration 9 — HUD, heredity, and the claim/reserve answer
+
+**1. Colony HUD (`src/hud.ts`).** Per-creep labels answered "what is this creep doing"; the
+panel answers "how is the colony doing". Shows RCL and GCL progress bars, energy, population
+vs `COLONY_MAX`, total WORK parts, per-task counts with live stimuli, nest (extensions /
+roads / sites), evolution generation and best fitness, and recruitment-deferred pressure when
+non-zero. All read from live game state rather than recomputed, so it cannot drift from what
+the colony believes.
+
+**2. Heredity — "a dying ant births a better ant" (`src/evolution.ts`).** Previously every
+creep drew a fresh random profile, so nothing accumulated across generations; the colony
+re-rolled the same lottery forever. Now:
+- **Fitness** = fraction of a creep's lifetime spent doing useful work. Measured, not assumed
+  — each task reports whether its action actually succeeded, and a builder with no site to
+  work is explicitly scored as idle.
+- **Selection** = fitness-weighted draw from a bounded pool of the 20 fittest retired
+  profiles. The retirement happens in `pruneCreepMemory`, the only moment the information
+  still exists.
+- **Mutation** = jitter per threshold so the pool keeps exploring.
+- **Minimum boundaries** (the constraint the human specifically asked for): thresholds clamp
+  to [0.1, 0.9]. Without a floor, selection drives every threshold to 0, because a creep that
+  always works scores perfectly — and a colony of those stampedes every task at once, which is
+  exactly what the recruitment limiter exists to prevent. Without a ceiling, profiles drift so
+  high the creep never works. The bounds keep enough spread for the inactive-reserve caste
+  (§4.2.1) to survive selection rather than being optimised away.
+
+**Observed after ~90s: generation 44, pool full at 20, best fitness 1.0.** Selection is
+already structured — the fittest genes cluster at *low* upgrade thresholds (0.26–0.48) and
+*high* supply thresholds (0.46–0.70).
+
+**PROBLEM WORTH FIXING NEXT — the fitness proxy is misaligned.** It rewards task
+*availability*, not task *value*. `upgrade` always has work (constant 0.5 stimulus), so a
+creep that always upgrades scores 1.0 regardless of whether the colony was starving for
+supply at the time. `supply` and `build` have intermittent work, so genes preferring them
+idle more and score worse — and get bred out. Left alone this erodes the division of labor
+toward a monoculture of upgraders, undone only by the threshold bounds and the congestion /
+recruitment limiters. A value-aware fitness would weight productive ticks by the stimulus
+intensity at the moment the work was done, so scarce-but-critical work outscores abundant
+busywork.
+
+**3. Claim vs reserve — different gates, and this matters.** Verified on disk:
+- **Claiming** needs a free GCL slot. GCL is level 1 and the one slot is used by W5N8, so
+  claiming is impossible until GCL 2 (was 50.9%, now ~56%).
+- **Reserving needs no GCL at all** — only a CLAIM part. `CONTROLLER_RESERVE = 1` tick per
+  CLAIM part per tick, `CONTROLLER_RESERVE_MAX = 5000`. A claimer costs 650 (`BODYPART_COST.claim`
+  = 600 + 50 MOVE) against 950 capacity, so it is already affordable, and
+  `CREEP_CLAIM_LIFE_TIME` is 600 ticks.
+
+So **reservation is available right now and claiming is not.** Reserving a neighbour also
+unlocks remote mining, which raises income, which raises upgrade throughput, which is the only
+thing that opens the claim gate — it is the correct next move on its own merits rather than a
+consolation prize. It needs room scouting first (score neighbours on sources, controller,
+terrain, threat), which is safe to build before the gate opens.
+
+**Next iteration candidates:**
+1. Value-aware fitness (weight productive ticks by stimulus intensity) — fixes the
+   monoculture pressure described above.
+2. Room scouting + reservation — available now, and accelerates the claim gate.
+3. Pheromone-weighted pathfinding (other half of M3).

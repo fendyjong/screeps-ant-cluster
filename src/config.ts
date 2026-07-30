@@ -143,6 +143,25 @@ export const ROAD_MAX_PENDING_SITES = 4;
 export const RECRUIT_LIMIT_PER_TICK = 2;
 
 /**
+ * Heredity (see evolution.ts). Creeps inherit thresholds from fitter dead
+ * creeps, with mutation.
+ *
+ * The bounds are the "minimum boundaries" this design needs. Without a floor,
+ * selection drives every threshold to 0 — a creep that always works scores
+ * perfectly, and a colony of those stampedes every task at once. Without a
+ * ceiling, profiles drift so high the creep never works. The bounds preserve
+ * enough spread for the inactive-reserve caste to survive selection.
+ */
+export const THRESHOLD_MIN = 0.1;
+export const THRESHOLD_MAX = 0.9;
+export const MUTATION_RATE = 0.08;
+export const GENE_POOL_SIZE = 20;
+
+/** GCL curve, verified against constants.js on disk. */
+export const GCL_POW = 2.4;
+export const GCL_MULTIPLY = 1000000;
+
+/**
  * K — ticks between telemetry snapshots. Distinct from COLONY_SIZE.
  * The server runs at ~20ms/tick (~50 ticks/sec), so 10 emitted five snapshots a
  * second and swamped SigNoz. At 100 it is roughly one every two seconds, which

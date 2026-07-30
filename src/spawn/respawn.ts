@@ -10,7 +10,7 @@ import {
   MIN_BODY,
   MIN_BODY_COST,
 } from '../config';
-import { generateProfile } from '../creep/thresholds';
+import { breed } from '../evolution';
 
 /**
  * Largest affordable body, or null if even the minimum is out of reach.
@@ -62,7 +62,7 @@ export function runSpawning(
   const result = spawn.spawnCreep(body, `ant_${Game.time}`, {
     memory: {
       task: DEFAULT_TASK,
-      thresholds: generateProfile(),
+      thresholds: breed(),
       taskState: {},
     },
   });

@@ -38,6 +38,7 @@ export function emitSnapshot(
   energy: { available: number; capacity: number },
   switches: Record<string, number>,
   deferred: number,
+  evolution: { generation: number; best: number; pooled: number },
 ): void {
   emit('INFO', 'snapshot', {
     room: room.name,
@@ -56,5 +57,7 @@ export function emitSnapshot(
     // Recruitment attempts refused this tick by the rate limit — how hard the
     // colony is straining against it.
     deferred,
+    // Is the colony actually getting better across generations?
+    evolution,
   });
 }

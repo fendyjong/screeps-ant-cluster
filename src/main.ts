@@ -8,6 +8,8 @@ import { run as runBuild } from './creep/tasks/build';
 import { run as runSupply } from './creep/tasks/supply';
 import { run as runUpgrade } from './creep/tasks/upgrade';
 import { MIN_BODY_COST, RECRUIT_LIMIT_PER_TICK, SNAPSHOT_INTERVAL } from './config';
+import { drawColonyHud } from './hud';
+import { evolutionStats, fitnessOf, retire } from './evolution';
 import { drawCreepLabels } from './visuals';
 import { emit, emitSnapshot, TaskDistribution } from './telemetry';
 import { TaskName } from './types';
@@ -26,6 +28,13 @@ function distributionTotal(d: TaskDistribution): number {
 function pruneCreepMemory(): void {
   for (const name in Memory.creeps) {
     if (!(name in Game.creeps)) {
+      // Heredity: a dying creep's profile enters the gene pool scored by how
+      // much of its life it spent working. This is the only moment the
+      // information exists — after the delete it is gone forever.
+      const memory = Memory.creeps[name];
+      const record = memory.work;
+      const fitness = record && record.ticks > 0 ? record.productive / record.ticks : 0;
+      retire(memory.thresholds, fitness);
       delete Memory.creeps[name];
     }
   }
@@ -151,10 +160,19 @@ function runRoom(room: Room): void {
     emit('INFO', 'nest-expand', { room: room.name, have: nest.have, wanted: nest.wanted });
   }
 
+  const evo = evolutionStats();
+  drawColonyHud(room, {
+    distribution,
+    stimuli,
+    energy,
+    deferred,
+    generation: evo.generation,
+    bestFitness: evo.best,
+  });
   drawCreepLabels(room);
 
   if (Game.time % SNAPSHOT_INTERVAL === 0) {
-    emitSnapshot(room, stimuli, distribution, energy, switches, deferred);
+    emitSnapshot(room, stimuli, distribution, energy, switches, deferred, evolutionStats());
   }
 }
 

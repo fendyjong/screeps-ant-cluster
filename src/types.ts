@@ -31,6 +31,8 @@ declare global {
     task?: TaskName;
     thresholds?: ThresholdProfile;
     taskState?: TaskState;
+    /** Lifetime work record, the raw material for fitness. */
+    work?: { productive: number; ticks: number };
   }
 
   interface Memory {
@@ -48,5 +50,8 @@ declare global {
      * a dense 50x50 grid per room would be 2500 entries of pure overhead.
      */
     traffic?: Record<string, Record<string, number>>;
+
+    /** Gene pool of retired creeps' threshold profiles, best-first. */
+    evolution?: { genes: Array<{ thresholds: ThresholdProfile; fitness: number }>; generation: number };
   }
 }
