@@ -31,7 +31,8 @@ function pruneCreepMemory(): void {
 
 function runRoom(room: Room): void {
   const energy = readEnergy(room);
-  const raw = computeStimuli(readRoom(room));
+  const snapshot = readRoom(room);
+  const raw = computeStimuli(snapshot);
   const creeps = room.find(FIND_MY_CREEPS);
 
   // Occupancy is read from last tick's committed tasks, before anyone decides,
@@ -42,7 +43,7 @@ function runRoom(room: Room): void {
     const held = creep.memory.task;
     if (held) occupancy[held] += 1;
   }
-  const stimuli = applyCongestion(raw, occupancy);
+  const stimuli = applyCongestion(raw, occupancy, snapshot);
 
   const distribution: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
 

@@ -46,6 +46,26 @@ export const GROWTH_SURPLUS_RATIO = 0.95;
 export const CONGESTION_FACTOR = 0.35;
 
 /**
+ * How many creeps each task can absorb before it is genuinely crowded.
+ * Congestion only applies to workers BEYOND this — arriving at an uncrowded
+ * site costs nothing, which is how real congestion behaves.
+ *
+ * Damping by raw occupancy instead was actively harmful: at 25 creeps it divided
+ * every stimulus by up to ~9, pushing all of them under every threshold, so no
+ * creep ever saw a positive margin and the whole colony froze on whatever it
+ * happened to hold. Observed with 5-12 creeps stranded on `build` while zero
+ * construction sites existed.
+ */
+/** One spawn saturates after a couple of deliverers. */
+export const CAPACITY_SUPPLY = 3;
+
+/** A controller absorbs as many upgraders as the colony can field. */
+export const CAPACITY_UPGRADE = 999;
+
+/** Build capacity scales with actual sites — no sites means no capacity at all. */
+export const CAPACITY_BUILD_PER_SITE = 2;
+
+/**
  * K — ticks between telemetry snapshots. Distinct from COLONY_SIZE.
  * The server runs at ~20ms/tick (~50 ticks/sec), so 10 emitted five snapshots a
  * second and swamped SigNoz. At 100 it is roughly one every two seconds, which

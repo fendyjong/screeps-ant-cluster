@@ -497,6 +497,45 @@ creep decides this tick. Counting as they decide would make the damping depend o
 iteration order, so the first creep polled would see no congestion and the last
 would see all of it.
 
+**Congestion must be measured against what a task can absorb, not against raw
+headcount.** Dividing every stimulus by its occupancy was worse than having no
+damping at all: at 25 creeps it scaled signals down by up to ~9×, pushing all of
+them beneath every threshold. No creep ever saw a positive margin, so rule 1
+("keep current task") applied universally and the colony froze on whatever
+history had assigned — 5–12 workers sat on `build` while *zero* construction
+sites existed.
+
+The correction is that congestion only applies to workers **beyond** a task's
+capacity, because arriving at an uncrowded site genuinely costs nothing:
+`stimulus / (1 + max(0, occupancy − capacity) × factor)`. Capacity is per-task
+and reflects the real sink — one spawn saturates after a couple of deliverers, a
+controller absorbs as many upgraders as the colony can field, and build capacity
+scales with actual site count, so no sites means no capacity and the task
+correctly repels workers. After the change, `upgrade` recovered from a damped
+0.145 to its true 0.5, and stranded builders fell from 7–9 to 2–5 while upgraders
+rose from 8 to 18.
+
+### 7.4 Nest size is driven by population, not the reverse
+
+Colonies do not build capacity ahead of need and then grow into it. **Population
+size controls nest area, not vice versa** — as workers are born, digging activity
+rises and the nest expands to match. The proximate triggers are local and
+stigmergic: workers perceive ant density and dig more where it is high, relocated
+brood spatially guides where new chambers form, and freshly-excavated pellets
+plus stridulation recruit further diggers to an active face.
+
+**Directly relevant to our ceiling.** The colony reached RCL 3 with 25 creeps
+while `energyCapacity` stayed at 300 — one spawn, zero extensions. Verified
+against `@screeps/common/lib/constants.js` on disk: `CONTROLLER_STRUCTURES`
+permits 5 extensions at RCL 2 and **10 at RCL 3**, so ~800 energy of capacity is
+available and unbuilt. Because bodies scale with available energy, the colony is
+pinned to the 200-energy minimum body indefinitely. Population has outgrown the
+nest exactly as the biology describes, but nothing translates that pressure into
+excavation.
+
+Sources: [eLife — Colony demographics shape nest construction](https://elifesciences.org/articles/100706),
+[PLOS One — Nest enlargement in leaf-cutting ants](https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0097872)
+
 ### 4.4 Resource Flow
 
 In a mature colony, energy flows through a pipeline:

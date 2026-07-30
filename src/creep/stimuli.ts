@@ -1,5 +1,8 @@
 import {
   BUILD_SATURATION_SITES,
+  CAPACITY_BUILD_PER_SITE,
+  CAPACITY_SUPPLY,
+  CAPACITY_UPGRADE,
   CONGESTION_FACTOR,
   MIN_BODY_COST,
   UPGRADE_BASELINE,
@@ -96,10 +99,19 @@ export function computeStimuli(s: RoomSnapshot): Stimuli {
 export function applyCongestion(
   stimuli: Stimuli,
   occupancy: Record<TaskName, number>,
+  snapshot: RoomSnapshot,
 ): Stimuli {
+  const capacity: Record<TaskName, number> = {
+    supply: CAPACITY_SUPPLY,
+    upgrade: CAPACITY_UPGRADE,
+    build: snapshot.constructionSiteCount * CAPACITY_BUILD_PER_SITE,
+  };
+
   const damped = {} as Stimuli;
   for (const task of TASK_NAMES) {
-    damped[task] = stimuli[task] / (1 + occupancy[task] * CONGESTION_FACTOR);
+    // Only workers beyond capacity crowd the site; the first few cost nothing.
+    const excess = Math.max(0, occupancy[task] - capacity[task]);
+    damped[task] = stimuli[task] / (1 + excess * CONGESTION_FACTOR);
   }
   return damped;
 }

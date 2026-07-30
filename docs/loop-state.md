@@ -286,3 +286,49 @@ before/after numbers.
    the hard growth ceiling and still needs a human decision: hand-place extension sites, or
    let the colony propose them.
 3. Idle state for all-negative-margin creeps (research doc §4.2.1) — still unaddressed.
+
+### 2026-07-30 — iteration 4
+
+**Observed.** Colony healthy and advancing: **RCL 3**, 25 creeps, zero ERROR events. But two
+things were wrong, both caused by iteration 3's congestion fix:
+- `sites: 0`, yet **5–12 creeps sat on `build`** — a task with no work at all.
+- At energy 89 (emergency) supply drew only 12, when it should have recruited hard.
+
+**Root cause:** damping by *raw* occupancy divided stimuli by up to ~9× at N=25, pushing
+every stimulus below every threshold. With no positive margins anywhere, rule 1 ("keep
+current task") applied universally and the colony froze on historical assignments rather
+than responding to stimuli. Confirmed in telemetry: `upgrade` stimulus read 0.145 instead of
+its true 0.5.
+
+**Improved: congestion now applies only beyond a task's capacity** —
+`stimulus / (1 + max(0, occupancy − capacity) × factor)`. Capacity is per-task and models
+the real sink: `CAPACITY_SUPPLY = 3` (one spawn saturates fast), `CAPACITY_UPGRADE = 999`
+(a controller absorbs everyone), `CAPACITY_BUILD_PER_SITE = 2` (no sites ⇒ zero capacity, so
+the task repels workers). Arriving at an uncrowded site now costs nothing, which is how
+congestion actually behaves.
+
+**Result:** `upgrade` stimulus recovered 0.145 → 0.5. Stranded builders fell 7–9 → 2–5;
+upgraders rose 8 → 14–18. Supply still tracks energy dips proportionally. The residual 2–5
+on build is the inactive-reserve caste (§4.2.1), which is expected rather than a defect.
+
+**Researched:** nest construction triggers. Population size controls nest area, not the
+reverse — colonies expand as workers are born, driven by local density perception and
+stigmergic cues. Folded into research doc §7.4.
+
+**Verified against `@screeps/common/lib/constants.js` on disk:** `CONTROLLER_STRUCTURES`
+allows 5 extensions at RCL 2 and **10 at RCL 3**. The colony has built **zero**.
+
+**THE BLOCKING QUESTION for the next iteration — needs a human decision, not a technical
+one.** `energyCapacity` is stuck at 300 (one spawn), so `bodyFor()` can never exceed the
+200-energy minimum body. Every creep is and will remain the weakest possible worker. This is
+now the binding ceiling on everything: colony throughput, RCL progress, and any future
+milestone. Population has outgrown the nest exactly as §7.4 describes.
+
+Two ways forward, and the choice is a scope decision the loop should not make unilaterally:
+- **(a)** The human hand-places extension construction sites, consistent with M1's design
+  where all sites are placed by hand.
+- **(b)** The colony proposes its own extension sites when population outgrows capacity —
+  biologically the correct model per §7.4, but it crosses M1's explicit non-goal
+  ("Automated construction-site placement / room planning") and effectively starts M4.
+
+Until one is chosen, further tuning is polishing a colony that cannot grow.
