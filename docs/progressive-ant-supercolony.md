@@ -1399,3 +1399,68 @@ function findPathWithPheromones(fromPos, toPos, opts = {}) {
 ---
 
 *This completes the ant colony behavior synthesis for Screeps AI design.*
+
+---
+
+## 12. Hybrid Synthesis — Beyond Ants
+
+The ant metaphor carried this colony a long way and then stopped paying. §9.5
+gives the reason: Camazine's precondition for self-organization — subunits that
+*lack* the communication or computation for central control — does not hold in
+Screeps, where `Game.creeps` hands every creep perfect global information. Ants
+are one solution to one set of constraints. This colony faces a different set,
+so it should mine whatever lineage solved each specific problem best.
+
+**This section is a working ledger, not a survey.** Each row names a mechanism, the
+system that evolved it, and the concrete open problem in this colony it targets.
+Iterations pick a row, research it properly with sources, and record what was
+adopted or rejected and why. A rejected row is as valuable as an adopted one.
+
+### 12.1 Candidate mechanisms
+
+| System | Mechanism | Colony problem it targets |
+|---|---|---|
+| **Human economies** | investment vs consumption; compounding capital | **the growth term** — nothing in the colony distinguishes spending from investing, which is why it sits at equilibrium (§9.5.4) |
+| **Honeybee nest-site selection** | quorum sensing with *cross-inhibition* — scouts actively signal others to stop | task oscillation and deadlock; the colony's stimuli compete but never suppress each other |
+| **Octopus** | central brain sets goals, arms execute autonomously with local reflexes | the hybrid governance chosen in §9.5 — a working biological precedent for exactly that split |
+| **Termite mounds** | stigmergic construction guided by *templates*, not just gradients | structure placement — roads emerge from traffic, but no local signal ever requests a granary |
+| **Slime mold (*Physarum*)** | reinforce-and-prune network optimization | road networks; which remote rooms to keep |
+| **Immune systems** | distributed detection, clonal expansion, memory cells | defense — the colony currently has none, and towers are unbuilt |
+| **Mycelial networks** | resource redistribution across a connected network | multi-room energy sharing once expansion happens |
+| **Siphonophores** | extreme zooid specialization in a colonial organism | caste design beyond the single reserver caste |
+| **Naked mole rats** | eusociality in a vertebrate; castes without morphological lock-in | behavioural castes that can still switch |
+| **r/K selection** | few large offspring vs many small | body size vs population count — the poverty trap that produced 3-part creeps |
+
+### 12.2 The one that matters most first
+
+**Economies, not insects, hold the missing concept.** Every stimulus in this
+colony is homeostatic: it measures a deficit and closes it. No ant mechanism
+naturally supplies a *growth* term, because ant colonies convert surplus into
+reproduction through a channel that has no Screeps analogue — they make more
+colonies, not bigger ones.
+
+What a growing economy has that this colony does not is a distinction between
+**consumption** and **investment**. Energy spent upgrading, spawning replacements
+and repairing is consumption: it sustains the present. Energy spent on
+extensions, links, containers, storage and new rooms is investment: it raises
+future capacity. A colony with no such split cannot compound, and compounding is
+the entire content of the word "progressive."
+
+This reframes the project's own title. The goal is not a better ant colony. It is
+a **civilization** that borrows ant task allocation because that part is genuinely
+good, and borrows from elsewhere wherever ants have no answer.
+
+### 12.3 Adoption ledger
+
+Filled in by iterations. Record the mechanism, the source, what was implemented,
+and the measured effect — including when the effect was nil.
+
+| Mechanism | Source system | Status | Measured effect |
+|---|---|---|---|
+| Response-threshold task allocation | ants | adopted | works; cheapest subsystem, kept per §9.5 |
+| Stigmergic trail formation → roads | ants / *Atta* | adopted | roads emerge from traffic; maintenance added |
+| Central-place foraging limits | foraging theory | adopted | drove remote foraging |
+| Food storage / repletes | *Myrmecocystus* | adopted, no gain yet | granary built; holds ~0, see §4.3.0 |
+| Colony-level objective | — | **open** | fitness still rewards busywork |
+| Investment vs consumption | economies | **open** | the growth term; highest value |
+

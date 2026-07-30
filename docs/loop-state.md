@@ -1,3 +1,20 @@
+# Loop State
+
+## Iteration ledger
+
+One row per iteration. Newest at the bottom. `metric` is GCL rate in energy/tick
+with headcount, because a rate without a headcount measures population, not
+efficiency.
+
+| # | changed | metric before → after | verdict |
+|---|---|---|---|
+| 22 | body reshape (WORK-lean, MOVE-balanced) | 2.91@24 → 1.25@11 | **falsified**; replacement cost and roads did improve |
+| 23 | cohort-death hypothesis tested | — | rejected; ages evenly spread |
+| 24 | `REMOTE_CRISIS_WEIGHT` — shortage pulls foraging outward | remote 0 → 9.5 creeps at low energy | worked; population 26→2 oscillation stopped |
+| 25 | granary: storage placement + sink + withdraw path | 1.70@27 → 1.97@26 | over-read; single sample |
+| 25b | route deliveries by need (`NEST_PRIORITY_FILL`) | 1.76@24-27 | fixed my own collapse; no gain |
+| 25c | `NEST_SPAWN_RESERVE` replaces capacity fraction | 1.70 → 1.85@25-26 | population and body size fixed; output marginal |
+
 # Loop state — progressive ant supercolony
 
 Append-only log of what each loop iteration did. **Read this first, every iteration.**
