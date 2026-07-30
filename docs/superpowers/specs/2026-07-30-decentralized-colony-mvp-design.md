@@ -234,7 +234,20 @@ bot console.log(JSON)  →  server writes to its log files  →  tools/log-shipp
   `4317` and HTTP on `4318`, published on portctl-managed host ports (`17817` / `17818`
   at time of writing; UI on `17800`, `signoz.local.zeven.day`). Per the portctl rule, the
   shipper **resolves these from the registry rather than hardcoding them**.
-- `service.name = screeps`.
+
+### Resource attributes
+
+This SigNoz instance is **shared** — the container is `personal-signoz` and it already
+ingests roughly thirty other services on this machine (supabase stacks, `kolva-ops`,
+`ai-*`, `cog-os-*`, `hermes`). M1 adds one more service to it rather than standing up a
+dedicated instance.
+
+- `service.name = screeps` — unique here (nothing by that name exists today) and
+  consistent with the instance's existing lowercase container-style naming.
+- `deployment.environment = pserver` — the collector treats this as a first-class
+  dimension (it otherwise defaults to `default`). Tagging it makes the private-server-only
+  constraint visible in the data itself: queries can filter on it, and official-server
+  data showing up would be immediately obvious rather than silently blending in.
 
 ### What gets emitted
 
