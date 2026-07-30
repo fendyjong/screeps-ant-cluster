@@ -18,7 +18,12 @@ export default {
     plugins: [
         resolve(),
         commonjs(),
-        typescript({tsconfig: "./tsconfig.json"}),
+        // Explicit `include`: rollup-plugin-typescript2@0.27.3's default
+        // (`*.ts+(|x)`) is an extglob that the installed picomatch@2.3.2
+        // (via @rollup/pluginutils@3.1.0) fails to parse — it falls back to
+        // matching the literal string "+(|x)", so the default rejects every
+        // .ts file in the project. Equivalent coverage without extglob syntax.
+        typescript({tsconfig: "./tsconfig.json", include: ["*.ts", "*.tsx", "**/*.ts", "**/*.tsx"]}),
         screeps({config: cfg, dryRun: cfg == null})
     ],
     treeshake: false,
