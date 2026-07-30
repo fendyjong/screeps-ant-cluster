@@ -889,3 +889,45 @@ it executes before debugging its logic — `Memory.remotes` was a direct asserti
 not, and I explained it away every time.
 
 **Also:** GCL is now **116%** — past the claim gate. Claiming a second room is available.
+
+### 2026-07-30 — iteration 16 — reservation (remote income doubled)
+
+**Observed.** Boom-bust is **fixed**: population held 14–24 (avg 18.5 across 79 samples), no
+sawtooth, zero ERRORs. All four tasks staffed simultaneously (supply 3–8, upgrade 3–10,
+build 1–12, remote 3–10). Energy now cycles 184–905 of 1800 rather than sitting pinned at
+capacity, meaning the colony consumes what it earns instead of wasting surplus.
+
+No defect to fix, so: next milestone. Capacity is maxed for RCL 5 (30 extensions → 1800), and
+the highest-ratio available move was reservation rather than new territory.
+
+**Verified on disk** (`@screeps/common/lib/constants.js`): `SOURCE_ENERGY_NEUTRAL_CAPACITY`
+1500 vs `SOURCE_ENERGY_CAPACITY` 3000, so an unreserved remote source sustains 5 energy/tick
+and a reserved one 10 — **reservation doubles the return on foraging already happening**.
+`CONTROLLER_RESERVE` 1 tick per CLAIM part per tick, `CONTROLLER_RESERVE_MAX` 5000,
+`CREEP_CLAIM_LIFE_TIME` 600, `BODYPART_COST.claim` 600. One `[CLAIM, MOVE]` reserver costs 650
+against 1800 capacity and roughly sustains a reservation if replaced promptly. Needs **no GCL**.
+
+**Shipped: the reserver caste.** This is the design's one deliberate exception to
+"no fixed castes", and it is worth stating plainly: a `[CLAIM, MOVE]` body has no WORK and no
+CARRY, so it *physically cannot* harvest, build or upgrade whatever its thresholds say.
+Behaviour follows morphology, so the colony must decide to build one rather than let one
+emerge from stimulus — and reservers are dispatched by body, bypassing the threshold system.
+
+Researched and folded into research doc §4.2: this is faithful rather than a compromise. The
+textbook claim is that allocation is not caste-fixed "*in most species*" — but many ants do
+have morphological castes (*Atta* majors and minors, soldier castes), where bodies make some
+work impossible and the colony produces them deliberately in the proportions it needs. Every
+creep that physically *can* do general work still chooses its own task from thresholds.
+
+**Result:** a reserver spawned, travelled to W6N8, and holds the controller —
+`RESERVED by user 28f62b5ff0c690b`. W6N8's two sources now regenerate 3000 instead of 1500.
+`RESERVE_MAX = 2`, so a second reserver will take W5N9 (also 2 sources) as energy allows,
+which would put 4 of the 6 remote sources at double yield.
+
+**Next iteration candidates:**
+1. **Confirm the income actually doubled.** Reservation is theory until observed — watch
+   whether energy throughput and RCL progress rise now that W6N8 yields 10/tick per source.
+2. **Claim a second room.** GCL is **116%**, so the gate is open. A second room brings its own
+   sources, controller and eventually spawn — structurally larger than reservation, and the
+   remote-foraging plumbing now works, which was the blocker.
+3. Pheromone-weighted pathfinding; idle state for all-negative-margin creeps.

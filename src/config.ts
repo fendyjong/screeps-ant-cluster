@@ -154,6 +154,20 @@ export const REMOTE_COMMIT_TICKS = 300;
 export const REMOTE_MAX_STIMULUS = 0.55;
 
 /**
+ * Reservation. A reserved remote room's sources hold 3000 rather than the
+ * neutral 1500, so each yields 10 energy/tick instead of 5 — reservation doubles
+ * the return on foraging the colony already does. Needs no GCL, unlike claiming.
+ */
+export const RESERVE_ENABLED = true;
+
+/** [CLAIM, MOVE] — 600 + 50. Affordable against the current 1800 capacity. */
+export const RESERVER_BODY: BodyPartConstant[] = [CLAIM, MOVE];
+export const RESERVER_COST = 650;
+
+/** At most one reserver per remote room, and only rooms actually worth holding. */
+export const RESERVE_MAX = 2;
+
+/**
  * WORK parts one home source sustains: SOURCE_ENERGY_CAPACITY / ENERGY_REGEN_TIME
  * / HARVEST_POWER = 3000/300/2. Beyond this, extra WORK in the home room is
  * simply idle, which is what makes remote foraging worth its travel overhead.

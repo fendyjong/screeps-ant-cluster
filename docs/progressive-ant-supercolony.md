@@ -432,6 +432,20 @@ behavior rather than derived from a published figure)
 A forager can become a nurse. A nurse can become a defender. The colony
 adapts by adjusting the distribution of thresholds across the population.
 
+**Where a real caste is unavoidable — and why that is still faithful.** The
+qualifier "in most species" matters. Many ants *do* have morphological castes:
+*Atta* majors and minors, soldier castes with mandibles built for defence rather
+than foraging. Those individuals are not assigned a role by policy; their bodies
+make some work physically impossible, and the colony produces them deliberately
+in the proportions it needs.
+
+Our reserver is exactly that case. A `[CLAIM, MOVE]` creep has no WORK and no
+CARRY, so it cannot harvest, build or upgrade no matter what its thresholds say.
+Behaviour follows morphology, and the colony must therefore *decide to build one*
+rather than let one emerge from stimulus. This is the only such exception in the
+design and it is deliberately narrow: every creep that physically can do general
+work still chooses its own task from thresholds, with no assignment anywhere.
+
 ### 4.2.1 Inactive workers are a feature, not waste
 
 Roughly **40% of workers in a colony are persistently inactive**, and this is not

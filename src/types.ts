@@ -45,6 +45,9 @@ declare global {
      *  the border. */
     remoteRoom?: string;
 
+    /** Marks a morphological caste: a [CLAIM, MOVE] body cannot do normal work. */
+    caste?: 'reserver';
+
     /** Expiry tick of a homeward commitment. Bounded so it cannot lock a creep
      *  permanently, which previously collapsed the colony. */
     commitUntil?: number;

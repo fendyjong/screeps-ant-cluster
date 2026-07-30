@@ -1,5 +1,9 @@
 import {
   BODY_UNIT_COST,
+  RESERVER_BODY,
+  RESERVER_COST,
+  RESERVE_ENABLED,
+  RESERVE_MAX,
   COLONY_MAX,
   COLONY_MIN,
   DEFAULT_TASK,
@@ -33,7 +37,21 @@ export function bodyFor(energy: number): BodyPartConstant[] | null {
   return body;
 }
 
-export type SpawnReason = 'survival' | 'growth';
+export type SpawnReason = 'survival' | 'growth' | 'reserver';
+
+/**
+ * Rooms worth reserving: seen, holding sources, and not hostile. Reservation
+ * doubles a remote source's yield, so it only pays where foraging already goes.
+ */
+export function reservationTargets(): string[] {
+  const intel = Memory.remotes ?? {};
+  const home = Object.keys(Game.rooms).filter(r => Game.rooms[r].controller?.my);
+  return Object.entries(intel)
+    .filter(([room, v]) => !home.includes(room) && v.sources > 0 && !v.hostile)
+    .sort((a, b) => b[1].sources - a[1].sources)
+    .slice(0, RESERVE_MAX)
+    .map(([room]) => room);
+}
 
 /**
  * Quorum-driven spawning. There is no target headcount: below COLONY_MIN the
@@ -52,6 +70,21 @@ export function runSpawning(
 
   const alive = room.find(FIND_MY_CREEPS).length;
   if (alive >= COLONY_MAX) return null;
+
+  // Reservers are a morphological caste — a [CLAIM, MOVE] body cannot harvest —
+  // so they are spawned explicitly rather than emerging from thresholds. See
+  // creep/tasks/reserve.ts for why this is the one deliberate exception.
+  if (RESERVE_ENABLED && alive >= COLONY_MIN && energy.available >= RESERVER_COST) {
+    const targets = reservationTargets();
+    const existing = Object.values(Game.creeps).filter(c => c.memory.caste === 'reserver');
+    const unheld = targets.find(room => !existing.some(c => c.memory.remoteRoom === room));
+    if (unheld) {
+      const res = spawn.spawnCreep(RESERVER_BODY, `res_${Game.time}`, {
+        memory: { caste: 'reserver', remoteRoom: unheld, home: room.name, taskState: {} },
+      });
+      if (res === OK) return 'reserver';
+    }
+  }
 
   const reason: SpawnReason = alive < COLONY_MIN ? 'survival' : 'growth';
 

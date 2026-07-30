@@ -6,6 +6,7 @@ import { decide } from './creep/decide';
 import { ensureProfile } from './creep/thresholds';
 import { run as runBuild } from './creep/tasks/build';
 import { run as runRemote } from './creep/tasks/remote';
+import { isReserver, run as runReserve } from './creep/tasks/reserve';
 import { run as runSupply } from './creep/tasks/supply';
 import { run as runUpgrade } from './creep/tasks/upgrade';
 import { MIN_BODY_COST, RECRUIT_LIMIT_PER_TICK, REMOTE_ENABLED, SNAPSHOT_INTERVAL } from './config';
@@ -80,6 +81,13 @@ function runRoom(room: Room): void {
   for (const creep of creeps) {
     // One creep throwing must not cost every other creep its tick.
     try {
+      // Caste creeps are dispatched by body, not by threshold: a [CLAIM, MOVE]
+      // creep physically cannot do any of the normal tasks.
+      if (isReserver(creep)) {
+        runReserve(creep);
+        continue;
+      }
+
       const thresholds = ensureProfile(creep);
       const previous = creep.memory.task;
 
