@@ -195,7 +195,9 @@ there's more than one room and more than one mechanism.
 
 Reusing Overmind's color language (inspiration only, no code):
 - HUD text: `#c9c9c9`
-- Log severity: ERROR red, WARNING orange, ALERT yellow, INFO green, DEBUG gray, FATAL `#d65156`
+- Log severity — four levels only: `DEBUG` gray, `INFO` green, `WARN` orange, `ERROR` red.
+  (Overmind's palette also had ALERT and FATAL; both are dropped. Four is enough for M1
+  and maps 1:1 onto OpenTelemetry's standard severity numbers — see Observability.)
 
 M1 HUD: a `room.visual.text()` label over each creep showing its current task, colored
 by the scheme above. This is not decoration — it's the actual instrument for validating
@@ -249,15 +251,31 @@ dedicated instance.
   constraint visible in the data itself: queries can filter on it, and official-server
   data showing up would be immediately obvious rather than silently blending in.
 
+### Severity levels
+
+Four levels, no more: `DEBUG`, `INFO`, `WARN`, `ERROR`. Each JSON line carries its level,
+and the shipper maps it onto OpenTelemetry's standard `SeverityNumber` so SigNoz's native
+severity filtering works rather than requiring string matching on the body:
+
+| Level | OTel `SeverityNumber` | Console color | Used for |
+|---|---|---|---|
+| `DEBUG` | 5 | gray | Per-creep decision detail; off or sampled by default (chatty) |
+| `INFO` | 9 | green | Snapshots, spawns, task switches — the normal signal |
+| `WARN` | 13 | orange | Recoverable trouble: corrupt threshold profile regenerated, task target vanished, spawn starved of energy |
+| `ERROR` | 17 | red | Colony starvation, and anything caught by the main-loop try/catch |
+
+`SeverityText` is the level string itself.
+
 ### What gets emitted
 
-- **Snapshot**, every N ticks (throttled — `JSON.stringify` costs CPU in Screeps): tick,
-  room, creep count, energy available/capacity, all three stimulus values, and **task
+- **Snapshot** (`INFO`), every N ticks (throttled — `JSON.stringify` costs CPU in Screeps):
+  tick, room, creep count, energy available/capacity, all three stimulus values, and **task
   distribution** (count of creeps per task). The distribution series is the single most
   important signal in the whole milestone — it is literally the shape of labor
   reallocating over time.
-- **Events**, immediately: spawn, death, task switch (from, to, and the margins that
-  caused it), and FATAL on colony starvation.
+- **Events**, immediately: spawn and death (`INFO`), task switch with from/to and the
+  margins that caused it (`INFO`), recoverable faults (`WARN`), colony starvation and
+  uncaught creep exceptions (`ERROR`).
 
 ### Private-server only
 
@@ -292,7 +310,7 @@ The design doc's `MINIMUM_CIVILIAN_FLOOR` (§1.1) exists for exactly this. M1's 
 is the saturating supply stimulus described above — when the room cannot afford a
 replacement creep, supply's stimulus pegs at maximum and clears essentially every creep's
 threshold. If the colony dies anyway, that is a legitimate experimental result about
-threshold tuning: log it at FATAL so it is visible rather than discovered hours later.
+threshold tuning: log it at `ERROR` so it is visible rather than discovered hours later.
 
 ## Deploy plan
 
