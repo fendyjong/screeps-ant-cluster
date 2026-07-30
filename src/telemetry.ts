@@ -37,6 +37,7 @@ export function emitSnapshot(
   distribution: TaskDistribution,
   energy: { available: number; capacity: number },
   switches: Record<string, number>,
+  deferred: number,
 ): void {
   emit('INFO', 'snapshot', {
     room: room.name,
@@ -52,5 +53,8 @@ export function emitSnapshot(
     // exploration noise. The counts preserve the signal (how much churn, and
     // why) at ~1/500th the volume.
     switches,
+    // Recruitment attempts refused this tick by the rate limit — how hard the
+    // colony is straining against it.
+    deferred,
   });
 }

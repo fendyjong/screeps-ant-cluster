@@ -7,7 +7,7 @@ import { ensureProfile } from './creep/thresholds';
 import { run as runBuild } from './creep/tasks/build';
 import { run as runSupply } from './creep/tasks/supply';
 import { run as runUpgrade } from './creep/tasks/upgrade';
-import { MIN_BODY_COST, SNAPSHOT_INTERVAL } from './config';
+import { MIN_BODY_COST, RECRUIT_LIMIT_PER_TICK, SNAPSHOT_INTERVAL } from './config';
 import { drawCreepLabels } from './visuals';
 import { emit, emitSnapshot, TaskDistribution } from './telemetry';
 import { TaskName } from './types';
@@ -49,6 +49,11 @@ function runRoom(room: Room): void {
 
   const distribution: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
   const switches: Record<string, number> = {};
+  // Recruitment is a rate, not a step change: only so many creeps may join a
+  // given task per tick, so a stimulus crossing every threshold at once can no
+  // longer move the whole colony in a single tick.
+  const joined: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
+  let deferred = 0;
 
   for (const creep of creeps) {
     // One creep throwing must not cost every other creep its tick.
@@ -57,9 +62,21 @@ function runRoom(room: Room): void {
       const previous = creep.memory.task;
       const decision = decide(stimuli, thresholds, previous, Math.random());
 
+      if (decision.switched && joined[decision.task] >= RECRUIT_LIMIT_PER_TICK) {
+        // Task is taking on all the recruits it can this tick; this creep keeps
+        // doing what it was doing and may switch on a later tick.
+        deferred += 1;
+        distribution[previous ?? decision.task] += 1;
+        if (previous) {
+          RUNNERS[previous](creep);
+          continue;
+        }
+      }
+
       if (decision.switched) {
         // A new task starts with a clean slate — the old target is meaningless.
         creep.memory.taskState = {};
+        joined[decision.task] += 1;
         switches[decision.reason] = (switches[decision.reason] ?? 0) + 1;
         // Per-switch detail is DEBUG-only: it is the single loudest event in the
         // system and is mostly exploration noise. The snapshot carries the
@@ -137,7 +154,7 @@ function runRoom(room: Room): void {
   drawCreepLabels(room);
 
   if (Game.time % SNAPSHOT_INTERVAL === 0) {
-    emitSnapshot(room, stimuli, distribution, energy, switches);
+    emitSnapshot(room, stimuli, distribution, energy, switches, deferred);
   }
 }
 

@@ -397,6 +397,37 @@ stimulus above its threshold for a different task, it may switch. The
 probability of switching depends on the relative intensity of the two
 stimuli.
 
+**Switching is a rate, not a step change — and this matters enormously.** A
+threshold model alone implies that when a stimulus crosses the whole
+population's thresholds at once, the whole population switches at once. Real
+colonies cannot do that: recruitment costs travel time and physical contact, and
+workers *accelerate a transition* toward a task rather than teleporting into it.
+Reallocation plays out over many time steps.
+
+**Observed here, and it was destructive.** With instantaneous switching, a
+saturating stimulus repeatedly moved nearly the entire colony in a single tick —
+23 of 24 creeps onto `supply` (tick 222500, 18 simultaneous `abandon` switches),
+24 of 25 onto `build` (tick 222800). Congestion damping could not stop it: since
+occupancy is sampled from the previous tick, every creep evaluated against a
+near-empty task and committed before any of them counted as crowding. The colony
+oscillated between monocultures instead of maintaining a division of labor.
+
+Capping how many creeps may *join* a task per tick removes the pathology
+entirely — stampedes went from six occurrences to zero, and the distribution
+settled into a stable mix. The rate limit only binds during surges; a
+`deferred` counter in the snapshot shows it refusing 3 recruits during a spike
+and 0 otherwise.
+
+Note this is a *different* mechanism from congestion damping, and both are
+needed. Congestion answers "is this task already crowded?"; the rate limit
+answers "how fast can labor physically move?" The first is about equilibrium, the
+second about the path taken to reach it.
+
+Source: [Scientific Reports — Task allocation in a cooperative society](https://www.nature.com/articles/s41598-020-59920-5)
+(worth noting: a search for quantitative recruitment-kinetics measurements did
+not turn up usable numbers, so the rate limit's value is tuned from observed
+behavior rather than derived from a published figure)
+
 **Important:** Task allocation is NOT fixed by caste (in most species).
 A forager can become a nurse. A nurse can become a defender. The colony
 adapts by adjusting the distribution of thresholds across the population.

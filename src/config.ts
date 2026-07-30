@@ -112,6 +112,25 @@ export const ROAD_PLAN_INTERVAL = 150;
 export const ROAD_MAX_PENDING_SITES = 4;
 
 /**
+ * How many creeps may join any one task per tick — recruitment as a rate rather
+ * than a step change.
+ *
+ * Without this, a stimulus crossing everyone's threshold at once moves the whole
+ * colony in a single tick. Observed repeatedly: 23 of 24 creeps on `supply`
+ * (tick 222500, 18 simultaneous `abandon` switches), 24 of 25 on `build`
+ * (tick 222800). Congestion damping cannot prevent it, because occupancy is
+ * sampled from the previous tick — every creep evaluates against a near-empty
+ * task and commits before any of them counts as crowding.
+ *
+ * Real colonies cannot do this. Recruitment costs travel and physical contact,
+ * and workers accelerate a transition rather than switching instantly, so labor
+ * shifts over many time steps. Two per tick still fills an urgent task within a
+ * few ticks (~40ms at this server's speed) while making mass migration
+ * impossible.
+ */
+export const RECRUIT_LIMIT_PER_TICK = 2;
+
+/**
  * K — ticks between telemetry snapshots. Distinct from COLONY_SIZE.
  * The server runs at ~20ms/tick (~50 ticks/sec), so 10 emitted five snapshots a
  * second and swamped SigNoz. At 100 it is roughly one every two seconds, which

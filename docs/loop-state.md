@@ -440,3 +440,45 @@ many creeps may switch to one task per tick.
 **Still open:** bodies-actually-grew verification; idle state for all-negative-margin creeps
 (§4.2.1); pheromone-weighted *pathfinding* (the other half of M3 — roads exist now, but
 movement does not yet prefer high-pheromone routes).
+
+### 2026-07-30 — iteration 7 — recruitment rate limit
+
+**Observed.** The stampede logged in iteration 6 was not a one-off. Six occurrences found,
+and the `switches` counts revealed the mechanism — mass simultaneous `abandon`:
+`supply 23/24` with 18 abandons (tick 222500), `supply 20/24` with 23 abandons (222200),
+`supply 23/23` with 22 abandons (220400), `build 24/25` (222800). The colony was oscillating
+between monocultures rather than holding a division of labor.
+
+Colony otherwise thriving: **RCL 4**, 139 roads, capacity 750, memory 20.7 KB, zero ERRORs.
+
+**Root cause.** Congestion damping structurally cannot prevent this. Occupancy is sampled
+from the *previous* tick (deliberately, so damping cannot depend on iteration order), so when
+a stimulus saturates, every creep evaluates against a near-empty task and commits in the same
+tick. Damping only bites the tick *after* the stampede has already happened.
+
+**Researched:** recruitment kinetics. Honest result — a search for quantitative time-course
+measurements did not surface usable numbers. What it did establish qualitatively is that
+workers *accelerate a transition* toward a task rather than switching instantly, and that
+switching is age/state dependent. Reallocation is a rate. Folded into research doc §4.2 with
+that caveat stated explicitly, since the rate limit's value is tuned from observed behavior
+rather than derived from a published figure.
+
+**Improved: `RECRUIT_LIMIT_PER_TICK = 2`.** At most two creeps may *join* any one task per
+tick; refused creeps keep their current task and may switch later. This is a distinct
+mechanism from congestion damping and both are needed — congestion answers "is this task
+crowded?", the rate limit answers "how fast can labor physically move?". A `deferred` counter
+now rides on the snapshot to show how hard the colony is straining against the limit.
+
+**Result:** stampedes **6 → 0**. Distribution stable and mixed (supply 2–6, upgrade 15–20,
+build 1–5). `deferred` reads 3 during a surge and 0 otherwise, confirming the limit binds only
+when it should rather than throttling normal operation.
+
+**Next iteration candidates:**
+1. **Nest growth is now circularly capped.** `desiredExtensions = min(RCL allowance,
+   ceil(creeps / 3))`. RCL 4 permits 20 extensions, but with `COLONY_MAX = 25` the colony only
+   ever wants 9 — and capacity caps body size, which caps throughput. Population gates the
+   nest while `COLONY_MAX` gates population. Worth deciding whether `COLONY_MAX` should scale
+   with capacity, or be removed now that the growth gate is absolute rather than ratio-based.
+2. **Pheromone-weighted pathfinding** — the other half of M3. Roads exist, but movement does
+   not yet prefer high-traffic routes; creeps still take default paths.
+3. **Idle state for all-negative-margin creeps** (§4.2.1) — still unaddressed.
