@@ -28,8 +28,21 @@ export const COLONY_MIN = 2;
  */
 export const COLONY_MAX = 25;
 
-/** Reserves must be at least this full before the colony invests in growth. */
-export const GROWTH_SURPLUS_RATIO = 0.95;
+/**
+ * Absolute energy the colony must hold before investing in a new worker.
+ *
+ * This was a ratio of capacity (0.95), which broke the moment the colony could
+ * expand its own nest: capacity went 300 -> 550, so the gate silently rose from
+ * 285 to 522 energy. Fewer workers refill more slowly, so the gate opened less
+ * often, so fewer workers were born — a death spiral that took the colony from
+ * 25 creeps to the survival floor of 2 within one generation.
+ *
+ * An absolute threshold does not move when the nest grows. At IDEAL_BODY_COST
+ * the colony can afford a full-size worker and still hold a minimum body in
+ * reserve, and a larger nest now means *more* headroom above the gate rather
+ * than less.
+ */
+export const GROWTH_MIN_RESERVE = 400;
 
 /**
  * Quorum control. Real colonies avoid over-recruiting to one source because
@@ -64,6 +77,19 @@ export const CAPACITY_UPGRADE = 999;
 
 /** Build capacity scales with actual sites — no sites means no capacity at all. */
 export const CAPACITY_BUILD_PER_SITE = 2;
+
+/**
+ * Nest expansion (research doc §7.4: population controls nest area, not the
+ * reverse). One extension per this many workers, capped by what the RCL allows.
+ * At 25 creeps that asks for 9, against the 10 permitted at RCL 3.
+ */
+export const CREEPS_PER_EXTENSION = 3;
+
+/** Ticks between nest-planning passes. Placement is cheap but not free. */
+export const NEST_PLAN_INTERVAL = 50;
+
+/** How far from the spawn to look for a legal extension tile. */
+export const NEST_SEARCH_RADIUS = 6;
 
 /**
  * K — ticks between telemetry snapshots. Distinct from COLONY_SIZE.

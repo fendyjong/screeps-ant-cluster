@@ -332,3 +332,49 @@ Two ways forward, and the choice is a scope decision the loop should not make un
   ("Automated construction-site placement / room planning") and effectively starts M4.
 
 Until one is chosen, further tuning is polishing a colony that cannot grow.
+
+### 2026-07-30 — iteration 5 — option (b) chosen: colony sizes its own nest
+
+The human chose **(b)**: the colony proposes its own extension sites. This deliberately
+overturns M1's non-goal ("Automated construction-site placement / room planning"), on the
+grounds that capacity was the binding ceiling on everything.
+
+**Shipped: `src/spawn/nest.ts`.** Implements research doc §7.4 directly — population size
+controls nest area, so `desiredExtensions = min(RCL allowance, ceil(creeps / 3))`. Placement
+walks expanding rings around the spawn on a checkerboard (`(x+y) % 2 === 0`) so half the
+tiles stay permanently walkable; packing extensions solid would wall the spawn in and strand
+every deliverer. Proposes at most one site per 50-tick pass. Crucially it does **not** direct
+labor: whether a site gets built remains an emergent outcome of the build stimulus competing
+against supply and upgrade.
+
+**It worked — and immediately caused a near-fatal regression.** Capacity grew 300 → 550, and
+the colony collapsed **25 → 2 creeps** inside one generation.
+
+**Root cause:** `GROWTH_SURPLUS_RATIO = 0.95` was a share *of capacity*. When the colony
+could expand its own nest, the gate silently rose from 285 energy to 522. Fewer workers
+refill more slowly, so the gate opened less often, so fewer workers were born — a textbook
+death spiral, arrested only by the `COLONY_MIN` survival floor. This is precisely the flaw
+logged in iteration 3 ("the surplus metric does not scale with colony size"), which stayed
+harmless only while capacity was fixed.
+
+**Fix:** replaced with `GROWTH_MIN_RESERVE = 400`, an absolute threshold. It does not move
+when the nest grows, so a larger nest now means *more* headroom above the gate rather than
+less. At `IDEAL_BODY_COST` the colony can afford a full-size worker and still hold a minimum
+body in reserve.
+
+**Result after the fix:** creeps 2 → **25**, extensions → **9 of 10**, energyCapacity
+300 → **750**. Energy reaches full 750. Distribution stays healthy (supply 4–9, upgrade
+12–18, build 0–6). Bodies can now reach the 400-energy ideal instead of being pinned at the
+200 minimum forever.
+
+**Lesson worth keeping:** every ratio-of-capacity threshold is a latent bug once capacity
+becomes dynamic. Audit any remaining one.
+
+**Next iteration candidates:**
+1. **RCL 3 extension allowance is nearly exhausted (9/10).** The next capacity step needs
+   RCL 4, which needs upgrade throughput — check whether upgraders are actually the
+   bottleneck now that bodies can be larger.
+2. **Verify bodies actually grew.** `bodyFor()` should now be returning `IDEAL_BODY` at 750
+   capacity; confirm in telemetry rather than assuming.
+3. **Idle state for all-negative-margin creeps** (research doc §4.2.1) — still unaddressed.
+4. **M3 pheromone routing** — the next milestone proper, still untouched.

@@ -2,7 +2,7 @@ import {
   COLONY_MAX,
   COLONY_MIN,
   DEFAULT_TASK,
-  GROWTH_SURPLUS_RATIO,
+  GROWTH_MIN_RESERVE,
   IDEAL_BODY,
   IDEAL_BODY_COST,
   MIN_BODY,
@@ -38,10 +38,8 @@ export function runSpawning(
   if (alive >= COLONY_MAX) return null;
 
   const reason: SpawnReason = alive < COLONY_MIN ? 'survival' : 'growth';
-  if (reason === 'growth') {
-    const ratio = energy.capacity > 0 ? energy.available / energy.capacity : 0;
-    if (ratio < GROWTH_SURPLUS_RATIO) return null;
-  }
+  // Absolute, not a share of capacity — see GROWTH_MIN_RESERVE.
+  if (reason === 'growth' && energy.available < GROWTH_MIN_RESERVE) return null;
 
   const body = bodyFor(energy.available);
   if (!body) return null;

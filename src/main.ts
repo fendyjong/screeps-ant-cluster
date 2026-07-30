@@ -1,3 +1,4 @@
+import { runNestExpansion } from './spawn/nest';
 import { runSpawning } from './spawn/respawn';
 import { applyCongestion, computeStimuli, readEnergy, readRoom } from './creep/stimuli';
 import { decide } from './creep/decide';
@@ -108,6 +109,13 @@ function runRoom(room: Room): void {
       room: room.name,
       energyAvailable: energy.available,
     });
+  }
+
+  // The colony sizes its own nest: population pressure proposes extensions,
+  // and the build stimulus decides whether anyone actually works them.
+  const nest = runNestExpansion(room, creeps.length);
+  if (nest && nest.placed) {
+    emit('INFO', 'nest-expand', { room: room.name, have: nest.have, wanted: nest.wanted });
   }
 
   drawCreepLabels(room);
