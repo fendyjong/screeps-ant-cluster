@@ -1089,3 +1089,52 @@ prompt.
 **Do not "fix" the low reserver count by lowering the cost back.** The 1-CLAIM body was
 strictly worse: cheaper per creep but delivering no coverage at all, since it banked nothing.
 This is a coverage-per-energy question, not a cost-per-creep one.
+
+### 2026-07-31 — iteration 19 — the colony tunes its own constants
+
+**Question raised: introduce TensorFlow so the ants can self-learn?** Investigated before
+answering, and the answer is that they already do — but the more useful finding came from the
+archived Overmind fork.
+
+**Overmind never ran TensorFlow inside Screeps.** `@tensorflow/tfjs` and `onnxjs` were in
+`package.json` with **zero imports anywhere in `src/`**. Its RL was `main_RL()`, a stripped
+loop that disables all colony logic and only executes actions written into
+`Memory.reinforcementLearning` by *external Python optimizers*. Screeps was the environment;
+learning happened outside. That is the only architecture where real TF makes sense here —
+our bundle is 78 KB against tfjs at 1000+ KB, the Screeps VM is pure JS with no WebGL/WASM
+backend, and CPU is 100/tick measured in milliseconds.
+
+More importantly, learning was not the bottleneck: measured 10.7 energy/tick goes to creep
+replacement against 3.08 to upgrading. A better task-selection policy does not move that ratio.
+
+**Chosen instead: widen the genome.** Three global hand-picked constants became per-creep
+heritable traits, inherited and mutated with the thresholds, each bounded:
+`switchBuffer` (decisiveness), `explorationChance` (curiosity), `returnFraction` (load size).
+Missing traits are seeded uniformly at random rather than derived from anything, so no
+assumption of mine is baked in.
+
+**Result after ~3900 generations — the colony disagreed with me on all three:**
+
+| trait | hand-picked | evolved mean |
+|---|---|---|
+| switchBuffer | 0.15 | **0.220** |
+| explorationChance | 0.02 | **0.040** |
+| returnFraction | 0.70 | **0.566** |
+
+Fitness rose ~0.68 → **0.85–0.91**; population healthy 16–24; pool stayed diverse
+(switchBuffer spanning 0.065–0.36) rather than converging.
+
+`returnFraction` is the instructive one: 0.70 assumed fuller loads mean fewer trips, but
+selection preferred leaving at ~0.57, because topping up at a contended source costs more than
+the extra journey. Central-place foraging theory predicts exactly that — optimal load size
+falls as loading slows relative to travel. Folded into research doc §4.2.2.
+
+**The general principle, and it is the answer to several of this project's failures.** A wrong
+global constant is wrong for every creep at once — that is how four collapses happened. The
+same value as a gene is wrong only for its bearer, costs that creep its fitness, and is bred
+out. Moving a decision from code into the genome converts a systemic risk into a local one.
+
+**Next iteration candidates:** more constants are still hand-picked and are candidates for the
+genome (congestion factor, recruit limit, spawn stagger — though these are colony-level rather
+than per-creep and would need a different mechanism). Also still open: reducing the
+creep-replacement share of the energy budget; pheromone-weighted pathfinding.

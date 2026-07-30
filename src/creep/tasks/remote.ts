@@ -1,5 +1,5 @@
-import { REMOTE_COMMIT_TICKS, REMOTE_RETURN_FRACTION } from '../../config';
-import { recordWork } from '../../evolution';
+import { REMOTE_COMMIT_TICKS } from '../../config';
+import { ensureTraits, recordWork } from '../../evolution';
 
 /**
  * Remote foraging — harvesting sources outside the home room.
@@ -257,7 +257,8 @@ export function run(creep: Creep, value: number): void {
 
   // Re-read the store: `carried` was sampled before this tick's harvest, so
   // using it here lags the decision by a tick and can miss the threshold.
-  if (creep.store.getUsedCapacity(RESOURCE_ENERGY) >= capacity * REMOTE_RETURN_FRACTION) {
+  // How full to fill before hauling home is this creep's own heritable trait.
+  if (creep.store.getUsedCapacity(RESOURCE_ENERGY) >= capacity * ensureTraits(creep).returnFraction) {
     beginReturn(creep);
   }
 }

@@ -1,5 +1,5 @@
-import { DEFAULT_TASK, EXPLORATION_CHANCE, EXPLORATION_ENABLED, SWITCH_BUFFER } from '../config';
-import { Stimuli, TaskName, TASK_NAMES, ThresholdProfile } from '../types';
+import { DEFAULT_TASK, EXPLORATION_ENABLED } from '../config';
+import { Stimuli, TaskName, TASK_NAMES, ThresholdProfile, TraitProfile } from '../types';
 
 export type SwitchReason = 'no-current' | 'abandon' | 'better' | 'explore' | 'stay';
 
@@ -26,7 +26,13 @@ export function decide(
   thresholds: ThresholdProfile,
   current: TaskName | undefined,
   roll: number,
+  traits: TraitProfile,
 ): Decision {
+  // These were global constants. They are now heritable per-creep traits, so a
+  // badly-tuned value costs one creep its fitness instead of destabilising the
+  // whole colony — and selection settles on a value rather than me guessing.
+  const explorationChance = traits.explorationChance;
+  const switchBuffer = traits.switchBuffer;
   const margins: Stimuli = {
     supply: stimuli.supply - thresholds.supply,
     upgrade: stimuli.upgrade - thresholds.upgrade,
@@ -34,9 +40,9 @@ export function decide(
     remote: stimuli.remote - thresholds.remote,
   };
 
-  if (EXPLORATION_ENABLED && roll < EXPLORATION_CHANCE) {
+  if (EXPLORATION_ENABLED && roll < explorationChance) {
     const others = TASK_NAMES.filter(t => t !== current);
-    const index = Math.floor((roll / EXPLORATION_CHANCE) * others.length);
+    const index = Math.floor((roll / explorationChance) * others.length);
     const pick = others[Math.min(index, others.length - 1)];
     return { task: pick, switched: pick !== current, reason: 'explore', margins };
   }
@@ -56,7 +62,7 @@ export function decide(
     return { task: best, switched: best !== current, reason: 'abandon', margins };
   }
 
-  if (margins[best] > margins[current] + SWITCH_BUFFER) {
+  if (margins[best] > margins[current] + switchBuffer) {
     return { task: best, switched: true, reason: 'better', margins };
   }
 

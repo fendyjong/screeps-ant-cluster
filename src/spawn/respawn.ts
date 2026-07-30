@@ -117,7 +117,7 @@ export function runSpawning(
   const result = spawn.spawnCreep(body, `ant_${Game.time}`, {
     memory: {
       task: DEFAULT_TASK,
-      thresholds: breed(),
+      ...breed(),
       taskState: {},
     },
   });

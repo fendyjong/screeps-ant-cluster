@@ -457,6 +457,42 @@ behavior rather than derived from a published figure)
 A forager can become a nurse. A nurse can become a defender. The colony
 adapts by adjusting the distribution of thresholds across the population.
 
+### 4.2.2 The colony tunes its own constants
+
+Response thresholds are not the only heritable thing worth evolving. Individual
+ants vary measurably in *how* they decide, not just *what* they decide — how
+readily they abandon a task, how often they try something unprompted, how large
+a load they carry before returning. Treating those as heritable traits rather
+than fixed rules lets the colony discover them.
+
+**Implemented and measured (2026-07-31).** Three constants that had been global
+and hand-picked became per-creep genes, inherited and mutated alongside the
+thresholds, each with bounds to keep selection out of degenerate corners. After
+~3900 generations the colony had moved all three away from the values chosen for
+it:
+
+| trait | hand-picked | evolved mean |
+|---|---|---|
+| switch buffer (decisiveness) | 0.15 | **0.220** |
+| exploration chance (curiosity) | 0.02 | **0.040** |
+| return fraction (load size) | 0.70 | **0.566** |
+
+Fitness rose from ~0.68 to 0.85–0.91, and the pool stayed diverse (switch buffer
+spanning 0.065–0.36) rather than converging on one answer.
+
+The return-fraction result is the instructive one. The hand-picked 0.70 assumed
+fuller loads mean fewer trips and therefore less overhead. Selection preferred
+~0.57 — leaving earlier — because time spent topping up at a contended source
+costs more than the extra journey does. That is a real foraging trade-off, and
+central-place foraging theory predicts exactly this shape: optimal load size
+falls as loading becomes slower relative to travel.
+
+**Why this matters beyond tuning.** A global constant that is wrong is wrong for
+every creep simultaneously; several colony collapses in this project came from
+exactly that. The same value as a gene is wrong only for its bearer, costs that
+creep its fitness, and is bred out. Moving a decision from code into the genome
+converts a systemic risk into a local one.
+
 **Where a real caste is unavoidable — and why that is still faithful.** The
 qualifier "in most species" matters. Many ants *do* have morphological castes:
 *Atta* majors and minors, soldier castes with mandibles built for defence rather

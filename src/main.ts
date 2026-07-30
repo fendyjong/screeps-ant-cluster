@@ -11,7 +11,7 @@ import { run as runSupply } from './creep/tasks/supply';
 import { run as runUpgrade } from './creep/tasks/upgrade';
 import { MIN_BODY_COST, RECRUIT_LIMIT_PER_TICK, REMOTE_ENABLED, SNAPSHOT_INTERVAL } from './config';
 import { drawColonyHud } from './hud';
-import { evolutionStats, fitnessOf, retire } from './evolution';
+import { ensureTraits, evolutionStats, fitnessOf, retire } from './evolution';
 import { drawCreepLabels } from './visuals';
 import { emit, emitSnapshot, TaskDistribution } from './telemetry';
 import { TaskName } from './types';
@@ -37,7 +37,7 @@ function pruneCreepMemory(): void {
       const memory = Memory.creeps[name];
       const record = memory.work;
       const fitness = record && record.ticks > 0 ? record.value / record.ticks : 0;
-      retire(memory.thresholds, fitness);
+      retire(memory.thresholds, memory.traits, fitness);
       delete Memory.creeps[name];
     }
   }
@@ -89,6 +89,7 @@ function runRoom(room: Room): void {
       }
 
       const thresholds = ensureProfile(creep);
+      const traits = ensureTraits(creep);
       const previous = creep.memory.task;
 
       // Commitment is deliberately narrow: finish delivering a load you are
@@ -124,7 +125,8 @@ function runRoom(room: Room): void {
         continue;
       }
 
-      const decision = decide(stimuli, thresholds, previous, Math.random());
+      // Decisiveness and curiosity are the creep's own genes now, not globals.
+      const decision = decide(stimuli, thresholds, previous, Math.random(), traits);
 
       if (decision.switched && joined[decision.task] >= RECRUIT_LIMIT_PER_TICK) {
         // Task is taking on all the recruits it can this tick; this creep keeps

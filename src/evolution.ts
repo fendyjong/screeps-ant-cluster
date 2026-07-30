@@ -2,12 +2,13 @@ import {
   FITNESS_VERSION,
   GENE_POOL_SIZE,
   MUTATION_RATE,
+  TRAIT_BOUNDS,
   THRESHOLD_BASE,
   THRESHOLD_JITTER,
   THRESHOLD_MAX,
   THRESHOLD_MIN,
 } from './config';
-import { TASK_NAMES, ThresholdProfile } from './types';
+import { TASK_NAMES, ThresholdProfile, TraitProfile, TRAIT_NAMES } from './types';
 import { generateProfile } from './creep/thresholds';
 
 /**
@@ -53,7 +54,39 @@ function clamp(value: number): number {
 
 export interface Gene {
   thresholds: ThresholdProfile;
+  traits: TraitProfile;
   fitness: number;
+}
+
+function clampTrait(name: keyof TraitProfile, value: number): number {
+  const bounds = TRAIT_BOUNDS[name];
+  return Math.max(bounds.min, Math.min(bounds.max, value));
+}
+
+/** A trait drawn uniformly across its legal range — no prior, selection decides. */
+function randomTrait(name: keyof TraitProfile): number {
+  const b = TRAIT_BOUNDS[name];
+  return b.min + Math.random() * (b.max - b.min);
+}
+
+export function generateTraits(): TraitProfile {
+  return {
+    switchBuffer: randomTrait('switchBuffer'),
+    explorationChance: randomTrait('explorationChance'),
+    returnFraction: randomTrait('returnFraction'),
+  };
+}
+
+/** Patches any missing trait, so widening the genome never discards a profile. */
+export function ensureTraits(creep: Creep): TraitProfile {
+  const existing = creep.memory.traits as Partial<TraitProfile> | undefined;
+  const out = {} as TraitProfile;
+  for (const name of TRAIT_NAMES) {
+    const v = existing?.[name];
+    out[name] = typeof v === 'number' && isFinite(v) ? clampTrait(name, v) : randomTrait(name);
+  }
+  creep.memory.traits = out;
+  return out;
 }
 
 interface GenePool {
@@ -93,6 +126,15 @@ function pool(): GenePool {
           THRESHOLD_MIN + Math.random() * (THRESHOLD_MAX - THRESHOLD_MIN);
       }
     }
+    // Same treatment for the trait genes added later: seed uniformly at random
+    // rather than from any existing value, so no assumption of mine is baked in.
+    const traits = (gene.traits ?? {}) as Partial<TraitProfile>;
+    const filled = {} as TraitProfile;
+    for (const name of TRAIT_NAMES) {
+      const v = traits[name];
+      filled[name] = typeof v === 'number' && isFinite(v) ? clampTrait(name, v) : randomTrait(name);
+    }
+    gene.traits = filled;
   }
 
   return memory as GenePool;
@@ -126,10 +168,14 @@ export function recordWork(creep: Creep, productive: boolean, value: number): vo
  * Retires a dead creep's profile into the pool. Keeps only the fittest
  * GENE_POOL_SIZE, so Memory stays bounded and selection pressure is real.
  */
-export function retire(thresholds: ThresholdProfile | undefined, fitness: number): void {
+export function retire(
+  thresholds: ThresholdProfile | undefined,
+  traits: TraitProfile | undefined,
+  fitness: number,
+): void {
   if (!thresholds) return;
   const p = pool();
-  p.genes.push({ thresholds, fitness });
+  p.genes.push({ thresholds, traits: traits ?? generateTraits(), fitness });
   p.genes.sort((a, b) => b.fitness - a.fitness);
   if (p.genes.length > GENE_POOL_SIZE) p.genes.length = GENE_POOL_SIZE;
   p.generation += 1;
@@ -144,11 +190,22 @@ function mutate(parent: ThresholdProfile): ThresholdProfile {
   return child;
 }
 
+/** Traits mutate proportionally to their own range, so each drifts at its own scale. */
+function mutateTraits(parent: TraitProfile): TraitProfile {
+  const child = {} as TraitProfile;
+  for (const name of TRAIT_NAMES) {
+    const b = TRAIT_BOUNDS[name];
+    const drift = (Math.random() * 2 - 1) * MUTATION_RATE * (b.max - b.min);
+    child[name] = clampTrait(name, parent[name] + drift);
+  }
+  return child;
+}
+
 /**
  * A profile for a new creep: inherited from a fitness-weighted parent when the
  * pool has learned anything, otherwise a fresh random draw.
  */
-export function breed(): ThresholdProfile {
+export function breed(): { thresholds: ThresholdProfile; traits: TraitProfile } {
   const p = pool();
   const viable = p.genes.filter(g => g.fitness > 0);
   if (viable.length === 0) {
@@ -156,16 +213,18 @@ export function breed(): ThresholdProfile {
     // the first generation cannot start outside the legal range.
     const fresh = generateProfile();
     for (const task of TASK_NAMES) fresh[task] = clamp(fresh[task]);
-    return fresh;
+    return { thresholds: fresh, traits: generateTraits() };
   }
 
   const total = viable.reduce((sum, g) => sum + g.fitness, 0);
   let roll = Math.random() * total;
   for (const gene of viable) {
     roll -= gene.fitness;
-    if (roll <= 0) return mutate(gene.thresholds);
+    if (roll <= 0) {
+      return { thresholds: mutate(gene.thresholds), traits: mutateTraits(gene.traits) };
+    }
   }
-  return mutate(viable[0].thresholds);
+  return { thresholds: mutate(viable[0].thresholds), traits: mutateTraits(viable[0].traits) };
 }
 
 export function evolutionStats(): { generation: number; best: number; pooled: number } {

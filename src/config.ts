@@ -309,6 +309,23 @@ export const MUTATION_RATE = 0.08;
 export const GENE_POOL_SIZE = 20;
 
 /**
+ * Bounds for heritable traits. Same purpose as the threshold bounds: keep
+ * selection from driving a value somewhere degenerate.
+ *
+ * `switchBuffer` at 0 means a creep thrashes between tasks every tick; very high
+ * means it never adapts at all. `explorationChance` must stay above zero or the
+ * colony loses the entropy that lets it discover anything, and stay low or
+ * creeps random-walk instead of working. `returnFraction` too low wastes the
+ * journey on a nearly empty load; too high means a forager never quite fills and
+ * never comes home — a failure already observed when it was a fixed value.
+ */
+export const TRAIT_BOUNDS: Record<string, { min: number; max: number }> = {
+  switchBuffer: { min: 0.05, max: 0.4 },
+  explorationChance: { min: 0.005, max: 0.08 },
+  returnFraction: { min: 0.3, max: 0.95 },
+};
+
+/**
  * Bump when the fitness function changes meaning. Scores are only comparable
  * within one definition: the previous version scored the *fraction of life spent
  * working* and routinely hit 1.0, while the current one scores *value delivered*

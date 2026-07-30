@@ -8,6 +8,30 @@ export type Stimuli = Record<TaskName, number>;
 /** Per-creep response thresholds, one per task. */
 export type ThresholdProfile = Record<TaskName, number>;
 
+/**
+ * Heritable behavioural traits — the constants the colony tunes for itself.
+ *
+ * These were global hand-picked constants, and hand-picking them went badly:
+ * several colony collapses this session traced to a global value being wrong.
+ * As genes they are per-creep, so a bad value harms only its bearer and is bred
+ * out, rather than being imposed on everyone at once. Each also has a real
+ * analogue in individual ant variation.
+ */
+export interface TraitProfile {
+  /** How much better another task must look before switching. Decisiveness. */
+  switchBuffer: number;
+  /** Chance per tick of trying something else regardless of margins. Curiosity. */
+  explorationChance: number;
+  /** Fraction of carry capacity to fill before hauling home from a remote room. */
+  returnFraction: number;
+}
+
+export const TRAIT_NAMES: Array<keyof TraitProfile> = [
+  'switchBuffer',
+  'explorationChance',
+  'returnFraction',
+];
+
 export type TaskPhase = 'gathering' | 'delivering';
 
 export interface TaskState {
@@ -30,6 +54,7 @@ declare global {
   interface CreepMemory {
     task?: TaskName;
     thresholds?: ThresholdProfile;
+    traits?: TraitProfile;
     taskState?: TaskState;
     /**
      * Lifetime work record. `value` accumulates the colony's need for the task
@@ -77,7 +102,7 @@ declare global {
 
     /** Gene pool of retired creeps' threshold profiles, best-first. */
     evolution?: {
-      genes: Array<{ thresholds: ThresholdProfile; fitness: number }>;
+      genes: Array<{ thresholds: ThresholdProfile; traits?: TraitProfile; fitness: number }>;
       generation: number;
       version?: number;
     };
