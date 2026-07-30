@@ -21,7 +21,8 @@ efficiency.
 | 29a | *(settled)* confirm iteration 27's fitness change | 1.85@25-26 → **4.57@25-26** | **worked**; 2.29 was an understatement taken mid-reset |
 | 29 | pre-spawn: "alive" = outlives spawn+travel lead time | 4.57@25-26 → 3.91 & 5.02@26-27 | **no-gain** in steady state (by design); pop floor 24 → 25 |
 | 30 | growth reserve scales with deficit | at 17-19 creeps: blocked 9-45 ticks/100 → **0** | **worked** (verified on a later collapse) |
-| 31 | per-creep jitter on replacement lead time | birth gaps locked at 36 (spawn-limited) | unverified until next cohort cycle |
+| 31 | per-creep jitter on replacement lead time | collapses continued (26→2 again) | **did not fix collapses**; birth-gap test still inconclusive |
+| 32 | require full-size body outside survival | bodies all-3-part → 27/28 at 12-part | **worked** for composition; output 2.67@28-29, NOT an improvement |
 
 # Loop state — progressive ant supercolony
 
@@ -1822,3 +1823,50 @@ stable between collapses anyway.
 
 **Also confirmed:** the nest expanded to the RCL 6 maximum of 40 extensions on its own, so nest
 capacity is 2300 and `runNestExpansion` is working without intervention.
+
+### 2026-07-31 — iteration 32 — the poverty trap was self-inflicted; output still did not rise
+
+**Found during recovery: every one of 16 creeps was a 3-part MIN_BODY** — 1 WORK, 50 carry —
+while nest capacity was 2300. `bodyFor` sizes a creep to whatever energy is in the nest *at that
+instant*, which is the momentary-versus-sustainable trap (b) yet again. The colony crashed,
+spawned the cheapest thing available, and locked each of 16 population slots to a third of a
+worker for a full `CREEP_LIFE_TIME`. That is what turned every crash into a lasting poverty trap
+rather than a dip.
+
+**The reframe that matters: the population slot is the scarce resource, not the energy.**
+`COLONY_MAX` caps the colony and every creep holds its slot for 1500 ticks whether it cost 200 or
+700. Filling a slot with a third of a creep wastes two-thirds of a slot-lifetime; waiting a few
+hundred ticks for a full body costs almost nothing beside that.
+
+**Changed:** outside a survival emergency, refuse to spawn below `MAX_BODY_UNITS * BODY_UNIT_COST`
+(700). Survival stays exempt — below the floor any creep beats no creep.
+
+**Result on composition: worked, and the waiting cost was zero.** Bodies went from all-3-part to
+**27 of 28 at 12 parts**, and the new `saving-for-full-body` block registered **0 ticks** — the
+colony never once had to wait. The poverty trap was pure self-harm, costing nothing to remove.
+
+**Result on output: NOT an improvement, and this is the honest reading.** 2.67 energy/tick at
+28-29 creeps with a full-size fleet, against 5.02 at 26-27. That is well outside the ±1.1 noise
+floor, so it is not variance. It is recorded as a decline, not spun as a win.
+
+Two candidate explanations, neither confirmed. (1) The window is confounded — the colony
+collapsed repeatedly through this period. (2) **Population overshoot.** Pre-spawn lead time plus
+jitter now carry the colony at 28-29 against a `COLONY_MAX` of 25 — about 12% over, more than the
+~7% the jitter alone predicts. §7.1.1's central-place argument says W5N8 sustains only ~10 useful
+WORK however large the colony grows, so 28 creeps at 2 WORK each is 56 WORK chasing a fraction of
+that. More creeps crowding the same sources would lower output per creep exactly like this. Test
+it before acting: compare output per creep across headcounts rather than assuming.
+
+**Iteration 31's jitter: no effect on collapses.** Another 26 → 2 collapse occurred after it
+landed. The birth-gap test remains inconclusive for a separate reason — gaps stopped showing 36s,
+but only because the fleet had shrunk to 3-part bodies whose spawn time is 9 ticks, not because
+births scattered. **That was nearly mistaken for success and is worth naming: a metric can move
+for a reason unrelated to the change being tested.** Re-run the gap test now that bodies are back
+to 12 parts and the 36-tick signature is meaningful again.
+
+**Standing assessment after five spawn-side fixes** (deficit stagger, pre-spawn, scaled reserve,
+jitter, full-body): every *policy* blocker is now measurably cleared, and the colony still
+collapses. `spawn-busy` at 85-98% through every fall is a physical one-spawn limit that cannot be
+policy-fixed before RCL 7. **The trigger has never been found — only the amplifiers.** The next
+iteration should stop adding spawn policy and instead answer why ~10 creeps die inside 200-300
+ticks when the age distribution before the fall looks uniform.

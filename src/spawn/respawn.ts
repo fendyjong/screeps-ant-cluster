@@ -264,7 +264,36 @@ export function runSpawning(
     if (energy.available < required) return block('growth-reserve');
   }
 
-  const body = bodyFor(energy.available);
+  // Outside a survival emergency, wait for a body worth a population slot.
+  //
+  // `bodyFor` sizes the creep to whatever energy happens to be in the nest right
+  // now, which is the "momentary versus sustainable" trap again. Measured during
+  // a recovery: all 16 creeps were 3-part MIN_BODYs — 1 WORK and 50 carry each —
+  // while nest capacity was 2300. The colony had crashed, spawned the cheapest
+  // thing available, and locked each of those slots up for a full
+  // `CREEP_LIFE_TIME`.
+  //
+  // **The population slot is the scarce resource here, not the energy.**
+  // `COLONY_MAX` caps the colony at 25 creeps and every one of them holds its slot
+  // for 1500 ticks whether it cost 200 or 700. Filling a slot with a third of a
+  // creep wastes two-thirds of a slot-lifetime; waiting a few hundred ticks for a
+  // full body costs almost nothing by comparison. That is what turned each crash
+  // into a lasting poverty trap rather than a dip.
+  //
+  // Survival spawning is deliberately exempt: below the floor any creep beats no
+  // creep, and the colony must not stand around waiting to afford the perfect
+  // worker while going extinct.
+  //
+  // Range: `energy.available` spans 0-2300 at RCL 6 and the requirement is 700,
+  // comfortably inside it — a colony above the survival floor has the workforce to
+  // refill the nest to 700 quickly, and `too-poor` telemetry will show it plainly
+  // if that ever stops being true.
+  const affordable = reason === 'survival' ? energy.available : Math.max(energy.available, 0);
+  if (reason !== 'survival' && affordable < MAX_BODY_UNITS * BODY_UNIT_COST) {
+    return block('saving-for-full-body');
+  }
+
+  const body = bodyFor(affordable);
   if (!body) return block('too-poor');
 
   const result = spawn.spawnCreep(body, `ant_${Game.time}`, {
