@@ -638,3 +638,26 @@ actually needs.
 **Next iteration candidates:** room scouting + reservation (available now, no GCL needed, and
 it accelerates the claim gate); pheromone-weighted pathfinding (other half of M3); idle state
 for all-negative-margin creeps (§4.2.1).
+
+### Note on iteration speed and subagents (2026-07-30)
+
+Asked whether subagents would speed the loop up. They would not, and would likely harm it.
+
+**Where the time goes:** ~60–70% of an iteration is waiting for game ticks so the colony can
+react to a change. Editing, type-checking and deploying take ~15s combined. Parallel agents
+cannot compress a physical wait — they would wait in parallel.
+
+**Why parallel changes are actively wrong here.** There is exactly one `main.js`, so
+concurrent deploys clobber each other. More importantly the loop is an *experiment*: change
+one thing, wait, measure. Two changes shipped together makes attribution impossible — and
+attribution is what caught the congestion-damping freeze, the capacity-ratio death spiral,
+and the availability-biased fitness function. All three were only visible because exactly one
+variable moved.
+
+**Where a subagent does help:** research (WebSearch) and bulk telemetry analysis — read-only
+work that cannot conflict with a deploy and keeps large query dumps out of the main context.
+Worth using opportunistically, not by default.
+
+**Cheaper real speedups:** write the docs/commit while the colony is reacting rather than
+after, and shorten the observation window — at ~20ms/tick, 60s is already ~3000 ticks, two
+full creep generations, which is enough to judge most changes.
