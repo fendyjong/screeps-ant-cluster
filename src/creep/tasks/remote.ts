@@ -29,15 +29,30 @@ import { recordWork } from '../../evolution';
  */
 
 /**
- * Cost matrix that makes every border tile impassable.
+ * Ported from the archived Overmind fork (`archive/overmind-fork`), whose
+ * `Movement`/`Pathing` classes solve this properly. Reading working code beat
+ * six rounds of guessing against a live colony.
  *
- * Screeps pathfinding *ignores walls on room edges*, so a path is free to route
- * along the border or terminate on it. Combined with the transport rule below
- * that produces an endless blink between two rooms. Walling the border off at
- * 255 means a computed path can never end there in the first place — this is the
- * community's documented fix, not a guess.
- * See https://wiki.screepspl.us/index.php/Exit_tiles and
- * https://screeps.com/forum/topic/184/pathing-ignores-walls-on-room-edge
+ * Three separate pieces, and getting any one wrong reproduces the bouncing:
+ *  1. `blockExits` on the cost matrix for *in-room* pathing, because Screeps
+ *     pathfinding ignores walls on room borders and will otherwise route along
+ *     and terminate on them (Overmind: `MatrixLib.blockExits`).
+ *  2. `moveOffExit` — a single step to the best adjacent non-edge walkable tile,
+ *     NOT a path to the room centre. One guaranteed step off the border.
+ *  3. It fires ONLY on arrival at the destination. Overmind calls it inside the
+ *     `rangeToDestination <= opts.range` branch of `goTo`. Applying it whenever a
+ *     creep neared a border — which I did — prevents leaving a room at all,
+ *     since exiting requires stepping onto an exit tile.
+ */
+
+/** Overmind: `RoomPosition.isEdge`. */
+function isEdge(pos: RoomPosition): boolean {
+  return pos.x === 0 || pos.x === 49 || pos.y === 0 || pos.y === 49;
+}
+
+/**
+ * Cost matrix that makes every border tile impassable. Overmind's
+ * `MatrixLib.blockExits`, used whenever pathing is meant to stay in-room.
  */
 function borderAvoidingMatrix(roomName: string): CostMatrix {
   const matrix = new PathFinder.CostMatrix();
@@ -56,18 +71,57 @@ const AVOID_BORDER = {
 };
 
 /**
- * Never end a tick on an exit tile. Returns true if the creep spent its move
- * getting clear, in which case the caller must not issue another move.
+ * One step off an exit tile onto the best adjacent non-edge walkable tile.
+ * Port of Overmind's `Movement.moveOffExit`.
  *
- * The engine transports a creep that *ends its tick* on an exit tile into the
- * adjacent room. A creep arriving in a new room lands on such a tile, so unless
- * it moves off during that very tick it is sent straight back — the blink.
+ * A single `move` rather than a `moveTo`: the creep must clear the border on
+ * *this* tick, because the engine transports anything still standing on an exit
+ * tile back into the adjacent room. Pathing to the room centre — what I did
+ * before — can be blocked, can fail, and does not guarantee the step happens now.
+ *
+ * Returns true if it used the creep's move for this tick.
  */
-function stepOffEdge(creep: Creep): boolean {
-  const { x, y } = creep.pos;
-  if (x > 0 && x < 49 && y > 0 && y < 49) return false;
-  // Toward the room centre is always inward from any edge.
-  creep.moveTo(new RoomPosition(25, 25, creep.room.name), { reusePath: 0 });
+function moveOffExit(creep: Creep, toward?: RoomPosition): boolean {
+  if (!isEdge(creep.pos)) return false;
+
+  const terrain = creep.room.getTerrain();
+  let best: RoomPosition | undefined;
+  let bestPenalty = Infinity;
+
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      if (dx === 0 && dy === 0) continue;
+      const x = creep.pos.x + dx;
+      const y = creep.pos.y + dy;
+      if (x < 1 || x > 48 || y < 1 || y > 48) continue; // never onto another edge
+      if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
+
+      const pos = new RoomPosition(x, y, creep.room.name);
+      // Ramparts are walkable when they are ours, so test blocking directly
+      // rather than by structure type.
+      const blocked = pos
+        .lookFor(LOOK_STRUCTURES)
+        .some(st =>
+          st.structureType === STRUCTURE_WALL ||
+          (st.structureType === STRUCTURE_RAMPART && !(st as StructureRampart).my) ||
+          (st.structureType !== STRUCTURE_RAMPART &&
+            st.structureType !== STRUCTURE_ROAD &&
+            st.structureType !== STRUCTURE_CONTAINER),
+        );
+      if (blocked) continue;
+
+      // Overmind's weighting: prefer non-swamp, and step toward the goal.
+      let penalty = terrain.get(x, y) === TERRAIN_MASK_SWAMP ? 10 : 0;
+      if (toward) penalty += pos.getRangeTo(toward);
+      if (penalty < bestPenalty) {
+        bestPenalty = penalty;
+        best = pos;
+      }
+    }
+  }
+
+  if (!best) return false;
+  creep.move(creep.pos.getDirectionTo(best));
   return true;
 }
 
@@ -113,31 +167,25 @@ export function run(creep: Creep, value: number): void {
   const home = creep.memory.home ?? (creep.memory.home = creep.room.name);
   noteRoom(creep.room);
 
-  // Commit on FIRST tick of the trip, covering outbound as well as the return.
-  // Committing only the homeward leg was not enough: a round trip takes longer
-  // than a creep stays on the task, so outbound foragers were re-tasked before
-  // reaching a source and never accumulated a load worth carrying — the reason
-  // they sat around holding 27/150 with no phase ever set. The stamp is bounded
-  // and expires by itself, which is what makes this safe where the earlier
-  // open-ended version collapsed the colony.
-  if (creep.memory.commitUntil === undefined) {
-    creep.memory.commitUntil = Game.time + REMOTE_COMMIT_TICKS;
-  }
+  // Commitment is set only when heading home with a load (see `beginReturn`),
+  // never on the outbound leg.
+  //
+  // Outbound commitment existed to stop foragers being re-tasked before they
+  // reached a source — but the real cause of that was the main loop skipping
+  // creeps outside the home room, so they received no orders at all. With that
+  // fixed, outbound foragers path normally and congestion damping can do its
+  // job. Committing outbound as well simply overrode the damping and let remote
+  // monopolise the colony: 14 of 17 creeps foraging with `upgrade` at zero.
 
   const carried = creep.store.getUsedCapacity(RESOURCE_ENERGY);
   const capacity = creep.store.getCapacity(RESOURCE_ENERGY);
   const phase = creep.memory.taskState?.phase ?? 'gathering';
 
-  // Step off the border ONLY once inside the room we actually want to be in.
-  //
-  // An unconditional version of this guard was the reason nothing worked: to
-  // *leave* a room a creep must step onto an exit tile, so shoving it back
-  // inward every time it reached the border meant no forager ever crossed at
-  // all. The blink the research describes happens on ARRIVAL — a creep
-  // transported in lands on an exit tile and is sent back unless it moves off
-  // that same tick — so the guard belongs there and nowhere else.
+  // Arrival-only, exactly as Overmind scopes it: the guard belongs in the
+  // "reached my destination" branch and nowhere else, because leaving a room
+  // requires stepping onto an exit tile.
   const destination = phase === 'delivering' ? home : creep.memory.remoteRoom;
-  if (creep.room.name === destination && stepOffEdge(creep)) {
+  if (creep.room.name === destination && moveOffExit(creep)) {
     recordWork(creep, phase === 'delivering', value);
     return;
   }

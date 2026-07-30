@@ -839,3 +839,53 @@ claim gate that gated M4 is now open.
 
 **State:** remote disabled behind the flag, code and threshold axis retained, colony healthy
 at 24–25 creeps, RCL 5, capacity 1800.
+
+### 2026-07-30 — iteration 15 — remote foraging WORKS; the bug was never movement
+
+The human suggested reading the archived Overmind fork (`archive/overmind-fork`, the tag made
+before deleting it). That was the turning point, in two ways.
+
+**What Overmind's `Movement`/`Pathing` showed.** Three separate pieces, each of which I had
+either missed or mis-scoped:
+1. `MatrixLib.blockExits` — block border tiles in cost matrices for in-room pathing, because
+   Screeps pathfinding ignores walls on room borders and will route along and terminate on them.
+2. `moveOffExit` — a *single step* to the best adjacent non-edge walkable tile, weighted
+   against swamp and toward the goal. Not a path to the room centre, which can be blocked or
+   fail; the creep must clear the border on that exact tick.
+3. It is called ONLY inside `goTo`'s `rangeToDestination <= opts.range` branch — arrival only.
+   Applying it whenever a creep neared a border, as I had, makes leaving a room impossible,
+   since exiting requires stepping onto an exit tile.
+
+**But the actual bug was in `main.ts`, and had nothing to do with movement.** The loop iterated
+`room.find(FIND_MY_CREEPS)` for owned rooms only, so **a creep that walked into a neighbouring
+room stopped being processed entirely** — no orders, no task, no `noteRoom`. It drifted onto an
+exit tile and the engine bounced it back and forth. Every "movement bug" across six attempts
+was a symptom of foragers simply not being run.
+
+The tell was visible the whole time and I misread it repeatedly: `Memory.remotes` recorded only
+the home room even while creeps were physically standing in three neighbours. `noteRoom` is the
+first statement in the remote task — if it never fired for those creeps, the task was never
+executing for them. Fixed by selecting creeps by their **home** room rather than their current
+one.
+
+**Results, against the metrics that failed six times running:**
+| metric | before | after |
+|---|---|---|
+| rooms recorded | W5N8 only | **all 5** (W5N8, W6N8, W4N8, W5N9, W5N7) |
+| foragers delivering | 0 | **7** |
+| creeps stuck on exit tiles | 16 of 25 | **0 of 25** |
+
+**Follow-up fix in the same iteration.** With foraging working, remote monopolised labor —
+14 of 17 creeps with `upgrade` at 0, stopping GCL progress. Cause was outbound commitment
+overriding congestion damping. Outbound commitment only ever existed to compensate for the
+main-loop bug, so removing it restored balance: **supply 4–6 / upgrade 2–9 / build 1–11 /
+remote 3–6**, with remote sitting near its capacity of 6 exactly as designed. Commitment now
+covers only the homeward leg with a load, which is the one case where abandoning genuinely
+wastes work.
+
+**Lesson worth keeping.** Six attempts fixed the symptom because I never questioned whether the
+code was running at all. When a subsystem misbehaves in a way that looks impossible, check that
+it executes before debugging its logic — `Memory.remotes` was a direct assertion that it did
+not, and I explained it away every time.
+
+**Also:** GCL is now **116%** — past the claim gate. Claiming a second room is available.

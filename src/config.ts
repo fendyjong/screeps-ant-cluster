@@ -127,7 +127,7 @@ export const CAPACITY_REMOTE = 6;
  *    full store — foragers were stranded at 77/100 forever.
  *  - Commitment scoped to a single leg of the journey, never open-ended.
  */
-export const REMOTE_ENABLED = false;
+export const REMOTE_ENABLED = true;
 
 /**
  * Head home at this fraction of carry capacity rather than waiting to fill

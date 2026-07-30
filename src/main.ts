@@ -46,7 +46,18 @@ function runRoom(room: Room): void {
   const energy = readEnergy(room);
   const snapshot = readRoom(room);
   const raw = computeStimuli(snapshot);
-  const creeps = room.find(FIND_MY_CREEPS);
+
+  // Every creep that calls this room home, WHEREVER IT CURRENTLY IS.
+  //
+  // This used to be `room.find(FIND_MY_CREEPS)`, which returns only creeps
+  // standing in this room — so a creep that walked into a neighbouring room
+  // stopped being processed at all. It received no orders, drifted onto an exit
+  // tile, and the engine bounced it back and forth across the border. Every
+  // "movement bug" in remote foraging was a symptom of this: the foragers were
+  // not moving badly, they were not being run.
+  const creeps = Object.values(Game.creeps).filter(
+    c => (c.memory.home ?? c.room.name) === room.name,
+  );
 
   // Occupancy is read from last tick's committed tasks, before anyone decides,
   // so every creep sees the same congestion picture and the damping cannot
