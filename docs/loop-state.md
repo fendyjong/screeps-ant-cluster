@@ -1402,3 +1402,40 @@ fixed; the objective function is not. Fitness should count energy actually deliv
 This was deliberately NOT done first: with only 1800 of capacity and no granary, delivery-based
 fitness would have scored nearly every creep zero and destroyed the selection gradient. The
 granary had to exist before delivery could be the objective. It exists now.
+
+### 2026-07-31 — iteration 25b — I caused a collapse, and the granary has not paid off
+
+**A monitor caught a collapse from 26 creeps to 2, and it was my change.** Routing remote
+foragers to the granary first read `granary ?? nestSink`. Storage free capacity is 1,000,000, so
+that branch is taken *every single time* — foragers stopped feeding spawn and extensions
+entirely. Spawn fell to 36 of 300, nest fill to 15.2%, spawning stopped, population collapsed.
+
+This is trap (f) from this file's own list, inverted. I replaced "a fallback that never fires"
+with "a preference that never yields." Both are the same underlying error: **a two-way choice
+written as fixed precedence resolves the same way every tick regardless of what the colony
+needs.** Neither ordering is a policy; a threshold on actual need is.
+
+**Fixed** with `NEST_PRIORITY_FILL = 0.75` — feed the nest while it is below three-quarters
+full, bank above it. Expressed as a fraction of nest capacity, not an absolute, because capacity
+grows with RCL (trap (c)). Population recovered and is stable at 24-27 across five samples, nest
+oscillating 7-53% as a working buffer should.
+
+**The honest result of the whole granary effort: no measurable gain.** Upgrade output is
+**1.76 energy/tick** over 5581 ticks at 24-27 creeps, against **1.70 before any of it**. Within
+noise. The granary reads 0 at every single sample.
+
+**Why, and this is the useful finding:** the granary is empty because there is no surplus to
+put in it. The colony consumes everything it earns on spawning plus upgrading. I built a
+warehouse for an economy with no leftovers. Storage was a real missing capability — a colony
+that cannot bank is limited by its worst tick — but it is *infrastructure that pays off once
+inflow exceeds consumption*, not a fix in itself. It was necessary and it was not sufficient,
+and I should not have presented "1.70 to 1.97" as a win when the next measurement regressed to
+1.76; that reading was one sample and I over-read it.
+
+**What this does not change:** the fitness function is still the biggest known defect, and it
+is now unblocked because delivery is measurable. Keep it as the next change.
+
+**What this adds to the queue:** the colony is at equilibrium — it spends exactly what it earns.
+No amount of buffering escapes that. Per the new §9.5.4, nothing in the stimulus set measures
+growth, so equilibrium is the system's fixed point and it will return there after every fix.
+The growth term matters more than any further plumbing.

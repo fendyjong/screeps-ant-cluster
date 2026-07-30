@@ -505,3 +505,16 @@ export const COLORS = {
   WARN: '#ff9800',
   ERROR: '#e53935',
 } as const;
+
+/**
+ * Nest fill below which returning foragers feed spawn and extensions instead of
+ * banking. Spawning draws only from the nest, so starving it stops reproduction
+ * outright — measured: a fixed preference for the granary took spawn to 36 of
+ * 300 and the population from 26 to 2. Above this line the nest can cover a
+ * spawn cycle on its own and surplus is better banked than left in a full nest
+ * with nowhere to go.
+ *
+ * Expressed as a fraction of nest capacity rather than an absolute, because
+ * capacity changes with RCL as extensions are added.
+ */
+export const NEST_PRIORITY_FILL = 0.75;

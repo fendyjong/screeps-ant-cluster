@@ -1,4 +1,5 @@
-import { REMOTE_COMMIT_TICKS } from '../../config';
+import { NEST_PRIORITY_FILL, REMOTE_COMMIT_TICKS } from '../../config';
+import { readEnergy } from '../stimuli';
 import { ensureTraits, recordWork } from '../../evolution';
 
 /**
@@ -222,6 +223,26 @@ export function run(creep: Creep, value: number): void {
     // whose loads are surplus by definition, since the nest was already being
     // fed while they were away — deposit to the granary, which upgraders then
     // draw on instantly instead of mining at 2 energy/tick.
+    // Route by need, not by a fixed preference. Both fixed orderings failed:
+    //
+    //  - Nest first, granary as fallback: the granary sat at 0 for 5319 ticks,
+    //    because spawning drains the nest at ~4.4 energy/tick so it always had
+    //    room and nothing ever spilled over. A leaky bucket never overflows.
+    //  - Granary first, nest as fallback: worse. Storage free capacity is
+    //    1,000,000, so that branch is always taken — foragers stopped feeding
+    //    the nest entirely, spawn fell to 36 of 300, and the population
+    //    collapsed from 26 to 2.
+    //
+    // The lesson is the same in both directions: a two-way choice written as a
+    // fixed precedence resolves the same way every tick regardless of what the
+    // colony actually needs. Brood provisioning comes first in a real colony and
+    // storage takes the surplus, but "first" there means priority under
+    // competition, not a fixed queue — repletes are filled during a glut, not
+    // after the last larva is fed.
+    const nest = readEnergy(creep.room);
+    const nestHungry =
+      nest.capacity > 0 && nest.available / nest.capacity < NEST_PRIORITY_FILL;
+
     const granary = creep.room
       .find(FIND_STRUCTURES)
       .find(
@@ -231,7 +252,8 @@ export function run(creep: Creep, value: number): void {
           (s as StructureStorage).store.getFreeCapacity(RESOURCE_ENERGY) > 0,
       );
 
-    const sink = granary ?? creep.pos.findClosestByPath(sinks, AVOID_BORDER);
+    const nestSink = creep.pos.findClosestByPath(sinks, AVOID_BORDER);
+    const sink = nestHungry ? (nestSink ?? granary) : (granary ?? nestSink);
 
     if (!sink) {
       // Genuinely nowhere to put it — nest full and no granary yet. Not a
