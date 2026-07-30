@@ -41,5 +41,12 @@ declare global {
      * db.json instead, so that is the escape route.
      */
     telemetry?: TelemetryRecord[];
+
+    /**
+     * Sparse per-room trail pheromone: only tiles creeps actually walked, keyed
+     * "x,y". Sparse and pruned on purpose — Memory is serialized every tick, so
+     * a dense 50x50 grid per room would be 2500 entries of pure overhead.
+     */
+    traffic?: Record<string, Record<string, number>>;
   }
 }

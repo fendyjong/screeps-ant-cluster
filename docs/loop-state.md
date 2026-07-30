@@ -401,3 +401,42 @@ snapshot the same way.
 
 **General lesson:** any per-creep, per-tick event is unshippable at 50 ticks/sec. Aggregate
 into the periodic snapshot by default; keep per-event detail behind DEBUG.
+
+### 2026-07-30 — iteration 6 — roads from traffic (M3 first half)
+
+**Prompted by the human's observation:** builders idle when no construction sites exist. True
+and structural — `build` stimulus is `siteCount / BUILD_SATURATION_SITES`, so zero sites means
+zero pull, and builders sat doing nothing.
+
+**Researched:** *Atta* trunk trails. The biology is literal — leafcutters physically clear
+trails through undergrowth, move faster on them, and recoup the clearing cost within days.
+Decisively, it is "infrastructure construction without information exchange": no ant plans
+the network; each clears obstacles on paths it uses, and the network is the residue. Folded
+into research doc §5.4 with sources.
+
+**Shipped: `src/pheromone.ts`** — trail pheromone with roads as its permanent form (§11.3).
+Creeps deposit on the tile they occupy each tick; the map evaporates every 100 ticks
+(`TRAFFIC_DECAY = 0.85`) and prunes cold tiles; tiles above `ROAD_TRAFFIC_THRESHOLD = 60` get
+a road site, capped at 4 outstanding so builders are not swamped. No route is planned
+anywhere in the code.
+
+**Result:** **105 roads built**, hottest tiles reading 419–488 accumulated traffic. Builders
+now have permanent self-generated work, and it compounds — every road makes future traffic
+cheaper. Memory holding the sparse map: 22.7 KB across 265 tracked tiles, well within budget.
+
+**New artifact to fix next — a one-tick stampede.** At tick 222800 the snapshot read
+`{"supply":0,"upgrade":1,"build":24}`: 24 of 25 creeps piled onto build simultaneously, then
+dispersed the following tick. Cause is the one-tick lag in congestion damping — occupancy is
+sampled from the *previous* tick (deliberately, so damping cannot depend on iteration order),
+so when new sites appear the damped stimulus is still computed against near-zero occupancy.
+Every creep sees an undamped 1.0 and commits at once; damping only bites the tick after.
+It self-corrects and was harmless here (supply stimulus was low), but it abandons supply and
+upgrade for a tick, which could starve the colony if it coincided with an energy trough.
+
+Likely fix: damp against the *anticipated* occupancy — count commitments as they are made
+within the tick, while still evaluating every creep against the same snapshot — or cap how
+many creeps may switch to one task per tick.
+
+**Still open:** bodies-actually-grew verification; idle state for all-negative-margin creeps
+(§4.2.1); pheromone-weighted *pathfinding* (the other half of M3 — roads exist now, but
+movement does not yet prefer high-pheromone routes).

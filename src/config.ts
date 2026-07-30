@@ -92,6 +92,26 @@ export const NEST_PLAN_INTERVAL = 50;
 export const NEST_SEARCH_RADIUS = 6;
 
 /**
+ * Trail pheromone and road crystallisation (research doc §11.3).
+ *
+ * Decay is what keeps a road meaning "currently useful" rather than "walked once":
+ * without evaporation every tile ever stepped on eventually crosses the threshold
+ * and the colony paves the entire room.
+ */
+export const TRAFFIC_DECAY = 0.85;
+export const TRAFFIC_DECAY_INTERVAL = 100;
+export const TRAFFIC_PRUNE_BELOW = 1;
+
+/** Accumulated traffic before a tile is worth paving. */
+export const ROAD_TRAFFIC_THRESHOLD = 60;
+
+/** Ticks between road-planning passes. */
+export const ROAD_PLAN_INTERVAL = 150;
+
+/** Cap on outstanding sites, so builders are never swamped by the planner. */
+export const ROAD_MAX_PENDING_SITES = 4;
+
+/**
  * K — ticks between telemetry snapshots. Distinct from COLONY_SIZE.
  * The server runs at ~20ms/tick (~50 ticks/sec), so 10 emitted five snapshots a
  * second and swamped SigNoz. At 100 it is roughly one every two seconds, which

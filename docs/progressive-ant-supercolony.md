@@ -640,6 +640,34 @@ function pheromoneCostMatrix(roomName) {
 
 **Key insight**: This replaces static road planning with emergent route optimization. Roads become "frozen pheromone" — build roads where pheromone consistently exceeds a threshold.
 
+**The biology is literal, not metaphorical.** *Atta* leafcutters do not merely
+lay chemical trails over existing ground — they physically clear **trunk trails**
+through undergrowth, up to 200 m long, cutting vegetation and removing debris.
+Workers move measurably faster on cleared trail than over litter, and the
+energetic savings repay the clearing investment within days. Some workers
+specialise in trail maintenance, responding to unpredictable obstructions like
+leaf fall.
+
+Most importantly for us, this is **"infrastructure construction without
+information exchange"**: no ant plans the network, and none communicates a route.
+Each clears obstacles on paths it happens to use heavily, and the network is
+simply what remains. That is a road system arising from stigmergy alone.
+
+**Implemented and observed (2026-07-30).** Creeps deposit one unit of trail
+pheromone on the tile they occupy each tick; the map evaporates on a timer, which
+is what keeps a road meaning "currently useful" rather than "walked once" —
+without decay every tile ever stepped on eventually crosses the threshold and the
+colony paves the whole room. Tiles above the threshold get a road construction
+site, capped so builders are never swamped. **Result: 105 roads built**, none of
+them planned; the network is the residue of where the colony actually walked.
+
+This also resolved a real inefficiency: with no construction sites the `build`
+stimulus sat at zero, so builders idled. Roads give the colony permanent,
+self-generated work that also compounds — every road makes future traffic cheaper.
+
+Sources: [Royal Society — Infrastructure construction without information exchange](https://royalsocietypublishing.org/doi/10.1098/rspb.2018.2539),
+[Insectes Sociaux — Trunk trail maintenance in leafcutter ants](https://link.springer.com/article/10.1007/s00040-016-0530-y)
+
 ### 5.5 Cross-Room Navigation
 
 Ants use **edge pheromones** at territory boundaries and **inter-nest trails** between satellite colonies.

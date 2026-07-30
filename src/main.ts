@@ -1,3 +1,4 @@
+import { decayTraffic, depositTraffic, proposeRoads } from './pheromone';
 import { runNestExpansion } from './spawn/nest';
 import { runSpawning } from './spawn/respawn';
 import { applyCongestion, computeStimuli, readEnergy, readRoom } from './creep/stimuli';
@@ -114,6 +115,16 @@ function runRoom(room: Room): void {
       room: room.name,
       energyAvailable: energy.available,
     });
+  }
+
+  // Trail pheromone: deposit where creeps actually are, evaporate on a timer,
+  // and let roads crystallise where the trail persists. No route is planned —
+  // the network is whatever the colony kept walking.
+  depositTraffic(room, creeps);
+  decayTraffic(room);
+  const roads = proposeRoads(room);
+  if (roads && roads.placed > 0) {
+    emit('INFO', 'road-plan', { room: room.name, placed: roads.placed, hottest: Math.round(roads.hottest) });
   }
 
   // The colony sizes its own nest: population pressure proposes extensions,
