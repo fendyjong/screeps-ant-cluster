@@ -8,10 +8,39 @@ export interface RoomSnapshot {
   constructionSiteCount: number;
 }
 
+/**
+ * Sums energy across spawns and extensions directly instead of trusting
+ * `room.energyAvailable` / `room.energyCapacityAvailable`.
+ *
+ * Observed 2026-07-30 (tick ~86120): both room properties arrived as `undefined`
+ * on this server, which serialized into telemetry as null. `computeStimuli` then
+ * fell through to `else supply = 0`, so the supply stimulus was pinned at zero —
+ * no creep ever refilled the spawn, the saturating starvation guard could never
+ * fire, and the colony ran monotask on `upgrade` while its spawn sat empty.
+ * Reading the structures is unambiguous and cannot silently degrade this way.
+ */
+export function readEnergy(room: Room): { available: number; capacity: number } {
+  const stores = room
+    .find(FIND_MY_STRUCTURES)
+    .filter(
+      (s): s is StructureSpawn | StructureExtension =>
+        s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION,
+    );
+
+  let available = 0;
+  let capacity = 0;
+  for (const s of stores) {
+    available += s.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
+    capacity += s.store.getCapacity(RESOURCE_ENERGY) ?? 0;
+  }
+  return { available, capacity };
+}
+
 export function readRoom(room: Room): RoomSnapshot {
+  const energy = readEnergy(room);
   return {
-    energyAvailable: room.energyAvailable,
-    energyCapacityAvailable: room.energyCapacityAvailable,
+    energyAvailable: energy.available,
+    energyCapacityAvailable: energy.capacity,
     hasController: room.controller !== undefined && room.controller.my,
     constructionSiteCount: room.find(FIND_CONSTRUCTION_SITES).length,
   };

@@ -126,3 +126,58 @@ Next iteration: get the server restarted, start the shipper, and observe M1's ac
 distribution for a few thousand ticks BEFORE changing any behavior. Specifically worth
 checking: whether the synchronized-switching prediction holds, and whether the supply
 stimulus saturation keeps the colony out of starvation.
+
+### 2026-07-30 — iteration 1
+
+**Observed.** No telemetry existed, so per the loop rules this iteration diagnosed instead
+of adding features. Server had been restarted, `log_console = true` was live, yet
+`engine_runner1.log` held only boot messages and `users.console` was empty.
+
+**Root cause of the telemetry blackout:** on a Steam-launched server, `log_console`
+forwards console output to the *launcher process's stdout*, which the GUI swallows. Nothing
+tailable is ever written. `tools/log-shipper` cannot work on this setup. This was the exact
+risk the design spec flagged as "verify, don't assume."
+
+**Fix shipped:** telemetry now also goes into a bounded `Memory.telemetry` ring buffer
+(`TELEMETRY_BUFFER_MAX = 60`), because Memory *does* reach disk — the server flushes it into
+`db.json` roughly every 10s (measured). New `tools/memory-shipper/` polls `db.json`, extracts
+`memory:<userId>`, and ships new records to SigNoz over OTLP.
+**SigNoz is now live** — snapshots and task-switch events streaming under
+`service.name=screeps`.
+
+**Research (folded into the research doc):** the "parked" creep observed with every
+threshold above every stimulus is not a defect — roughly 40% of real ant workers are
+persistently inactive, and colonies with *variable* thresholds outlast uniform-threshold
+ones because inactive workers form a reserve that replaces fatigued active workers. Our
+jitter reproduces that reserve caste for free. One divergence worth acting on: real inactive
+ants *rest*, whereas ours keeps running a task at negative margin — burning CPU and
+occupying tiles.
+
+**Second bug the telemetry immediately exposed (fixed):** `room.energyAvailable` and
+`room.energyCapacityAvailable` both arrive `undefined` on this server. Two consumers were
+silently degraded by it:
+- `computeStimuli` fell through to `else supply = 0`, pinning the supply stimulus at zero —
+  so no creep ever refilled the spawn and the saturating starvation guard could never fire.
+- `main.ts`'s starvation check compared `undefined < MIN_BODY_COST`, which is `false`, so
+  the `colony-starvation` ERROR **never fired even though the colony was dying**.
+Both now use a new `readEnergy(room)` that sums spawn/extension stores directly. Verified:
+`energyAvailable` reports real numbers and ERROR events now fire (75 of them).
+
+**Colony died during this iteration.** Zero creeps, spawn empty. The human raised tick speed
+to 50ms, so a 1500-tick creep lifetime is ~75 real seconds — a full generation elapsed inside
+a single 45s verification wait. Confirmed the engine does **not** auto-refill an empty spawn
+for a creepless player (watched 200 ticks; `store` stayed `{}`), so this state is
+unrecoverable without a human respawn.
+
+**Top suspect for the death, for the next iteration to verify first:**
+`readEnergy` reports `energyCapacity: 0`, but a spawn should report 300. That implies
+`room.find(FIND_MY_STRUCTURES)` is returning empty on this server — and **`supply.ts` uses
+exactly that call to find its delivery targets**. If it returns nothing, the supply task can
+never deliver energy to the spawn, which would explain the death spiral directly.
+`runSpawning` uses `FIND_MY_SPAWNS` and demonstrably works, so switching `supply.ts` and
+`readEnergy` to `FIND_MY_SPAWNS` + an explicit extension lookup is the probable fix.
+
+**Next iteration:** (1) confirm the `FIND_MY_STRUCTURES` hypothesis and fix `supply.ts`;
+(2) after a respawn, verify a creep actually refills the spawn and the colony sustains
+itself across a generation; (3) then consider letting all-negative-margin creeps genuinely
+idle rather than working at a loss.

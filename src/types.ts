@@ -18,10 +18,28 @@ export interface TaskState {
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
+/** One emitted telemetry line, buffered in Memory for the external shipper. */
+export interface TelemetryRecord {
+  tick: number;
+  level: LogLevel;
+  event: string;
+  [key: string]: unknown;
+}
+
 declare global {
   interface CreepMemory {
     task?: TaskName;
     thresholds?: ThresholdProfile;
     taskState?: TaskState;
+  }
+
+  interface Memory {
+    /**
+     * Bounded ring buffer of recent telemetry. Exists because this private
+     * server is Steam-launched: console output goes to the launcher's stdout,
+     * which no external process can tail. Memory reaches disk via the server's
+     * db.json instead, so that is the escape route.
+     */
+    telemetry?: TelemetryRecord[];
   }
 }

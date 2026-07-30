@@ -23,6 +23,13 @@ export const DEBUG_LOGGING = false;
 /** Prefixed to every telemetry line so the shipper can find our output. */
 export const TELEMETRY_SENTINEL = '[ANT]';
 
+/**
+ * Cap on Memory.telemetry. Memory is serialized every tick, so this buffer must
+ * stay small. At SNAPSHOT_INTERVAL=10 and ~0.8 ticks/sec, 60 records is roughly
+ * 12 minutes of snapshots — far more than the ~10s db.json flush cadence needs.
+ */
+export const TELEMETRY_BUFFER_MAX = 60;
+
 /** Cost of the minimum body — the affordability point where supply saturates. */
 export const MIN_BODY_COST = 200;
 

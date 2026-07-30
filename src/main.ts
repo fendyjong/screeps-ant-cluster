@@ -1,5 +1,5 @@
 import { runSpawning } from './spawn/respawn';
-import { computeStimuli, readRoom } from './creep/stimuli';
+import { computeStimuli, readEnergy, readRoom } from './creep/stimuli';
 import { decide } from './creep/decide';
 import { ensureProfile } from './creep/thresholds';
 import { run as runBuild } from './creep/tasks/build';
@@ -26,6 +26,7 @@ function pruneCreepMemory(): void {
 }
 
 function runRoom(room: Room): void {
+  const energy = readEnergy(room);
   const stimuli = computeStimuli(readRoom(room));
   const distribution: TaskDistribution = { supply: 0, upgrade: 0, build: 0 };
 
@@ -82,19 +83,19 @@ function runRoom(room: Room): void {
   if (
     alive === 0 &&
     !spawnBusy &&
-    room.energyAvailable < MIN_BODY_COST &&
+    energy.available < MIN_BODY_COST &&
     Game.time % SNAPSHOT_INTERVAL === 0
   ) {
     emit('ERROR', 'colony-starvation', {
       room: room.name,
-      energyAvailable: room.energyAvailable,
+      energyAvailable: energy.available,
     });
   }
 
   drawCreepLabels(room);
 
   if (Game.time % SNAPSHOT_INTERVAL === 0) {
-    emitSnapshot(room, stimuli, distribution);
+    emitSnapshot(room, stimuli, distribution, energy);
   }
 }
 
