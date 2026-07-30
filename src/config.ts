@@ -160,9 +160,24 @@ export const REMOTE_MAX_STIMULUS = 0.55;
  */
 export const RESERVE_ENABLED = true;
 
-/** [CLAIM, MOVE] — 600 + 50. Affordable against the current 1800 capacity. */
-export const RESERVER_BODY: BodyPartConstant[] = [CLAIM, MOVE];
-export const RESERVER_COST = 650;
+/**
+ * Reserver body: two CLAIM parts, not one.
+ *
+ * `CONTROLLER_RESERVE` adds 1 reservation tick per CLAIM part per tick while the
+ * reservation decays 1/tick, so a single-CLAIM reserver **exactly breaks even**.
+ * It holds a room only while physically standing at the controller and banks
+ * nothing, so the room lapses the instant that creep dies or spends time
+ * travelling. Measured consequence: only 2 of 4 reserved rooms were actually
+ * held at any moment despite 3 reservers being alive.
+ *
+ * Two CLAIM parts net +1/tick, banking a buffer that carries the reservation
+ * across the gap until a replacement arrives. Costs 1250 against 650, but the
+ * comparison is not per-creep — it is coverage per energy, and a reservation
+ * that lapses half the time delivers none of the doubled source yield it was
+ * bought for.
+ */
+export const RESERVER_BODY: BodyPartConstant[] = [CLAIM, CLAIM, MOVE];
+export const RESERVER_COST = 1250;
 
 /**
  * How many neighbouring rooms to hold reservations on.

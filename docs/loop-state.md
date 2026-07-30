@@ -1026,3 +1026,41 @@ part adds 1/tick against 1/tick decay), so a room drops the moment its reserver 
 `[CLAIM, CLAIM, MOVE]` body would build a buffer. Also unverified: whether reservation has
 actually raised sustained income — average energy is 477 here versus 543-780 earlier, though
 that is confounded by the collapse and recovery.
+
+### 2026-07-30 — iteration 18 — measuring output, not buffer level
+
+**Methodological correction, and it invalidates how I judged the last two iterations.**
+I had been treating `energyAvailable` as an income signal. It is not — it is a *buffer level*.
+A colony that spends everything it earns keeps it low no matter how much comes in, so the flat
+377–609 trend across 20 minutes proved nothing in either direction.
+
+GCL rises **only** from upgrading, so its rate is a genuine output measure. Measured over 1632
+ticks: **5020 GCL points → 3.08 energy/tick of sustained upgrade output.**
+
+That number reframes everything. Rough energy budget at ~20 workers:
+- creep replacement: 20 × 800 / 1500 ≈ **10.7/tick**
+- reservers: 3 × 650 / 600 ≈ **3.25/tick**
+- upgrading: **3.08/tick**
+
+**The reservers were costing more than the colony's entire upgrade throughput** while holding
+only **2 of 4** rooms — verified directly against controller reservation state, not inferred.
+
+**Root cause: the reserver body was break-even by construction.** `CONTROLLER_RESERVE` adds 1
+tick per CLAIM part per tick against 1/tick decay, so a `[CLAIM, MOVE]` reserver nets exactly
+zero. It holds a room only while standing at the controller and banks nothing, so the room
+lapses the moment that creep dies or spends time travelling. Three reservers alive, two rooms
+held — the missing coverage is travel time and replacement gaps.
+
+**Improved: reserver body `[CLAIM, MOVE]` → `[CLAIM, CLAIM, MOVE]`** (650 → 1250 energy).
+Two CLAIM parts net +1/tick, banking roughly 500 ticks of buffer per lifetime, which carries a
+reservation across the gap until a replacement arrives. The right comparison is not cost per
+creep but **coverage per energy**: a reservation that lapses half the time delivers none of the
+doubled source yield it was bought for.
+
+**Next iteration:**
+1. Verify coverage actually reaches 4 of 4 and stays there, and that upgrade output rises above
+   3.08/tick. If coverage improves but output does not, reservation is not the bottleneck and
+   the energy is going somewhere else — check the replacement-cost share.
+2. **Use GCL rate as the standard output metric from now on.** `energyAvailable` answers "is
+   the buffer full", never "is the colony productive".
+3. Still open: pheromone-weighted pathfinding; idle state for all-negative-margin creeps.
