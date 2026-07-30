@@ -157,6 +157,16 @@ export const THRESHOLD_MAX = 0.9;
 export const MUTATION_RATE = 0.08;
 export const GENE_POOL_SIZE = 20;
 
+/**
+ * Bump when the fitness function changes meaning. Scores are only comparable
+ * within one definition: the previous version scored the *fraction of life spent
+ * working* and routinely hit 1.0, while the current one scores *value delivered*
+ * and tops out near the average stimulus. Mixing the two would let obsolete
+ * genes outrank every new one forever and the change would silently never take
+ * effect. On a version change the pool is discarded and re-earned.
+ */
+export const FITNESS_VERSION = 2;
+
 /** GCL curve, verified against constants.js on disk. */
 export const GCL_POW = 2.4;
 export const GCL_MULTIPLY = 1000000;

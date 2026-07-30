@@ -597,3 +597,44 @@ terrain, threat), which is safe to build before the gate opens.
    monoculture pressure described above.
 2. Room scouting + reservation — available now, and accelerates the claim gate.
 3. Pheromone-weighted pathfinding (other half of M3).
+
+### 2026-07-30 — iteration 10 — value-weighted fitness
+
+**Fixed the flaw shipped in iteration 9.** The fitness function scored the *fraction of life
+spent working*, which rewarded task availability rather than task value. `upgrade` always has
+work (constant 0.5 stimulus), so always-upgraders scored a perfect 1.0 regardless of whether
+the colony was starving for supply at the time, while `supply` and `build` genes idled during
+quiet periods and were bred out. The pool was converging on a monoculture.
+
+**Fitness is now value delivered per tick of life.** Each unit of work is weighted by the
+colony's raw need for that task at the moment it happened, so hauling during an energy crisis
+outscores upgrading a controller that was never starved. Idle ticks still contribute nothing,
+which is what punishes a builder standing around with no site.
+
+The weight is the **undamped** stimulus, deliberately. Congestion damping describes how
+crowded a task is, not how much the work mattered — a creep should not be penalised for
+helping with something genuinely urgent just because others helped too.
+
+**Gene pools are versioned now (`FITNESS_VERSION`), and this was essential rather than
+tidiness.** Scores are only comparable within one fitness definition: the old scale routinely
+hit 1.0 while the new one tops out near the mean stimulus. Carrying the old genes across would
+have let obsolete high scores outrank every honestly scored newcomer permanently, and the fix
+would have silently never taken effect. On a version change the pool is discarded and
+re-earned.
+
+**Result after ~100s (229 generations, pool refilled):**
+- Best fitness **1.000 → 0.525** — the new ceiling is honest; ~0.52 is roughly the mean
+  stimulus a creep can capture, where the old function was trivially saturable.
+- Fittest genes' upgrade thresholds **0.26–0.48 → 0.41–0.53**, and supply/build now sit in a
+  comparable band. Selection produces balanced profiles instead of upgrade specialists.
+- Colony健康 throughout: capacity reached **1350** (from 300 at the start of the session),
+  distribution supply 3–5 / upgrade 18–22 / build 0–2.
+
+Note the remaining upgrade-heaviness is now *correct* rather than an artifact: upgrade
+stimulus is a constant 0.5 while supply sits at 0 whenever reserves are full, and GCL — the
+sole gate on claiming — comes only from upgrading. The colony is weighting toward the thing it
+actually needs.
+
+**Next iteration candidates:** room scouting + reservation (available now, no GCL needed, and
+it accelerates the claim gate); pheromone-weighted pathfinding (other half of M3); idle state
+for all-negative-margin creeps (§4.2.1).

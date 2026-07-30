@@ -31,8 +31,12 @@ declare global {
     task?: TaskName;
     thresholds?: ThresholdProfile;
     taskState?: TaskState;
-    /** Lifetime work record, the raw material for fitness. */
-    work?: { productive: number; ticks: number };
+    /**
+     * Lifetime work record. `value` accumulates the colony's need for the task
+     * at the moment each unit of work happened, so scarce-but-critical work
+     * outweighs abundant busywork.
+     */
+    work?: { value: number; ticks: number };
   }
 
   interface Memory {
@@ -52,6 +56,10 @@ declare global {
     traffic?: Record<string, Record<string, number>>;
 
     /** Gene pool of retired creeps' threshold profiles, best-first. */
-    evolution?: { genes: Array<{ thresholds: ThresholdProfile; fitness: number }>; generation: number };
+    evolution?: {
+      genes: Array<{ thresholds: ThresholdProfile; fitness: number }>;
+      generation: number;
+      version?: number;
+    };
   }
 }

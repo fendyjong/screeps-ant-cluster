@@ -14,7 +14,7 @@ import { drawCreepLabels } from './visuals';
 import { emit, emitSnapshot, TaskDistribution } from './telemetry';
 import { TaskName } from './types';
 
-const RUNNERS: Record<TaskName, (creep: Creep) => void> = {
+const RUNNERS: Record<TaskName, (creep: Creep, value: number) => void> = {
   supply: runSupply,
   upgrade: runUpgrade,
   build: runBuild,
@@ -33,7 +33,7 @@ function pruneCreepMemory(): void {
       // information exists — after the delete it is gone forever.
       const memory = Memory.creeps[name];
       const record = memory.work;
-      const fitness = record && record.ticks > 0 ? record.productive / record.ticks : 0;
+      const fitness = record && record.ticks > 0 ? record.value / record.ticks : 0;
       retire(memory.thresholds, fitness);
       delete Memory.creeps[name];
     }
@@ -77,7 +77,7 @@ function runRoom(room: Room): void {
         deferred += 1;
         distribution[previous ?? decision.task] += 1;
         if (previous) {
-          RUNNERS[previous](creep);
+          RUNNERS[previous](creep, raw[previous]);
           continue;
         }
       }
@@ -110,7 +110,7 @@ function runRoom(room: Room): void {
         margins: decision.margins,
       });
 
-      RUNNERS[decision.task](creep);
+      RUNNERS[decision.task](creep, raw[decision.task]);
     } catch (err) {
       emit('ERROR', 'creep-exception', {
         creep: creep.name,

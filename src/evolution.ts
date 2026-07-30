@@ -1,4 +1,5 @@
 import {
+  FITNESS_VERSION,
   GENE_POOL_SIZE,
   MUTATION_RATE,
   THRESHOLD_BASE,
@@ -19,9 +20,16 @@ import { generateProfile } from './creep/thresholds';
  * inherit from that pool with mutation.
  *
  * The three pieces a genetic algorithm needs:
- *  - **Fitness**: fraction of a creep's lifetime spent doing useful work rather
- *    than idling. Measured, not assumed — each task reports whether its action
- *    actually succeeded this tick.
+ *  - **Fitness**: value delivered per tick of life. Each unit of work is weighted
+ *    by how badly the colony needed that task at the moment it happened, so a
+ *    creep hauling during an energy crisis outscores one upgrading a controller
+ *    that was never starved.
+ *
+ *    An earlier version scored the raw *fraction of life spent working*, which
+ *    rewarded task availability rather than task value: `upgrade` always has
+ *    work, so always-upgraders scored a perfect 1.0 no matter what the colony
+ *    actually needed, and the pool bred toward a monoculture of upgraders. The
+ *    weighting is what makes selection track usefulness instead of busyness.
  *  - **Selection**: fitness-weighted draw from a bounded pool of dead creeps'
  *    profiles, so good profiles breed more often without ever being the only
  *    option.
@@ -50,23 +58,42 @@ interface GenePool {
 }
 
 function pool(): GenePool {
-  const memory = Memory.evolution ?? (Memory.evolution = { genes: [], generation: 0 });
+  const memory =
+    Memory.evolution ?? (Memory.evolution = { genes: [], generation: 0, version: FITNESS_VERSION });
   if (!Array.isArray(memory.genes)) memory.genes = [];
+
+  // Scores are only comparable within one fitness definition. Carrying genes
+  // across a redefinition would let obsolete high scores outrank every honestly
+  // scored newcomer, and the new function would never actually take effect.
+  if (memory.version !== FITNESS_VERSION) {
+    memory.genes = [];
+    memory.version = FITNESS_VERSION;
+  }
   return memory as GenePool;
 }
 
-/** Fraction of ticks this creep spent actually working. */
+/** Value delivered per tick of life. */
 export function fitnessOf(creep: Creep): number {
   const record = creep.memory.work;
   if (!record || record.ticks <= 0) return 0;
-  return record.productive / record.ticks;
+  return record.value / record.ticks;
 }
 
-/** Called once per creep per tick with whether its action did something. */
-export function recordWork(creep: Creep, productive: boolean): void {
-  const record = creep.memory.work ?? (creep.memory.work = { productive: 0, ticks: 0 });
+/**
+ * Called once per creep per tick.
+ *
+ * `value` is the colony's raw need for the task being performed — the undamped
+ * stimulus. Undamped on purpose: congestion damping describes how crowded a task
+ * is, not how much the work mattered, and a creep should not be penalised for
+ * helping with something genuinely urgent just because others helped too.
+ *
+ * Idle ticks contribute nothing, which is what punishes a builder standing
+ * around with no site to work.
+ */
+export function recordWork(creep: Creep, productive: boolean, value: number): void {
+  const record = creep.memory.work ?? (creep.memory.work = { value: 0, ticks: 0 });
   record.ticks += 1;
-  if (productive) record.productive += 1;
+  if (productive) record.value += value;
 }
 
 /**
