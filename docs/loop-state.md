@@ -1064,3 +1064,28 @@ doubled source yield it was bought for.
 2. **Use GCL rate as the standard output metric from now on.** `energyAvailable` answers "is
    the buffer full", never "is the colony productive".
 3. Still open: pheromone-weighted pathfinding; idle state for all-negative-margin creeps.
+
+**Verified same iteration.** The 2-CLAIM body works as intended and the evidence is stark:
+
+| room | buffer with 1x CLAIM | buffer with 2x CLAIM |
+|---|---|---|
+| W5N7 | 1-2 ticks | **4998** (at CONTROLLER_RESERVE_MAX 5000) |
+| W6N8 | 1-2 ticks | **1082** |
+
+Reservations now persist for thousands of ticks with **zero reservers alive**, which is exactly
+the point — one reserver saturates a room and the banked buffer carries it long after that
+creep dies. Workers recovered to 25.
+
+**New binding constraint, and it is different from the old one.** Coverage sits at 2 of 4, but
+no longer because reservations lapse instantly — because reservers cost 1250 and average energy
+is 528, so they only spawn on peaks (energy tops out around 1374). Coverage should fill in
+gradually rather than needing another mechanism.
+
+There was a transient collapse to 4 creeps around the deploy. Not attributed with confidence:
+it coincided with a 1250-energy spawn while energy was tight, but the colony also had a dip in
+progress at the time. Worth watching rather than acting on — the recovery to 25 workers was
+prompt.
+
+**Do not "fix" the low reserver count by lowering the cost back.** The 1-CLAIM body was
+strictly worse: cheaper per creep but delivering no coverage at all, since it banked nothing.
+This is a coverage-per-energy question, not a cost-per-creep one.
