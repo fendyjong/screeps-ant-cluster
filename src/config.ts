@@ -15,8 +15,18 @@ import { TaskName } from './types';
 /** Survival floor — always replace below this, regardless of reserves. */
 export const COLONY_MIN = 2;
 
-/** Safety ceiling, so a runaway feedback loop cannot exhaust CPU. */
-export const COLONY_MAX = 10;
+/**
+ * Safety ceiling, so a runaway feedback loop cannot exhaust CPU.
+ *
+ * Raised 10 -> 25 to test whether satiation feedback is genuinely self-limiting.
+ * At 10 the colony still held 300/300 energy, so the ceiling was the binding
+ * constraint, not the stimulus — which left the central M2 claim unproven. With
+ * headroom, sources (finite, 300-tick regen) and a fixed 300-energy reserve
+ * should make added workers stop paying for themselves, dropping the surplus
+ * ratio and halting growth on its own. If the colony instead pins at 25, the
+ * feedback is NOT self-limiting and the model needs rethinking.
+ */
+export const COLONY_MAX = 25;
 
 /** Reserves must be at least this full before the colony invests in growth. */
 export const GROWTH_SURPLUS_RATIO = 0.95;
