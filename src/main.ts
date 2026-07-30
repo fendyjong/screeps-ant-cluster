@@ -240,6 +240,25 @@ function runRoom(room: Room): void {
     // with evidence.
     emit('INFO', 'evolution-trajectory', { room: room.name, ...evolutionTrajectory() });
 
+    // Death clustering, the quantity that actually decides whether the spawn can
+    // keep up. The average replacement rate has always looked fine; it is the
+    // busiest window that outruns one spawn and compounds into a collapse.
+    const lives = creeps
+      .filter(c => c.memory.caste !== 'reserver')
+      .map(c => c.ticksToLive ?? 0);
+    const windows: Record<number, number> = {};
+    for (const ttl of lives) {
+      const bucket = Math.floor(ttl / 100);
+      windows[bucket] = (windows[bucket] ?? 0) + 1;
+    }
+    const peak = Math.max(0, ...Object.values(windows));
+    emit('INFO', 'demography', {
+      room: room.name,
+      alive: lives.length,
+      peakDeathsPer100: peak,
+      spawnCapacityPer100: Math.round((100 / (2 * 6 * 3)) * 100) / 100,
+    });
+
     const blocks = Memory.spawnBlocks ?? {};
     if (Object.keys(blocks).length > 0) {
       emit('INFO', 'spawn-blocks', { room: room.name, ...blocks });

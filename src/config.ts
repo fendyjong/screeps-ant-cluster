@@ -42,7 +42,44 @@ export const COLONY_MIN_FRACTION = 0.35;
  * ratio and halting growth on its own. If the colony instead pins at 25, the
  * feedback is NOT self-limiting and the model needs rethinking.
  */
-export const COLONY_MAX = 25;
+/**
+ * Demographic ceiling, DERIVED from what one spawn can actually sustain.
+ *
+ * This was 25, picked as a CPU backstop, and the arithmetic nobody had done says
+ * it was too high. A colony of N creeps with `CREEP_LIFE_TIME` 1500 must replace
+ * N/15 creeps per 100 ticks forever. One spawn building a 12-part body takes
+ * 12 * `CREEP_SPAWN_TIME` = 36 ticks, so it can produce 100/36 = 2.78 creeps per
+ * 100 ticks. Equating the two gives an absolute ceiling of
+ * `CREEP_LIFE_TIME / spawnTicks` = **41.7 creeps** — beyond that a single spawn
+ * cannot keep up even with perfectly spread ages, and RCL 7 is the earliest a
+ * second spawn exists.
+ *
+ * The absolute ceiling is the wrong number to run at, because deaths are not
+ * uniform. Measured at 28 creeps: the busiest upcoming 100-tick window held
+ * **3 deaths against a capacity of 2.78** — peak demand already exceeded what the
+ * spawn could deliver, while the average sat at a comfortable 1.87. Birth gaps
+ * still show runs of exactly 36 ticks, the spawn-limited signature, so clustering
+ * has not gone away and cannot be assumed away.
+ *
+ * `SPAWN_HEADROOM` reserves half the spawn's throughput for those transients.
+ * That is the whole design: **run the colony at a size where the worst cluster
+ * still fits through the spawn**, rather than at a size where the average does
+ * and every cluster compounds into a collapse.
+ *
+ * Deriving it also means the ceiling moves on its own when the inputs change — a
+ * second spawn at RCL 7, or a different body size — instead of silently becoming
+ * wrong the way the hardcoded 25 did.
+ */
+const CREEP_LIFE_TIME_TICKS = 1500;
+const CREEP_SPAWN_TICKS = 3;
+const BODY_UNIT_PARTS = 6;
+const MAX_BODY_UNITS_VALUE = 2;
+const SPAWN_HEADROOM = 0.5;
+
+export const COLONY_MAX = Math.floor(
+  (CREEP_LIFE_TIME_TICKS / (MAX_BODY_UNITS_VALUE * BODY_UNIT_PARTS * CREEP_SPAWN_TICKS)) *
+    SPAWN_HEADROOM,
+);
 
 /**
  * Absolute energy the colony must hold before investing in a new worker.

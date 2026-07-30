@@ -1467,6 +1467,7 @@ and the measured effect — including when the effect was nil.
 | Fewer, larger workers (r/K selection) | life-history theory | **rejected** | spawn time is proportional to parts and total parts is fixed by the economy, so 25x12 and 17x18 both occupy the one spawn ~60% of the time — no relief from the bottleneck. Do not retry as a spawn-throughput fix |
 | Variable worker lifespan (de-synchronisation) | ant/bee life-history | adopted, no effect yet | jittered replacement lead time; collapses continued unchanged |
 | Slot scarcity over resource scarcity | economics (capital vs labour) | adopted | body composition all-3-part → 27/28 full-size; `saving-for-full-body` blocked 0 ticks, so waiting cost nothing |
+| Carrying capacity bounds population | central-place foraging (§7.1.1) | adopted | per-creep output rises monotonically as headcount falls: 0.094 at 28.5 creeps → 0.203 at 22. Same total output from 6 fewer creeps |
 
 ### 12.4 What a superorganism actually optimises
 

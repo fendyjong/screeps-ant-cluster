@@ -23,6 +23,7 @@ efficiency.
 | 30 | growth reserve scales with deficit | at 17-19 creeps: blocked 9-45 ticks/100 → **0** | **worked** (verified on a later collapse) |
 | 31 | per-creep jitter on replacement lead time | collapses continued (26→2 again) | **did not fix collapses**; birth-gap test still inconclusive |
 | 32 | require full-size body outside survival | bodies all-3-part → 27/28 at 12-part | **worked** for composition; output 2.67@28-29, NOT an improvement |
+| 33 | `COLONY_MAX` derived from spawn capacity (25 → 20) | 2.67@28-29 → **4.47@22**; per-creep 0.094 → **0.203** | **worked**; colony was past carrying capacity |
 
 # Loop state — progressive ant supercolony
 
@@ -1870,3 +1871,57 @@ collapses. `spawn-busy` at 85-98% through every fall is a physical one-spawn lim
 policy-fixed before RCL 7. **The trigger has never been found — only the amplifiers.** The next
 iteration should stop adding spawn policy and instead answer why ~10 creeps die inside 200-300
 ticks when the age distribution before the fall looks uniform.
+
+### 2026-07-31 — iteration 33 — the colony was over-populated, and the ceiling is now derived
+
+**The collapse trigger question is answered on the first two checks, and it is not hostile.** A
+tombstone carried `creepTicksToLive: 1` — died of old age. No hostile creeps, no keeper lairs, no
+invader cores, no hostile towers, zero damaged creeps anywhere in W5N8 or W4N8. **The collapses
+are purely demographic.** That closes the "are they being killed" line for good; do not reopen it
+without new evidence.
+
+**The arithmetic nobody had done.** A colony of N creeps with `CREEP_LIFE_TIME` 1500 must replace
+N/15 creeps per 100 ticks forever. One spawn building a 12-part body takes 12 *
+`CREEP_SPAWN_TIME` = 36 ticks, so it delivers 100/36 = **2.78 creeps per 100 ticks**. Equating
+them gives an absolute ceiling of **41.7 creeps** for a single spawn — and RCL 7 is the earliest a
+second one exists.
+
+But the average was never the problem. Measured at 28 creeps, the busiest upcoming 100-tick window
+held **3 deaths against 2.78 capacity** — peak demand already exceeded the spawn while the average
+sat at a comfortable 1.87. Every collapse was a cluster the spawn could not clear, compounding.
+
+**Changed: `COLONY_MAX` is now derived rather than picked** —
+`floor(CREEP_LIFE_TIME / (MAX_BODY_UNITS * BODY_UNIT.length * CREEP_SPAWN_TIME) * SPAWN_HEADROOM)`
+= floor(41.7 * 0.5) = **20**, against the hardcoded 25 it replaced. Half the spawn's throughput is
+reserved for transients: run at a size where the *worst cluster* fits through the spawn, not one
+where the average does. Because it is derived, it moves on its own when a second spawn arrives at
+RCL 7 or the body size changes, instead of silently going stale the way the 25 did.
+
+**Result: worked, and it also explains the unexplained decline.** Population settled at 22 (the
+cap of 20 plus the ~10% pre-spawn overshoot). Output **4.47 at 22 creeps** against 2.67 at 28-29.
+Per-creep output across every post-fitness measurement:
+
+| headcount | total | per creep |
+|---|---|---|
+| 28.5 | 2.67 | 0.094 |
+| 26.5 | 3.91 | 0.148 |
+| 26.5 | 5.02 | 0.189 |
+| 25.5 | 4.57 | 0.179 |
+| **22** | **4.47** | **0.203** |
+
+**Per-creep output rises monotonically as headcount falls** — 2.2x better at 22 than at 28.5. The
+colony was past its carrying capacity, exactly as §7.1.1's central-place argument predicts, and
+the iteration-32 decline to 2.67 needed no collapse to explain it. That interpretation is now
+settled: it was crowding. Total output is unchanged within noise while costing 6 fewer creeps to
+replace, so the saving is real even where the headline number is flat.
+
+**Not fixed, and stated plainly: peak clustering still exceeds spawn capacity.** The new
+`demography` telemetry shows peaks of 3-4 deaths per 100 ticks against 2.78 even at 22 creeps.
+The 0.5 headroom factor reduced the frequency but did not eliminate the overrun, so collapses may
+well continue. If they do, the honest options are a smaller `SPAWN_HEADROOM` or attacking the
+clustering itself — and clustering has already resisted the lead-time jitter.
+
+**Next:** watch `demography` across the next collapse. `peakDeathsPer100` exceeding
+`spawnCapacityPer100` in the windows *before* the fall would confirm the mechanism end to end; if
+a collapse happens while peak is at or under capacity, the cluster theory is wrong and should be
+withdrawn.
