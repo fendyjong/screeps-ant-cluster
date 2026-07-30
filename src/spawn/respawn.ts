@@ -18,6 +18,7 @@ import {
   MIN_BODY,
   MIN_BODY_COST,
   PRESPAWN_TRAVEL_TICKS,
+  PRESPAWN_JITTER_TICKS,
 } from '../config';
 import { breed } from '../evolution';
 
@@ -105,6 +106,21 @@ export function reservationTargets(): string[] {
  * stopping them, so the next one gets evidence instead of a hypothesis. Every
  * `return null` below is a distinct reason the colony declined to reproduce.
  */
+/**
+ * A stable per-creep offset on the replacement lead time, derived from the name.
+ *
+ * Deterministic rather than random: the same creep must get the same answer every
+ * tick, or it would flicker in and out of the headcount and the spawn gate would
+ * chatter. Hashing the name gives that for free and needs no memory field, so it
+ * also applies to creeps already alive rather than only to ones born after this
+ * lands.
+ */
+function leadJitter(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 100003;
+  return hash % PRESPAWN_JITTER_TICKS;
+}
+
 function block(reason: string): null {
   const counts = Memory.spawnBlocks ?? (Memory.spawnBlocks = {});
   counts[reason] = (counts[reason] ?? 0) + 1;
@@ -146,11 +162,11 @@ export function runSpawning(
   //
   // `ticksToLive` is undefined while a creep is still being spawned; that is a
   // creep about to start its life, so it counts.
-  const leadTime = MAX_BODY_UNITS * BODY_UNIT.length * CREEP_SPAWN_TIME + PRESPAWN_TRAVEL_TICKS;
+  const baseLead = MAX_BODY_UNITS * BODY_UNIT.length * CREEP_SPAWN_TIME + PRESPAWN_TRAVEL_TICKS;
   const alive = mine.filter(
     c =>
       c.memory.caste !== 'reserver' &&
-      (c.ticksToLive === undefined || c.ticksToLive > leadTime),
+      (c.ticksToLive === undefined || c.ticksToLive > baseLead + leadJitter(c.name)),
   ).length;
   if (alive >= COLONY_MAX) return block('at-cap');
 

@@ -1464,6 +1464,8 @@ and the measured effect — including when the effect was nil.
 | Colony-level objective | superorganism selection | **adopted** | fitness now counts delivered energy; output 1.85 → 2.29/tick, best fitness unfroze |
 | Investment vs consumption | economies | **open** | the growth term; highest value |
 | Pre-emptive replacement (lead-time births) | animal life-history / standard Screeps practice | adopted | population floor 24 → 25; no steady-state output change, benefit is conditional on cohort events |
+| Fewer, larger workers (r/K selection) | life-history theory | **rejected** | spawn time is proportional to parts and total parts is fixed by the economy, so 25x12 and 17x18 both occupy the one spawn ~60% of the time — no relief from the bottleneck. Do not retry as a spawn-throughput fix |
+| Variable worker lifespan (de-synchronisation) | ant/bee life-history | adopted | jittered replacement lead time; unverified pending a cohort cycle |
 
 ### 12.4 What a superorganism actually optimises
 

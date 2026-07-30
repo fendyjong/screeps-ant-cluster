@@ -535,3 +535,30 @@ export const NEST_SPAWN_RESERVE = MAX_BODY_UNITS * BODY_UNIT_COST;
  * the asymmetry favours the larger number.
  */
 export const PRESPAWN_TRAVEL_TICKS = 15;
+
+/**
+ * Spread of the per-creep replacement lead time, in ticks.
+ *
+ * The colony's collapses are a phase-locking problem. Measured birth gaps show a
+ * run of six consecutive births exactly 36 ticks apart — precisely
+ * `12 parts * CREEP_SPAWN_TIME`, so those births were spawn-limited rather than
+ * stagger-limited. Every rebuild runs the single spawn flat out, which compresses
+ * the age distribution; the compressed cohort then dies together, forcing a
+ * deeper rebuild that packs tighter still. Each collapse breeds a worse one.
+ *
+ * Deliberate noise is the standard cure for coupled oscillators, and real
+ * colonies have it for free: worker lifespans vary, so a generation born together
+ * does not die together. Screeps fixes `CREEP_LIFE_TIME` at 1500 for everyone, so
+ * the variation has to be introduced where it can be — in *when a replacement is
+ * started*, which shifts the successor's birthday without touching anyone's
+ * lifespan.
+ *
+ * Derived from the jam rather than guessed: 200 ticks is wider than the 36-tick
+ * spacing that causes the lock and comfortably wider than the 60-tick healthy
+ * stagger, so successive generations diffuse apart instead of re-locking. It
+ * stays far inside the 0-1500 range `ticksToLive` occupies. The cost is that
+ * creeps in their final phase are excluded from the headcount slightly earlier on
+ * average, so the colony carries roughly `PRESPAWN_JITTER_TICKS / CREEP_LIFE_TIME`
+ * extra bodies — about 7%, bounded and self-correcting.
+ */
+export const PRESPAWN_JITTER_TICKS = 200;

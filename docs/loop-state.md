@@ -20,7 +20,8 @@ efficiency.
 | 28 | stagger scales with deficit (`base / deficit`) | stagG during decline 24-48 → **0** | worked as designed; did NOT stop collapses |
 | 29a | *(settled)* confirm iteration 27's fitness change | 1.85@25-26 → **4.57@25-26** | **worked**; 2.29 was an understatement taken mid-reset |
 | 29 | pre-spawn: "alive" = outlives spawn+travel lead time | 4.57@25-26 → 3.91 & 5.02@26-27 | **no-gain** in steady state (by design); pop floor 24 → 25 |
-| 30 | growth reserve scales with deficit | growth-reserve blocked 9-45 ticks/100 during die-off | unverified until next collapse |
+| 30 | growth reserve scales with deficit | at 17-19 creeps: blocked 9-45 ticks/100 → **0** | **worked** (verified on a later collapse) |
+| 31 | per-creep jitter on replacement lead time | birth gaps locked at 36 (spawn-limited) | unverified until next cohort cycle |
 
 # Loop state — progressive ant supercolony
 
@@ -1769,3 +1770,55 @@ staying at 0 while creeps are below strength.
 **Next:** the growth term remains queued, and the RCL-7 finding gives it a second motive — a
 second spawn is itself an investment that raises future capacity, which is exactly the
 consumption-versus-investment distinction §12.2 says the colony cannot currently express.
+
+### 2026-07-31 — iteration 31 — the cohort mechanism found, and it is phase-locking
+
+**Iteration 30 verified on a real die-off.** Comparing the same population band across two
+collapses: at 17-19 creeps `growth-reserve` previously blocked 9-45 ticks per 100, and now blocks
+**0**. The gate no longer throttles replacement. Through the whole fall the dominant blocker is
+`spawn-busy` at 85-98%, with `too-poor` only at the bottom — **every policy blocker is now
+cleared and what remains is the physical one-spawn limit.**
+
+**The cohort mechanism is now identified, from birth-gap data rather than inference.** Gaps
+between consecutive creep birthdays, oldest first:
+
+```
+36 36 36 36 36 36 | 59 60 71 60 | 94 150 206 336 | 69 30 24 15 27 15 23 16
+```
+
+A run of six births **exactly 36 ticks apart** — precisely `12 parts * CREEP_SPAWN_TIME 3`, so
+those births were **spawn-limited, not stagger-limited**. Then healthy 59-71 gaps under the
+60-tick stagger, then the die-off, then the current emergency rebuild at 15-30.
+
+**Every rebuild runs the single spawn flat out, so births land 36 ticks apart instead of 60.**
+That compresses the age distribution; the compressed cohort dies together; the deeper rebuild
+packs tighter still. Each collapse breeds a worse one. This is phase-locking, and the
+deficit-scaled stagger from iteration 28 accelerates it — the risk flagged there, now with
+evidence.
+
+**Rejected on arithmetic before shipping: fewer, larger workers (r/K selection, §12.1).** The
+appeal is obvious — fewer bodies to replace. But spawn time is proportional to part count and
+total parts is fixed by what the economy supports, so 25 creeps of 12 parts and 17 of 18 both
+occupy the spawn about 60% of the time. It relieves nothing. Recorded in §12.3 as rejected so no
+future iteration retries it as a spawn-throughput fix.
+
+**Changed: per-creep jitter on the replacement lead time.** Deliberate noise is the standard cure
+for coupled oscillators, and real colonies get it free through variable worker lifespan. Screeps
+fixes `CREEP_LIFE_TIME` at 1500 for everyone, so the variation goes where it can — into *when a
+replacement is started*, which shifts the successor's birthday without altering any lifespan. The
+offset is a hash of the creep's name, deterministic so a creep cannot flicker in and out of the
+headcount, and needing no memory field so it applies to creeps already alive.
+
+`PRESPAWN_JITTER_TICKS = 200` is derived from the jam rather than guessed: wider than the 36-tick
+spacing that causes the lock and wider than the 60-tick healthy stagger, so successive
+generations diffuse instead of re-locking, while sitting far inside the 0-1500 range
+`ticksToLive` occupies. Cost is about 7% extra bodies carried
+(`PRESPAWN_JITTER_TICKS / CREEP_LIFE_TIME`), bounded and self-correcting.
+
+**Unverified, and not claimed.** This needs a full cohort cycle to show up. The test is specific:
+birth gaps should stop showing runs of identical 36-tick values and instead scatter. Check the
+gap sequence directly — population stability alone will not distinguish it, because the colony is
+stable between collapses anyway.
+
+**Also confirmed:** the nest expanded to the RCL 6 maximum of 40 extensions on its own, so nest
+capacity is 2300 and `runNestExpansion` is working without intervention.
