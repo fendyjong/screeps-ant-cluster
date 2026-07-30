@@ -203,3 +203,46 @@ energy into the spawn (`supply` appears in `distribution`, and snapshot `energyA
 climbs above 0). That single observation confirms or refutes the whole `FIND_MY_STRUCTURES`
 diagnosis. If `energyCapacity` still reports 0 with a spawn present, the diagnosis was wrong
 and the next suspect is the `store` API shape on this server version.
+
+### 2026-07-30 — iteration 2
+
+**Observed (SigNoz, live).** The human respawned into W5N8 and the previous iteration's
+fixes were confirmed by data:
+- `energyCapacity` now reports **300**, not 0 — the `FIND_MY_STRUCTURES` diagnosis was
+  correct and the fix works.
+- The core M1 hypothesis demonstrated itself: energy fell to 148/300 → supply stimulus
+  saturated to 1.0 → **all three creeps self-selected `supply`** → spawn refilled to 298 →
+  stimulus collapsed to 0.007 → creeps drifted back to `upgrade`. Decentralized labor
+  reallocation, no central assignment. **M1 is validated.**
+- `colony-starvation` ERRORs stopped entirely once the colony was self-sustaining.
+
+**Next bottleneck, straight from the data:** energy sat pinned at **300/300 indefinitely**
+under fixed `COLONY_SIZE = 4`. Real surplus the colony structurally could not use.
+
+**Researched:** colony growth regulation. Colonies hold no target headcount; production runs
+on closed-loop satiation feedback — full reserves suppress recruitment, met needs reduce
+signal, negative feedback prevents overinvestment. Mediated individually by crop load.
+Folded into research doc §4.2.2 with sources. Also folded in §4.2.1, the inactive-worker
+reserve research from iteration 1 that had only been noted here.
+
+**Improved — M2 shipped: satiation-driven spawning.** `COLONY_SIZE` is gone. Replaced with
+`COLONY_MIN = 2` (survival floor, always replace below it), `COLONY_MAX = 10` (safety
+ceiling against runaway feedback), and `GROWTH_SURPLUS_RATIO = 0.95` (only invest in growth
+while reserves are satiated). `runSpawning` now returns `'survival' | 'growth' | null` so
+telemetry records *why* each creep was born. The loop is self-closing: spawning drops the
+reserve below the ratio, pausing growth until foragers refill it.
+
+**Result:** colony grew **4 → 10** while still holding 300/300 energy — the surplus was
+real, and ten workers remain within carrying capacity. Division of labor is now genuinely
+mixed: supply 1–4, upgrade 3–7, build 0–3, all three tasks active simultaneously.
+
+**Next iteration should consider:**
+1. **The ceiling is what's binding, not the stimulus.** At 10 creeps energy is still
+   pinned at 300/300, so `COLONY_MAX` is the limiter. Either raise it and find where the
+   satiation feedback *actually* levels off, or accept 10 as a CPU-driven cap and say so.
+2. **`energyCapacity` is stuck at 300** — no extensions are ever built, so bodies are capped
+   at the 200e minimum forever. This is the real growth ceiling. M1 deliberately excluded
+   room planning and sites are placed by hand, so this needs a decision: hand-place extension
+   sites, or let the colony propose them (a scoped step toward M3/M4).
+3. **Give all-negative-margin creeps a genuine idle state** rather than working at a loss
+   (research doc §4.2.1).
