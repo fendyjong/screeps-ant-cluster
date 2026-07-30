@@ -1,5 +1,13 @@
 # Peaceful Collaboration Strategies for Authoritarian Supercolony Growth in Screeps
 
+> **Status**: incomplete — ends mid-implementation at the end of Pillar 4;
+> the "five pillars" promised below only has four. Not yet cross-referenced
+> into the main design doc's military section. Covers the *economic*
+> denial half of "starve competitors"; see
+> [`docs/progressive-ant-supercolony.md`](docs/progressive-ant-supercolony.md)
+> §6 for the *kinetic* half — the two haven't been reconciled into one
+> doctrine yet.
+
 ## Executive Summary
 
 Peaceful strategies in Screeps can enable **exponential growth without military conflict** by leveraging the game's economic and logistical systems. The key insight: **control the infrastructure others depend on**, and you control their growth rate. This analysis covers five pillars with implementation details for a TypeScript-based bot.
@@ -360,4 +368,12 @@ class TerminalNetwork {
   
   private balanceEnergyAcrossEmpire(): void {
     const rooms = _.filter(Game.rooms, r => r.controller?.my && r.terminal);
-    const avgEnergy = _.meanBy(rooms,
+    // TODO: incomplete — averaging/redistribution logic not yet written.
+  }
+}
+```
+
+*(Pillar 4 implementation stops here — `prePositionBoostsForLabs`,
+`compressMineralsToFactories`, `exportExcessCommodities`,
+`distributePowerToProcessors`, and `handleEmergencies` are referenced above
+but not yet defined. Pillar 5 was never drafted.)*

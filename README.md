@@ -1,208 +1,119 @@
-# Screeps Bot — Adaptive Ant Colony
+# Screeps Bot — Progressive Ant Supercolony
 
-A growth-maximizing, expansionist Screeps AI built in TypeScript.
+A Screeps AI built on [Overmind](https://github.com/bencbartlett/Overmind)
+(TypeScript), extended with this project's own autonomous-growth and
+expansion systems.
 
 ## Philosophy
 
-The bot operates as an **adaptive ant colony**:
+Target direction is a **progressive ant supercolony**: rooms that stay
+connected and economically pooled like a real polydomous ant colony, grow
+exponentially, and — eventually — let individual creeps/overlords act on
+local quorum-sensed thresholds instead of everything being computed
+top-down. Full research and design rationale lives in
+[`docs/progressive-ant-supercolony.md`](docs/progressive-ant-supercolony.md);
+economic-denial ("starve the rivals") doctrine lives in
+[`peaceful-strategy-analysis.md`](peaceful-strategy-analysis.md).
 
-- **Growth-maximizing** — every surplus energy tick should produce more creeps.
-  The colony scales up workers, soldiers, and expansion proportionally to
-  available surplus.
-- **Replacement-first** — dying creeps get emergency spawn priority, preventing
-  service gaps. A harvester with 10 TTL left will spawn before a brand-new
-  builder request.
-- **Expansionist** — once a room is stable (RCL 4+, 500k stored energy), the
-  colony automatically claims and populates the next room.
-- **Soldiers are growth** — military scales with energy surplus, not as a
-  separate system. A wealthy colony naturally produces defenders.
+**Current reality check**: the orchestration model described below
+(`Overmind` → `Overseer` → `Colony`/`Overlord`) is centralized, same as
+stock Overmind. The decentralized, per-creep quorum-decision vision in the
+design doc is a target, not yet built — see that doc's gap analysis for
+what's missing.
 
 ## Architecture
 
 ```
 src/
-  main.ts              ← entry point, ticks each owned room
-  hatchery/
-    Queen.ts           ← colony manager: phase detection, death watch, requests
-    Hatchery.ts        ← priority queue, spawn execution
-    Request.ts         ← SpawnRequest type, Priority enum
-    Body.ts            ← body scaling between min and ideal
-  roles/
-    Harvester.ts       ← harvest energy → container/storage/spawn
-    Hauler.ts          ← move energy from containers to storage/spawn/tower
-    Builder.ts         ← build construction sites, repair, upgrade fallback
-    Upgrader.ts        ← upgrade controller
-  colony/
-    Architect.ts       ← terrain-aware bunker layout planner
-  lib/
-    Memory.ts          ← typed memory helpers, namespace management
-    TerrainMatrix.ts   ← terrain cache with version stamping
-    Pathing.ts         ← moveTo wrapper with cost matrices
-  types/
-    index.ts           ← shared type definitions
+  main.ts                 ← entry point; Screeps calls loop() once per tick
+  Overmind_obfuscated.js   ← compiled top-level singleton (global.Overmind);
+                             source Overmind.ts is intentionally not checked
+                             in — standard upstream Overmind practice, not
+                             specific to this fork
+  Overseer.ts              ← single global instance (Overmind.overseer).
+                             Owns every Directive + Overlord across ALL
+                             colonies, runs their init()/run() in priority
+                             order. Also the reactive rule engine: spawns
+                             Directives for bootstrap emergencies, invasion/
+                             nuke defense, power-bank mining, auto-poison,
+                             new-outpost discovery, safe mode.
+  Colony.ts                ← one instance per owned room + its outposts.
+                             Owns that room's HiveClusters, utility networks,
+                             and core Overlords. Tracks DEFCON and
+                             ColonyStage (Larva/Pupa/Adult).
+  hiveClusters/             ← structural "organs": Hatchery, CommandCenter,
+                             EvolutionChamber, UpgradeSite, SporeCrawler
+  overlords/                ← "process" layer: one job per subclass (worker,
+                             queen, transporter, miner, scout, guard,
+                             claimer, dismantler, ...)
+  directives/                ← flag-backed process-table entries (colonize,
+                             outpost, guard, bootstrap, nukeResponse, ...),
+                             created/removed by the Overseer
+  strategy/                  ← colony-external decisions: ExpansionEvaluator/
+                             ExpansionPlanner/ExpansionCampaign, CombatPlanner,
+                             NukePlanner
+  logistics/                 ← resource movement: LogisticsNetwork,
+                             LinkNetwork, RoadLogistics, TerminalNetwork/
+                             TradeNetwork (market), Energetics (energy policy)
+  zerg/                       ← wrappers around raw Creep/PowerCreep (Zerg,
+                             CombatZerg, PowerZerg, Swarm)
+  tasks/                      ← reusable creep-action state machines (harvest,
+                             build, repair, upgrade, attack, heal, ...),
+                             persisted in creep memory across ticks
+  intel/                      ← cached world knowledge: RoomIntel, CombatIntel
+  movement/                   ← CostMatrix pathfinding (Pathing) + per-tick
+                             move execution (Movement)
+  roomPlanner/                 ← structure placement: static hand-authored
+                             layouts (bunker/commandCenter/hatchery) +
+                             DynamicPlanner (algorithmic, see below)
+  resources/                   ← Abathur (lab reaction-chain planner),
+                             mineral/boost tier tables
+  console/                     ← OvermindConsole: in-game console commands
 ```
 
 ### Tick flow
 
-For each owned room:
-1. **Queen.tick(room)** — detect phase, update TTL death watch, compute targets with growth scaling, submit SpawnRequests to queue
-2. **Hatchery.process(room)** — read queue, sort by priority, scale body from min→ideal, spawn highest-priority affordable request
-3. **runCreeps(room)** — each creep executes its role function
+`main.ts` → `Overmind.build()`/`refresh()` (rebuilds/refreshes all `Colony`
+objects) → `Overmind.init()`/`run()` drives `Overseer` → `Overseer` drives
+every `Directive` and `Overlord` → each `Colony.init()`/`run()` drives its
+own `HiveCluster`s and utility networks.
 
-## Queen — Colony Manager
+## This fork's systems
 
-### Phase detection
+What's actually new here on top of stock Overmind — with honest status,
+not aspirational:
 
-| Phase | Trigger | Behaviour |
-|-------|---------|-----------|
-| bootstrap | RCL 1-2, low energy | 2 harvesters, 1 hauler — survival only |
-| stabilise | RCL 1-2, energy stable | Add builder + upgrader, scale haulers with storage |
-| critical_path | RCL 3-4, missing extensions/towers | Prioritise builders for critical gates |
-| buildout | RCL 5-7, construction sites exist | Scale builders with backlog |
-| growth | RCL 5-7, no active sites | Scale upgraders, consider defenders |
-| upgrade | RCL 8 | Scale upgraders |
+| System | File | Status |
+|---|---|---|
+| **Adaptive stockpile governor** | `logistics/Energetics.ts` | **Live.** `stockpileBenchmark(colony)` computes a reserve floor (creep-replacement cost + income buffer + tower reserve + build backlog) and derives a `spendFactor` that `overlords/core/worker.ts` uses to scale worker headcount, and that `ExpansionPlanner` uses to gate expansion. |
+| **Dynamic zone planner** | `roomPlanner/DynamicPlanner.ts` | **Built, not wired in.** Scores candidate anchor tiles on logistics distance, defensibility (min-cut rampart perimeter), buildable capacity, terrain. `RoomPlanner.ts` still only calls the static layout files. |
+| **Safe expansion campaign engine** | `strategy/ExpansionCampaign.ts` + `ExpansionPlanner.ts` | **Dry-run only.** Full state machine (discover → validate → escrow → probe → claim → bootstrap → stabilize → independent), gated on stockpile state / spawn capacity / CPU bucket / route safety, invoked every 1000 ticks in Automatic mode — but `dryRun` is hard-coded `true`; it logs what it *would* do and never claims or spawns for real. |
 
-### TTL death watch
+## Memory
 
-Every tick, the Queen scans all creeps and categorises them by remaining TTL:
-
-| Band | TTL | Effect |
-|------|-----|--------|
-| critical | 0-20 | Emergency replacement at priority ~50 |
-| warning | 21-100 | Planned replacement at priority ~150 |
-| stable | 100+ | Role's default priority |
-
-Request count = `max(0, target - alive + soonDead)`. This pre-spawns replacements before the old creep dies, avoiding service gaps.
-
-### Growth scaling
-
-Target counts are not static. They scale with stored energy and construction backlog:
-- +1 hauler per 5-10k stored energy
-- +1 builder per 20-30k construction backlog
-- +1 upgrader per 5-10k reserve
-
-### Room expansion
-
-When RCL ≥ 4 with 500k+ stored energy, the Queen auto-submits:
-- 1 claimer (priority LOW)
-- 2 remote harvesters (priority LOW)
-- 1 remote hauler (priority LOW)
-
-## Hatchery — Spawn Execution
-
-The Hatchery maintains a per-room priority queue in `Memory.v1.hatchery.queue[roomName]`.
-
-**process(room)** every tick:
-1. Read queue, validate entries, purge stale (>100 ticks)
-2. Sort by priority ascending (lower = more urgent)
-3. For each request, scale body to fit `room.energyAvailable`
-4. Spawn the first affordable request
-5. Decrement count or remove fulfilled/errored requests
-
-### Body scaling
-
-Each role defines a minimum body and an ideal body. `scaleBody(min, ideal, energy)` starts at min, appends parts from ideal in order while energy and 50-part cap allow.
-
-Example: harvester with `min: [WORK,CARRY,MOVE] (200e)`, `ideal: [WORK,WORK,WORK,CARRY,CARRY,CARRY,MOVE,MOVE,MOVE] (600e)`. Room has 350e → `[WORK,WORK,CARRY,CARRY,MOVE,MOVE]` (350e).
-
-If even the minimum body is unaffordable, the request is deferred to next tick.
-
-### Priority bands
-
-| Band | Range | Roles |
-|------|-------|-------|
-| CRITICAL | 0-99 | Emergency, death-watch critical (<20 TTL), bootstrap |
-| HIGH | 100-299 | Harvester, defender, death-watch warning (21-100 TTL) |
-| NORMAL | 300-599 | Hauler, builder, upgrader |
-| LOW | 600-899 | Scout, remote miner, claimer |
-| IDLE | 900+ | Attacker, healer (only with surplus) |
-
-## Room Layout
-
-The bunker planner (`colony/Architect.ts`) uses terrain-aware zone carving:
-
-1. **Core zone** — spawn, storage, terminal, factory, links (25 contiguous tiles)
-2. **Lab zone** — 15 labs in ring around core
-3. **Extensions** — up to 60 in outer rings
-4. **Towers** — optimal coverage positions
-5. **Ramparts + walls** — protect all structures
-6. **Swap planner** — handles structure relocation during construction
+Root shape declared in `src/declarations/memory.d.ts`: `tick, build,
+assimilator, Overmind, profiler, overseer, segmenter, roomIntel, colonies,
+creeps, powerCreeps, flags, rooms, spawns, pathing, constructionSites,
+stats, combatPlanner, expansionPlanner, playerCreepTracker, settings`.
+Defaults instantiated once per global reset by `Mem.format()`
+(`src/memory/Memory.ts`); subsystems claim their slice via
+`Mem.wrap(Memory, 'name', defaultsFn)`. Per-object memory (creep/flag/room)
+uses single-letter aliased keys (`MEM` enum) to shrink serialized size.
 
 ## Build & Deploy
 
 ```bash
-npm run build          # compiles src/main.ts → main.js
+npm run build            # tsc type-check only (tsc-out/, not the bundle)
+npm run push-main        # rollup -c, DEST=main      → dist/main.js
+npm run push-seasonal    # rollup -c, DEST=seasonal
+npm run push-pserver     # rollup -c, DEST=pserver
+npm run push-screepsplus # rollup -c, DEST=screepsplus
+npm run deploy           # compile, then cp dist/main.js into
+                          #   screeps.com/default, screeps.com/seasonal,
+                          #   127_0_0_1___21025/pserver
 ```
 
-The Screeps client syncs `main.js` to the game server. There is no test framework — verify by monitoring in-game console and Memory.
-
-## Memory Structure
-
-```ts
-Memory.v1.hatchery.queue[roomName]       // SpawnRequest[]
-Memory.v1.hatchery.deathWatch[roomName]   // { role: [{name, ttl}] }
-Memory.v1.pathing.terrain[roomName]       // CostMatrix cache
-Memory.v1.pathing.traffic[roomName]       // Movement heatmap
-Memory.v1.debugLog                        // DebugLogEntry[] (circular buffer, last 100)
-Memory[CURRENT_NS].metrics                // CPU, spawn, KPI stats
-```
-
-## Debug Logging
-
-The bot includes a periodic debug snapshot system (`src/lib/DebugLog.ts`) that captures structured room state every 25 ticks.
-
-### Console commands
-
-```js
-// Print latest debug snapshot as formatted text
-debugLog()
-
-// Get raw debug log entries from Memory
-debugRaw()
-
-// Clear debug log buffer
-Memory.v1.debugLog = []
-```
-
-### What it captures
-
-Each snapshot includes per-room:
-- Energy: available, capacity, storage, income/spawn/build rates
-- Creeps: count by role, dying count, idle count, stuck count
-- Per-creep: name, role, TTL, task, stuck ticks, carry/carryCap
-- Spawn: queue length, busy state, queued roles
-- Defense: tower count/energy, wall/rampart avg hits
-- Hostiles: count, threat level
-- Build: construction sites, backlog, pending roads
-- Traffic: top hotspots from heatmap
-- CPU: used, limit, bucket, soft/hard budgets
-- Total energy across all rooms
-
-### Output format
-
-```
-=== Debug Log @ tick 12345 ===
-CPU: 4.2/20 bucket=5000 soft=8.5 hard=15.0
-Total energy: 45000
-
---- W4N8 (RCL 5) ---
-  Energy: 300/800 storage=25000
-  Economy: income=12.5 spawn=8.2 build=3.1 health=green
-  Reserve: 5000
-  Creeps: 15 total | idle=2 stuck=0
-    harvester: 4 (dying=0 cpu=0.8)
-    hauler: 3 (dying=1 cpu=1.2)
-    builder: 2 (dying=0 cpu=0.5)
-    upgrader: 6 (dying=0 cpu=2.1)
-  Spawn: queue=1 busy=false [hauler]
-  Defense: towers=3/3 energy=1800 walls=250000 ramparts=180000
-  Hostiles: 0 (none)
-  Build: sites=5 backlog=12000 roads=3
-  Traffic: 33,30=97 40,34=95 29,33=92
-```
-
-### When it runs
-
-- Every 25 ticks when CPU allows (bucket ≥ 3000 and under soft budget)
-- Writes to `Memory.v1.debugLog` circular buffer (max 100 entries)
-- Access via `debugLog()` or `debugRaw()` in game console
+Destinations are keyed in `screeps.js`; `rollup.config.js` reads `src/main.ts`
+and emits `dist/main.js` (CommonJS, no sourcemap). There is no test
+framework beyond `tests/ExpansionCampaign.test.ts` — verify most changes by
+monitoring in-game console and Memory.

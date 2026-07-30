@@ -1,110 +1,140 @@
 # Screeps AI — agent notes
 
-Single-directory Screeps (screeps.com official server) bot. No build system,
-no tests, no package.json. Files in this dir are auto-synced to the game by
-the Screeps client; "deploy" = save the file (the client pushes it).
-`.sync` is the client sync stamp, not source control.
+TypeScript Screeps bot built on [Overmind](https://github.com/bencbartlett/Overmind),
+compiled via `tsc`/Rollup to `dist/main.js`. Real build system, real
+`package.json`, real (thin) test coverage (`tests/ExpansionCampaign.test.ts`).
+See README.md for the verified architecture overview — do not trust older
+descriptions of a flat `role.*.js`/`colony.manager.js` file layout; that
+architecture does not exist in this repo (see
+`docs/progressive-ant-supercolony.md` for how that drift happened).
 
 ## Runtime environment (Screeps globals — do NOT import or declare)
 
 `Game`, `Memory`, `RawMemory`, `PathFinder`, `RoomPosition`, `_` (lodash),
 `BODYPART_COST`, `CREEP_SPAWN_TIME`, all `STRUCTURE_*` / `RESOURCE_*` /
 `ERR_*` / `TERRAIN_MASK_*` / `FIND_*` constants are globals. There is no
-Node, no `fs`, no `process`. Each tick the engine calls `module.exports.loop`
-in `main.js` once.
+Node, no `fs`, no `process`. Each tick the engine calls the compiled
+`loop()` export in `dist/main.js` once.
 
 ## Design philosophy
 
-This bot uses an **adaptive ant colony** architecture. See README.md for
-full strategy documentation.
+Target direction is a **progressive ant supercolony** — see
+`docs/progressive-ant-supercolony.md` (design/research doc) and
+`peaceful-strategy-analysis.md` (economic-denial doctrine). Current code is
+still a centralized `Overmind → Overseer → Colony/Overlord` model, same as
+stock Overmind — the decentralized per-creep decision-making the design doc
+describes is a target, not yet built.
 
 ## Build & Deploy
 
-TypeScript source in `src/`, compiled to `main.js` via Rollup:
-
 ```bash
-npm run build
+npm run build             # tsc type-check only, no bundle
+npm run push-main         # rollup -c DEST=main      → dist/main.js
+npm run push-seasonal     # rollup -c DEST=seasonal
+npm run push-pserver      # rollup -c DEST=pserver
+npm run push-screepsplus  # rollup -c DEST=screepsplus
+npm run deploy             # compile, then cp dist/main.js into the three
+                           # local sync folders (screeps.com/default,
+                           # screeps.com/seasonal, 127_0_0_1___21025/pserver)
 ```
 
-The Screeps client syncs `main.js` to the game server.
+## Orchestration chain
 
-## CPU budget gating (in `main.js`)
+`main.ts` → `Overmind.build()/refresh()` (rebuilds/refreshes all `Colony`
+objects) → `Overmind.init()/run()` drives `Overseer` (single global
+instance, owns every `Directive`+`Overlord` across all colonies, also the
+reactive rule engine that spawns Directives for bootstrap emergencies,
+defense, nukes, etc.) → each `Colony.init()/run()` drives its own
+`HiveCluster`s and utility networks. Full directory-by-directory breakdown
+is in README.md's Architecture section — keep both in sync if either
+changes.
 
-- `getCpuBudgets()` derives `soft` and `hard` ceilings from `Game.cpu.limit`,
-  `tickLimit`, and `bucket`. Do not reimplement; call these.
-- Roles run only when `Game.cpu.getUsed() < hard`, EXCEPT `harvester`,
-  `hauler`, `defender` (and `builder` while sites exist) which always run.
-- Non-critical/burst work (`links`, `labs`, `factory`, `market`, `power`,
-  `construction`, `strategyRefresh`, `report`) rotates one job per tick via
-  `Memory.runtime.burstQueue` and only when `bucket >= 3000` and under `soft`.
-- When adding periodic work, gate with `shouldRunNonCritical()` /
-  `shouldRunBurstWork()` and prefer `Game.time % N === 0` cadences.
+## `Memory` root keys (verified, `src/declarations/memory.d.ts`)
 
-## Shared state: `Memory.roomIntel[roomName].colonyPlan`
-
-Written every tick by `colony.manager.run(room)` (only for owned rooms) and
-read by `auto.spawn`, `role.builder`, `role.ranged_escort`, the runtime
-banner, and KPI snapshots. Schema (see `colony.manager.js` around line 584):
-
-```
-plan.phase         // { status, label, ... }  status ∈ bootstrap|stabilize|critical_path|buildout|defense|upgrade|complete
-plan.economy       // { locked, survival, storedEnergy, stockpile, reserveFloor, hostiles }
-plan.buildGovernor // { mode, constructionEnabled, maxNewSitesPerRun }
-plan.civilian      // per-role target counts keyed by RCL
-plan.minimums      // hard floors (MINIMUM_CIVILIAN_FLOOR)
-plan.buildPriority // structureType -> int (lower = built first)
-plan.construction  // { activeType, enabled, maxNewSitesPerRun, queue }
-plan.eta           // { phase, ... }
-```
-
-`plan.economy.locked` / `survival` gate spawning and body sizes — respect
-them in any code that spends energy. Treat the plan as read-only outside
-`colony.manager.js`; never hand-write it from roles.
-
-## Other `Memory` trees
-
-- `Memory.strategy` — global stance (`defensive`/`offensive`/`na`), `attackTarget`,
-  `claimReady`, `attackReady`, `kpi.history`, `spawnState`, `routeCache`,
-  `economy` (aggregate `totalStockpile`, `sourceFillRatio`, `depletedSources`).
-- `Memory.warPlan` — `threat[room]`, `doctrine[room].template`, squad state.
-  Written by `war.room.js`; roles read `Memory.warPlan.threat[room]`.
-- `Memory.roomIntel[roomName]` — per-room intel incl. `colonyPlan`,
-  `lastSeen`, `threatLevel`. Pruned by `strategy.map.pruneRoomIntel` when
-  `RawMemory` exceeds `MEMORY_SOFT_LIMIT` (1.85 MB).
-- `Memory.metrics` — `cpu.roles`, `spawnIdle`, `towerStats`, KPI counters.
-  Record into it via `utils.metrics` / `utils.stats`, don't ad-hoc write.
-- `Memory.debugReport.markdown` — full markdown report regenerated every 25
-  ticks by `debug.report.generate()` when CPU allows.
+`tick, build, assimilator, Overmind, profiler, overseer, segmenter,
+roomIntel, colonies, creeps, powerCreeps, flags, rooms, spawns, pathing,
+constructionSites, stats, combatPlanner, expansionPlanner,
+playerCreepTracker, settings`. Subsystems claim their slice via
+`Mem.wrap(Memory, 'name', defaultsFn)` (`src/memory/Memory.ts`) — follow
+that pattern for new state, don't add ad-hoc root keys. Per-object memory
+(creep/flag/room) uses single-letter aliased keys (`MEM` enum) to shrink
+serialized size — check `declarations/roomMemory.d.ts` before hand-writing
+a new memory field.
 
 ## Conventions to follow
 
-- Tabs for indentation (the existing files use tabs, not spaces).
-- Per-tick periodic work uses `Game.time % N === 0`. Common cadences: 25
-  (memory/report), 50 (module health logs, strategic refresh), 100
-  (intel prune / KPI snapshot), 250 (summary log).
-- Pathing must go through `utils.pathing` (`moveTo` / `moveToRoom`); it
-  sets per-profile cost matrices, handles stuck-creep detection, and caches
-  inter-room routes in `Memory.strategy.routeCache`. Don't call
+- Tabs for indentation (existing files use tabs, not spaces).
+- Pathing goes through `movement/Pathing.ts` (CostMatrix-based) +
+  `movement/Movement.ts` (per-tick move execution) — don't call
   `creep.moveTo` directly.
-- Action results are logged via `metrics.recordRoleResult(role, action, result)`
-  (only records negative/error codes) and resource flows via
-  `utils.stats.record*(creep, amount)`. Wire these in on any new role action.
-- `auto.spawn` is the only spawner and owns `BODY_PRESETS` and emergency
-  bodies. To add a body variant, edit there — roles don't pick their own bodies.
-- `role.defender.js` requires `war.room.js`. Before adding a
-  `war.room -> role.*` edge, check for cycles; `main.js`'s safe-require will
-  mask a cycle as a `noopRun`, which is hard to notice.
+- Classes are commonly annotated `@profile` (`profiler/decorator.ts`) for
+  CPU accounting — follow the pattern used by sibling classes in the same
+  directory rather than guessing.
+- Exact per-subsystem conventions beyond this (logging helpers, periodic-work
+  cadences, CPU budget gating specifics) haven't been re-verified against
+  the real code yet after the README/AGENTS cleanup — check the relevant
+  source file directly rather than trusting stale assumptions here.
 
-## Adding a new role (check list)
+## Adding a new job (replaces old "adding a new role" checklist)
 
-1. Create `role.<name>.js` exporting `{ run: function (creep) {} }`. Require
-   `utils.pathing`, `utils.metrics`, `utils.stats` as needed.
-2. Add a `safeRequireRole('role.<name>')` line in `main.js` near the others.
-3. Add a dispatch `if (creep.memory.role === '<name>') ...` branch in the
-   creep loop (copy the `updateCpuMetrics` pattern).
-4. Add the role to `ROLE_LIST`, `BODY_PRESETS`, and the spawn logic in
-   `auto.spawn.js`; add to `CIVILIAN_PHASES` / `PRIORITY_ORDER` in
-   `colony.manager.js` if it should scale with RCL.
-5. If the file/require name contains an underscore (like `ranged_escort`),
-   keep the underscore in the filename but use camelCase for the
-   `creep.memory.role` value and stay consistent with the dispatch table.
+There is no `role.<name>.js` file-per-role system. Verified pattern from
+`overlords/core/worker.ts` + `Overlord.ts` + `Colony.ts`:
+
+1. New job = a new class extending `Overlord` (`overlords/Overlord.ts`),
+   constructor takes an `OverlordInitializer` (typically `colony`). Follow
+   an existing overlord in the same directory as a template (e.g.
+   `overlords/core/worker.ts`) rather than starting from scratch.
+2. **Core overlords** (always-on, one per colony) are instantiated directly
+   in `Colony.ts` (`new WorkerOverlord(this)` etc., keyed into
+   `this.overlords`, around the block that builds `default`/`work`/
+   `logistics`/`scout`).
+3. **Job-specific overlords** (situational — colonize, guard, claim, ...)
+   are instead owned/created by a `Directive` (`directives/`), not
+   registered in `Colony.ts` — check an existing directive in the same
+   category first (`directives/colony/`, `directives/defense/`, etc.).
+4. Priority constants live in `priorities/priorities_overlords.ts`; creep
+   body setups in `creepSetups/setups.ts` (`Roles`/`Setups`).
+
+
+<!-- headroom:rtk-instructions -->
+# RTK (Rust Token Killer) - Token-Optimized Commands
+
+When running shell commands, **always prefix with `rtk`**. This reduces context
+usage by 60-90% with zero behavior change. If rtk has no filter for a command,
+it passes through unchanged — so it is always safe to use.
+
+## Key Commands
+```bash
+# Git (59-80% savings)
+rtk git status          rtk git diff            rtk git log
+
+# Files & Search (60-75% savings)
+rtk ls <path>           rtk read <file>         rtk grep <pattern>
+rtk find <pattern>      rtk diff <file>
+
+# Test (90-99% savings) — shows failures only
+rtk pytest tests/       rtk cargo test          rtk test <cmd>
+
+# Build & Lint (80-90% savings) — shows errors only
+rtk tsc                 rtk lint                rtk cargo build
+rtk prettier --check    rtk mypy                rtk ruff check
+
+# Analysis (70-90% savings)
+rtk err <cmd>           rtk log <file>          rtk json <file>
+rtk summary <cmd>       rtk deps                rtk env
+
+# GitHub (26-87% savings)
+rtk gh pr view <n>      rtk gh run list         rtk gh issue list
+
+# Infrastructure (85% savings)
+rtk docker ps           rtk kubectl get         rtk docker logs <c>
+
+# Package managers (70-90% savings)
+rtk pip list            rtk pnpm install        rtk npm run <script>
+```
+
+## Rules
+- In command chains, prefix each segment: `rtk git add . && rtk git commit -m "msg"`
+- For debugging, use raw command without rtk prefix
+- `rtk proxy <cmd>` runs command without filtering but tracks usage
+<!-- /headroom:rtk-instructions -->
