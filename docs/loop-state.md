@@ -482,3 +482,58 @@ when it should rather than throttling normal operation.
 2. **Pheromone-weighted pathfinding** — the other half of M3. Roads exist, but movement does
    not yet prefer high-traffic routes; creeps still take default paths.
 3. **Idle state for all-negative-margin creeps** (§4.2.1) — still unaddressed.
+
+### 2026-07-30 — iteration 8 — expansion readiness (answering "how about expansion?")
+
+**Expansion is not a missing feature — it is gated, and the gate is arithmetic.**
+Verified against `@screeps/common/lib/constants.js` on disk (`GCL_POW = 2.4`,
+`GCL_MULTIPLY = 1000000`):
+
+- GCL progress 509,431 → **GCL level 1**, so exactly one room is claimable and we already
+  hold it (W5N8).
+- GCL 2 needs 1,000,000 points. We were **50.9%** there, 490,569 short.
+- GCL comes *only* from upgrading the controller. Therefore **expansion speed is upgrade
+  throughput**, nothing else.
+
+**Two caps I had written were throttling exactly that.**
+1. `bodyFor` returned a fixed `IDEAL_BODY` (400 energy, 2 WORK) and never grew. At 750
+   capacity it was spawning the identical creep it spawned at 400 — every point above 400
+   wasted. Since `UPGRADE_CONTROLLER_POWER` is per WORK part, this capped throughput directly.
+2. `desiredExtensions = ceil(creeps / 3)` = 9, while RCL 4 permits **20**. Capacity capped
+   body size, body size capped throughput, and `COLONY_MAX` capped population which capped the
+   nest — a closed loop with no exit.
+
+**Improved (both, since they are one problem):**
+- Bodies now scale: repeat the `[WORK, CARRY, MOVE]` unit (200e, 1:1 MOVE so the creep stays
+  full-speed off-road) up to `MAX_BODY_UNITS = 16` (`MAX_CREEP_SIZE` is 50 parts).
+- Nest also grows when reserves are satiated, not only on population pressure. A ratio is the
+  correct shape *here* even though it was wrong for the spawn gate: each extension added makes
+  satiation harder, so nest growth decelerates as the nest fills — genuine negative feedback
+  rather than the runaway the spawn gate suffered.
+
+**Result:** creep part counts now 6 / 9 / 12 (was uniformly 6); total WORK across the colony
+**50 → 74 (+48%)**; extensions 9 → 13; capacity 750 → 950; GCL 50.9% → 55.7%.
+
+**Research note, stated honestly:** this iteration's investigation was Screeps mechanics
+verified on disk (GCL formula, `MAX_CREEP_SIZE`, `UPGRADE_CONTROLLER_POWER`, `BODYPART_COST`,
+`CONTROLLER_STRUCTURES`) rather than a biology search, because the blocker was mechanical, not
+behavioural. No WebSearch was performed.
+
+**When GCL 2 arrives, M4 budding is implementable** and the design doc already specifies it
+(§1.3): claim + pre-built spawn + escrowed energy, which drops founder mortality from >99% to
+10–30% versus dumping a lone claimer into an empty room. Concrete prerequisites, all now met
+or in reach:
+- A CLAIM creep costs 600 (`BODYPART_COST.claim`) + 50 MOVE = **650**; capacity is 950, so it
+  is already affordable.
+- `CREEP_CLAIM_LIFE_TIME` is 600 ticks, so the target must be within reach of that.
+- 120 unowned rooms exist on this server, so target selection is unconstrained.
+
+**Next iteration candidates:**
+1. Let capacity keep climbing to the RCL 4 ceiling (20 extensions / 1300) and confirm bodies
+   scale with it; consider whether `COLONY_MAX = 25` should rise now that the growth gate is
+   absolute rather than ratio-based.
+2. **Room scouting / evaluation** — the genuinely useful pre-expansion step, and safe to build
+   before GCL 2: score neighbouring rooms on sources, controller, terrain, and threat so a
+   target is already chosen when the gate opens.
+3. Pheromone-weighted pathfinding (other half of M3); idle state for all-negative-margin
+   creeps (§4.2.1).

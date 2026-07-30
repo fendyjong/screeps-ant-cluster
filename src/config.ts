@@ -85,6 +85,18 @@ export const CAPACITY_BUILD_PER_SITE = 2;
  */
 export const CREEPS_PER_EXTENSION = 3;
 
+/**
+ * Also grow the nest whenever reserves sit satiated, not only when population
+ * demands it. Population alone left the colony at 9 extensions while RCL 4
+ * permitted 20 — capacity capped body size, body size capped upgrade throughput,
+ * and throughput is what gates expansion.
+ *
+ * A ratio is the right shape *here* even though it was wrong for the spawn gate:
+ * it self-limits correctly, since each new extension makes staying satiated
+ * harder, so nest growth slows as the nest grows.
+ */
+export const NEST_SATIATED_RATIO = 0.9;
+
 /** Ticks between nest-planning passes. Placement is cheap but not free. */
 export const NEST_PLAN_INTERVAL = 50;
 
@@ -177,6 +189,22 @@ export const DEFAULT_TASK: TaskName = 'upgrade';
 export const MIN_BODY: BodyPartConstant[] = [WORK, CARRY, MOVE];
 export const IDEAL_BODY: BodyPartConstant[] = [WORK, WORK, CARRY, CARRY, MOVE, MOVE];
 export const IDEAL_BODY_COST = 400;
+
+/**
+ * Bodies scale with available energy instead of stopping at a fixed template.
+ *
+ * `bodyFor` previously returned IDEAL_BODY (400 energy, 2 WORK) and never grew,
+ * so the colony wasted every point of capacity above 400 — at 750 it was
+ * spawning the same creep it spawned at 400. Since UPGRADE_CONTROLLER_POWER is
+ * per WORK part, upgrade throughput scales linearly with WORK, and GCL — the
+ * only gate on claiming a second room — comes solely from upgrading. Fixed-size
+ * bodies were therefore throttling expansion directly.
+ *
+ * One [WORK, CARRY, MOVE] unit costs 200 and keeps a 1:1 MOVE ratio, so the
+ * creep stays at full speed off-road. MAX_CREEP_SIZE is 50 parts, hence 16 units.
+ */
+export const BODY_UNIT_COST = 200;
+export const MAX_BODY_UNITS = 16;
 
 export const COLORS = {
   hud: '#c9c9c9',

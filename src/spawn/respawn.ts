@@ -1,8 +1,10 @@
 import {
+  BODY_UNIT_COST,
   COLONY_MAX,
   COLONY_MIN,
   DEFAULT_TASK,
   GROWTH_MIN_RESERVE,
+  MAX_BODY_UNITS,
   IDEAL_BODY,
   IDEAL_BODY_COST,
   MIN_BODY,
@@ -10,11 +12,24 @@ import {
 } from '../config';
 import { generateProfile } from '../creep/thresholds';
 
-/** Largest affordable body, or null if even the minimum is out of reach. */
+/**
+ * Largest affordable body, or null if even the minimum is out of reach.
+ *
+ * Repeats the [WORK, CARRY, MOVE] unit so the creep keeps a 1:1 MOVE ratio and
+ * stays at full speed off-road. Scaling matters because UPGRADE_CONTROLLER_POWER
+ * is per WORK part: a 600-energy creep upgrades three times as fast as a
+ * 200-energy one, and upgrade throughput is the sole gate on GCL and therefore
+ * on expansion.
+ */
 export function bodyFor(energy: number): BodyPartConstant[] | null {
-  if (energy >= IDEAL_BODY_COST) return IDEAL_BODY;
-  if (energy >= MIN_BODY_COST) return MIN_BODY;
-  return null;
+  if (energy < MIN_BODY_COST) return null;
+
+  const units = Math.min(Math.floor(energy / BODY_UNIT_COST), MAX_BODY_UNITS);
+  const body: BodyPartConstant[] = [];
+  for (let i = 0; i < units; i++) body.push(WORK);
+  for (let i = 0; i < units; i++) body.push(CARRY);
+  for (let i = 0; i < units; i++) body.push(MOVE);
+  return body;
 }
 
 export type SpawnReason = 'survival' | 'growth';

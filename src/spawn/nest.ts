@@ -1,4 +1,9 @@
-import { CREEPS_PER_EXTENSION, NEST_PLAN_INTERVAL, NEST_SEARCH_RADIUS } from '../config';
+import {
+  CREEPS_PER_EXTENSION,
+  NEST_PLAN_INTERVAL,
+  NEST_SATIATED_RATIO,
+  NEST_SEARCH_RADIUS,
+} from '../config';
 
 /**
  * Nest expansion — the colony sizing its own housing.
@@ -17,10 +22,23 @@ import { CREEPS_PER_EXTENSION, NEST_PLAN_INTERVAL, NEST_SEARCH_RADIUS } from '..
  */
 
 /** Extensions the colony wants at its current population, capped by RCL. */
-export function desiredExtensions(room: Room, creepCount: number): number {
+export function desiredExtensions(
+  room: Room,
+  creepCount: number,
+  energy: { available: number; capacity: number },
+): number {
   const level = room.controller?.level ?? 0;
   const allowed = CONTROLLER_STRUCTURES.extension[level] ?? 0;
-  const wanted = Math.ceil(creepCount / CREEPS_PER_EXTENSION);
+
+  const fromPopulation = Math.ceil(creepCount / CREEPS_PER_EXTENSION);
+
+  // Satiated reserves mean the colony can fill what it has and should build
+  // more. This self-limits: every extension added makes satiation harder to
+  // reach, so growth decelerates as the nest fills out.
+  const satiated =
+    energy.capacity > 0 && energy.available / energy.capacity >= NEST_SATIATED_RATIO;
+  const wanted = satiated ? Math.max(fromPopulation, allowed) : fromPopulation;
+
   return Math.min(allowed, wanted);
 }
 
@@ -67,7 +85,11 @@ export interface NestPlan {
  * nest. Returns null on ticks where planning does not run, so callers can tell
  * "not evaluated" from "evaluated, nothing to do".
  */
-export function runNestExpansion(room: Room, creepCount: number): NestPlan | null {
+export function runNestExpansion(
+  room: Room,
+  creepCount: number,
+  energy: { available: number; capacity: number },
+): NestPlan | null {
   if (Game.time % NEST_PLAN_INTERVAL !== 0) return null;
 
   const spawn = room.find(FIND_MY_SPAWNS)[0];
@@ -82,7 +104,7 @@ export function runNestExpansion(room: Room, creepCount: number): NestPlan | nul
     .filter(s => s.structureType === STRUCTURE_EXTENSION).length;
 
   const have = built + pending;
-  const wanted = desiredExtensions(room, creepCount);
+  const wanted = desiredExtensions(room, creepCount, energy);
   if (have >= wanted) return { placed: false, have, wanted };
 
   const spot = findExtensionSpot(room, spawn.pos);

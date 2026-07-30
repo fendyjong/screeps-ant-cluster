@@ -146,7 +146,7 @@ function runRoom(room: Room): void {
 
   // The colony sizes its own nest: population pressure proposes extensions,
   // and the build stimulus decides whether anyone actually works them.
-  const nest = runNestExpansion(room, creeps.length);
+  const nest = runNestExpansion(room, creeps.length, energy);
   if (nest && nest.placed) {
     emit('INFO', 'nest-expand', { room: room.name, have: nest.have, wanted: nest.wanted });
   }
