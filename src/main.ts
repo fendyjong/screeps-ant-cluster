@@ -8,7 +8,7 @@ import { run as runBuild } from './creep/tasks/build';
 import { run as runRemote } from './creep/tasks/remote';
 import { run as runSupply } from './creep/tasks/supply';
 import { run as runUpgrade } from './creep/tasks/upgrade';
-import { MIN_BODY_COST, RECRUIT_LIMIT_PER_TICK, SNAPSHOT_INTERVAL } from './config';
+import { MIN_BODY_COST, RECRUIT_LIMIT_PER_TICK, REMOTE_ENABLED, SNAPSHOT_INTERVAL } from './config';
 import { drawColonyHud } from './hud';
 import { evolutionStats, fitnessOf, retire } from './evolution';
 import { drawCreepLabels } from './visuals';
@@ -71,6 +71,33 @@ function runRoom(room: Room): void {
     try {
       const thresholds = ensureProfile(creep);
       const previous = creep.memory.task;
+
+      // Commitment is deliberately narrow: finish delivering a load you are
+      // already carrying, nothing more.
+      //
+      // A wider version — committing whenever the creep was away from home OR
+      // carrying — locked foragers permanently, because a forager is in one of
+      // those states almost its entire life. They could not re-evaluate even
+      // when remote stimulus fell to zero, which bypassed congestion damping and
+      // the recruitment limiter entirely: the whole colony became foragers,
+      // nobody supplied the spawn, and the population collapsed to 2.
+      //
+      // Carrying-only still prevents the real waste (abandoning a haul
+      // mid-journey) while leaving outbound creeps free to be re-tasked, which
+      // is what the anti-thrash buffer and recruitment limiter already handle.
+      // Only holds a creep long enough to finish delivering a load it already
+      // carries, and only while remote foraging is enabled at all.
+      const committed =
+        REMOTE_ENABLED &&
+        previous === 'remote' &&
+        creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0;
+
+      if (committed) {
+        distribution.remote += 1;
+        RUNNERS.remote(creep, raw.remote);
+        continue;
+      }
+
       const decision = decide(stimuli, thresholds, previous, Math.random());
 
       if (decision.switched && joined[decision.task] >= RECRUIT_LIMIT_PER_TICK) {

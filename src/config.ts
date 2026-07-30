@@ -104,6 +104,31 @@ export const CAPACITY_BUILD_PER_SITE = 2;
  */
 export const CAPACITY_REMOTE = 6;
 
+/**
+ * Remote foraging is DISABLED pending a redesign.
+ *
+ * The idea is sound and the measured need is real — the home room is hard-capped
+ * at 20 energy/tick while the colony was fielding 7.4x the WORK it can use. The
+ * implementation is not. Foragers ended up stuck: permanently in `gathering`
+ * phase, carrying partial loads, parked on exit tiles. Two attempted fixes each
+ * made things worse — narrowing the movement target did not stop the border
+ * bouncing, and committing creeps to their trip locked the entire colony onto
+ * remote, so nobody supplied the spawn and the population collapsed to 2.
+ *
+ * With this false, remote's stimulus is pinned at 0, so no creep ever chooses it
+ * and any still carrying a load finishes and is released. The code and the
+ * threshold axis stay in place, so the gene pool keeps its shape and the work is
+ * not lost — this is a switch, not a revert.
+ *
+ * What a correct version needs, from the observed failures:
+ *  - Movement that never leaves a creep resting on an exit tile (the engine
+ *    teleports creeps off them, which is the bouncing).
+ *  - A phase flip that triggers on "enough to be worth the trip", not only on a
+ *    full store — foragers were stranded at 77/100 forever.
+ *  - Commitment scoped to a single leg of the journey, never open-ended.
+ */
+export const REMOTE_ENABLED = false;
+
 /** Carry this much before walking home; shorter trips waste the journey. */
 export const REMOTE_MIN_ENERGY_TO_RETURN = 100;
 

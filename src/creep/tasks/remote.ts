@@ -61,7 +61,11 @@ export function run(creep: Creep, value: number): void {
 
   if (phase === 'delivering') {
     if (creep.room.name !== home) {
-      creep.moveTo(new RoomPosition(25, 25, home), { range: 20 });
+      // No `range` option: stopping short leaves the creep parked on an exit
+      // tile, and the engine teleports creeps off exit tiles into the adjacent
+      // room — so a creep that "arrives" on the border bounces across it
+      // forever. Path to the room centre and keep walking until actually there.
+      creep.moveTo(new RoomPosition(25, 25, home));
       recordWork(creep, true, value); // hauling home is the productive half
       return;
     }
@@ -92,7 +96,7 @@ export function run(creep: Creep, value: number): void {
   }
 
   if (creep.room.name !== target) {
-    creep.moveTo(new RoomPosition(25, 25, target), { range: 20 });
+    creep.moveTo(new RoomPosition(25, 25, target));
     recordWork(creep, false, value); // travel is overhead, not production
     return;
   }

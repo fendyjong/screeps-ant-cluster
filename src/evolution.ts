@@ -75,19 +75,22 @@ function pool(): GenePool {
   }
 
   // Adding a task widens the profile without invalidating fitness — the scores
-  // still mean what they meant. Rather than discarding the pool (and with it
-  // every generation of accumulated selection), seed the new dimension from the
-  // gene's own `supply` threshold: remote foraging is a gathering task, so a
-  // gene eager to supply is plausibly eager to fetch energy abroad. The jitter
-  // gives the new axis immediate diversity for selection to act on, instead of
-  // every gene starting identical there.
+  // still mean what they meant — so the pool is migrated rather than discarded,
+  // preserving every generation of accumulated selection.
+  //
+  // The new axis is seeded UNIFORMLY AT RANDOM across the legal range, not
+  // derived from an existing threshold. An earlier version seeded it from the
+  // gene's `supply` value on the reasoning that remote foraging is also a
+  // gathering task — but that is my assumption about what the task resembles,
+  // baked in as a prior the colony can never argue with. Spreading the seed
+  // across the whole range asserts nothing and lets selection discover the
+  // right value, which is the entire point of having selection.
   for (const gene of memory.genes) {
     for (const task of TASK_NAMES) {
       const value = gene.thresholds[task];
       if (typeof value !== 'number' || !isFinite(value)) {
-        const seed = gene.thresholds.supply;
-        const base = typeof seed === 'number' && isFinite(seed) ? seed : THRESHOLD_BASE;
-        gene.thresholds[task] = clamp(base + (Math.random() * 2 - 1) * THRESHOLD_JITTER);
+        gene.thresholds[task] =
+          THRESHOLD_MIN + Math.random() * (THRESHOLD_MAX - THRESHOLD_MIN);
       }
     }
   }

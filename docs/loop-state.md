@@ -746,3 +746,53 @@ remote task. Six unowned adjacent sources are now reachable, no Source Keeper la
    reserving takes remote sources from 5 to 10 energy/tick each. Needs no GCL, only a CLAIM
    part (650 energy against 1800 capacity).
 3. Pheromone-weighted pathfinding; idle state for all-negative-margin creeps.
+
+### 2026-07-30 — iteration 13 — remote foraging FAILED and is disabled
+
+The human reported foragers "circling back and forth at the door". Confirmed: 11 of 25 creeps
+sat on room-edge tiles with zero carry.
+
+**Two causes, one real and one self-inflicted.**
+
+*Real:* `moveTo(RoomPosition(25,25,target), {range: 20})` let a creep stop while still
+standing on an exit tile. The engine teleports creeps off exit tiles into the adjacent room,
+so an "arrived" creep bounces across the border indefinitely.
+
+*Self-inflicted:* I then added trip commitment — `away from home OR carrying` — on the theory
+that central-place foraging is a committed round trip. A forager is in one of those states
+almost its whole life, so commitment became permanent. Creeps could not re-evaluate even when
+remote stimulus fell to zero, which bypassed congestion damping and the recruitment limiter
+entirely. **The whole colony locked onto remote, nobody supplied the spawn, population
+collapsed 25 → 2.**
+
+Narrowing commitment to carrying-only recovered the population but did not fix foraging:
+every forager remained stuck in `gathering` phase with a partial load (8/100, 16/50, 77/100,
+84/100) and all seven were still on exit tiles. `updatePhase` only flips gathering→delivering
+on a *full* store, so a forager that never fills never goes home.
+
+**Decision: disabled behind `REMOTE_ENABLED = false` rather than patched further.** Two
+consecutive changes of mine collapsed a colony that had been healthy at 25 creeps, RCL 5,
+GCL 73%. Continuing to guess against a live colony was the wrong move; restoring stability
+first is the right one. Colony recovered immediately — **22–23 creeps, energy up to 1050,
+distribution supply 9 / upgrade 11 / build 2**.
+
+This is a switch, not a revert: the code and the `remote` threshold axis stay, so the gene
+pool keeps its shape and nothing is lost.
+
+**What a correct implementation needs, derived from the observed failures:**
+1. Movement that never leaves a creep resting on an exit tile — probably explicit
+   `findExitTo` pathing plus a forced inward step after crossing, rather than trusting
+   `moveTo` to a room centre.
+2. A phase flip on "enough to be worth the trip", not only on a full store. Foragers stranded
+   at 77/100 forever is a direct consequence of reusing `updatePhase`, which was written for
+   in-room tasks where topping up is cheap.
+3. Commitment scoped to a single leg (outbound, or inbound) and time-bounded, never
+   open-ended.
+4. Ideally validated against a *small* number of foragers first — the failure was amplified
+   because remote stimulus went to 1.0 and pulled a large share of the colony at once.
+
+**Also changed, per the human:** gene-pool seeding for a new task axis is now uniform random
+across the legal range rather than derived from the `supply` threshold. Deriving it encoded my
+assumption about which existing task the new one resembles, as a prior the colony could never
+argue with. Spreading the seed asserts nothing and lets selection discover the value, which is
+the point of having selection at all.
