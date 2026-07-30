@@ -1461,6 +1461,45 @@ and the measured effect — including when the effect was nil.
 | Stigmergic trail formation → roads | ants / *Atta* | adopted | roads emerge from traffic; maintenance added |
 | Central-place foraging limits | foraging theory | adopted | drove remote foraging |
 | Food storage / repletes | *Myrmecocystus* | adopted, no gain yet | granary built; holds ~0, see §4.3.0 |
-| Colony-level objective | — | **open** | fitness still rewards busywork |
+| Colony-level objective | superorganism selection | **adopted** | fitness now counts delivered energy; output 1.85 → 2.29/tick, best fitness unfroze |
 | Investment vs consumption | economies | **open** | the growth term; highest value |
 
+### 12.4 What a superorganism actually optimises
+
+The fitness fix needed a principle, not just a bug report, so this is the one it
+rests on. In advanced eusocial insects **the colony becomes the unit of
+selection** — the colony is the extended phenotype, and individual survival and
+reproduction stop mattering to a worker's genetic fitness as colony-level
+selection takes over. Colonies with the most effective recruitment and defence
+raise the most reproductives, and that — not worker activity — is what selection
+scores.
+
+Two things follow directly for this colony.
+
+**1. The objective must be an outcome, never an activity.** The old `fitnessOf`
+summed the *stimulus of whatever task a creep was doing*, so it scored intent
+rather than result. Nothing in it referred to energy. Selection did what it was
+told for ~7500 generations and produced creeps optimised for looking busy — best
+fitness frozen at 0.9055, an unbeatable busywork champion. Fitness is now energy
+that actually left the creep, which counts transfers, upgrades, construction and
+repair through one measurement and cannot be misreported by a call site.
+
+**2. Per-creep fitness is a proxy, and the seam is worth naming.** The literature
+is explicit that selection acts on colonies, not workers; here it acts on
+workers, because creeps die and are replaced while the colony does not
+reproduce. That proxy holds only while delivery is **additive and non-rival** —
+one creep's delivery must not come at another's expense. It would break for a
+rival resource: a creep monopolising the granary would score well individually
+while starving the colony. Nothing in the current task set is rival, so the
+proxy is sound today; anything that introduces contention for a shared, finite
+store invalidates it and needs a colony-level term instead.
+
+**3. Growth versus reproduction is a real biological trade-off, not a borrowed
+metaphor.** Colonies must balance investment in growth against investment in
+reproduction. §12.2 reached the same split from economics; the convergence is
+reassuring, and it means the consumption/investment term queued next has support
+from both directions.
+
+Sources: [The emergence of a superorganism through intergroup competition, PNAS](https://pnas.org/content/104/23/9736),
+[Major Evolutionary Transitions in Social Insects: Worker Sterility and Life History Trade-Offs, Frontiers](https://www.frontiersin.org/journals/ecology-and-evolution/articles/10.3389/fevo.2021.732907/full),
+[Natural selection drives the evolution of ant life cycles, PNAS](https://www.pnas.org/doi/full/10.1073/pnas.1405550111)

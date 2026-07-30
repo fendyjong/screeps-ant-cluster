@@ -61,7 +61,7 @@ declare global {
      * at the moment each unit of work happened, so scarce-but-critical work
      * outweighs abundant busywork.
      */
-    work?: { value: number; ticks: number };
+    work?: { value: number; ticks: number; lastStore?: number };
 
     /** Room this creep calls home, for remote foraging round trips. */
     home?: string;

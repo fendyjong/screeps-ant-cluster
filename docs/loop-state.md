@@ -16,6 +16,7 @@ efficiency.
 | 25c | `NEST_SPAWN_RESERVE` replaces capacity fraction | 1.70 → 1.85@25-26 | population and body size fixed; output marginal |
 | 26 | reserve only rooms actually harvested (`lastHarvest`) | reserver spawns 4.25/min → 0.75/min | worked (−82% waste); did NOT stop collapses |
 | 26b | instrument spawn-block reasons (telemetry only) | — | **decisive**: energy never blocks reproduction |
+| 27 | **fitness = energy delivered**, not stimulus-while-busy | 1.85@25-26 → **2.29@25** | **worked** (+24%); best fitness unfroze after ~7500 gens |
 
 # Loop state — progressive ant supercolony
 
@@ -1552,3 +1553,55 @@ system has no growth term; this is where that abstraction touches the code.
 **Next iteration:** the fitness fix is still queued and still right. But read the spawn-block
 histogram during a collapse first — the instrumentation is live and the answer will be in it.
 Do not ship another hypothesis about the collapses without that data.
+
+### 2026-07-31 — iteration 27 — the objective function finally mentions energy
+
+**Observed first.** No ERROR severity. Population pinned at exactly 25 across the whole window,
+with `at-cap` 26-59 ticks per 100 and `spawn-busy` 38-70 — together essentially every tick, while
+`too-poor` stayed 0. The colony is hard-capped, not starved. No collapse occurred since the
+instrumentation landed, so the collapse question is still open and still waiting on data.
+
+**Changed: `fitnessOf` now counts energy the creep actually delivered.** It was
+`record.value / record.ticks` where `value` was the *stimulus of the task being performed*, added
+whenever a caller passed `productive = true` — an objective function that never mentioned energy.
+It rewarded looking busy, and two call sites in `remote.ts` scored walking home and arriving at a
+full nest as productive.
+
+Delivery is measured as **a decrease in the creep's own energy store**, not self-reported per
+task. A store only falls when energy leaves the creep, so one measurement captures transfers,
+upgrades, construction and repair at once, and no call site can misreport it. Harvesting and
+withdrawing raise the store and correctly count for nothing. All 24 `recordWork` call sites lost
+their now-meaningless `productive`/`value` arguments rather than being left as decoration.
+
+`FITNESS_VERSION` bumped 2 → 3, which wipes the pool — old scores are in different units and
+would have outranked every honestly scored newcomer forever. Reservers needed no special case:
+they spawn without a threshold profile and `retire` already returns early without one.
+
+**Result — the largest single gain in this project so far.** Upgrade output **1.85 → 2.29
+energy/tick** at comparable headcount (25-26 → 25), +24%, against a 2.91 historic best measured
+at 24. Bodies stayed full size, population stable.
+
+**Trajectory — the answer to "where is evolution going" is no longer "nowhere".** Best fitness
+moved off 0.9055 for the first time in ~7500 generations (now 1.956, in new units, so the level
+is not comparable — the fact that it moves is the point). Across ten consecutive samples:
+fitMean 1.184 → 1.229 rising; supplyMean 0.50 → 0.46 with spread 0.116 → 0.088; upgradeMean
+0.67 → 0.70 with spread 0.089 → 0.070; remoteMean 0.83 → 0.81 with spread 0.057 → 0.054.
+**Mean moving while spread narrows on every gene is convergence under selection, not drift** —
+which is exactly the distinction the spread metric was added to make.
+
+Direction, read carefully because threshold semantics invert: a *lower* threshold means a creep
+adopts that task more readily. So the colony is becoming more willing to supply, slightly more
+willing to forage, and *less* willing to upgrade — yet upgrade output rose 24%. The consistent
+reading is that fewer, better-supplied upgraders deliver more than many perpetually empty ones,
+which is the same lesson as the granary: an upgrader that has to mine its own energy barely
+upgrades.
+
+**Caveat, stated before it can become an overclaim.** This is ~5300 ticks. The trend is
+consistent across ten trajectory samples rather than resting on one favourable reading, which is
+better evidence than the 1.97 figure I over-read in iteration 25 — but it is not yet a full
+creep generation of selection. Re-measure before treating 2.29 as the new baseline.
+
+**Next:** the growth term. `COLONY_MAX = 25` is a hard ceiling hit on ~40% of ticks and energy
+never blocks reproduction, so the plateau is now a one-constant problem with a well-supported
+design behind it — §12.4 finds the growth-versus-reproduction trade-off in the biology, and
+§12.2 reached the same consumption/investment split from economics.

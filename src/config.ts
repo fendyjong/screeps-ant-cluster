@@ -393,7 +393,7 @@ export const TRAIT_BOUNDS: Record<string, { min: number; max: number }> = {
  * genes outrank every new one forever and the change would silently never take
  * effect. On a version change the pool is discarded and re-earned.
  */
-export const FITNESS_VERSION = 2;
+export const FITNESS_VERSION = 3;
 
 /** GCL curve, verified against constants.js on disk. */
 export const GCL_POW = 2.4;

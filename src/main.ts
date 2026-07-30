@@ -11,7 +11,7 @@ import { run as runSupply } from './creep/tasks/supply';
 import { run as runUpgrade } from './creep/tasks/upgrade';
 import { MIN_BODY_COST, RECRUIT_LIMIT_PER_TICK, REMOTE_ENABLED, SNAPSHOT_INTERVAL } from './config';
 import { drawColonyHud } from './hud';
-import { ensureTraits, evolutionStats, fitnessOf, retire } from './evolution';
+import { ensureTraits, evolutionStats, evolutionTrajectory, fitnessOf, retire } from './evolution';
 import { drawCreepLabels } from './visuals';
 import { emit, emitSnapshot, TaskDistribution } from './telemetry';
 import { TaskName } from './types';
@@ -238,6 +238,8 @@ function runRoom(room: Room): void {
     // Why the colony declined to reproduce over the last interval. Three
     // collapses have been misattributed; this replaces the next hypothesis
     // with evidence.
+    emit('INFO', 'evolution-trajectory', { room: room.name, ...evolutionTrajectory() });
+
     const blocks = Memory.spawnBlocks ?? {};
     if (Object.keys(blocks).length > 0) {
       emit('INFO', 'spawn-blocks', { room: room.name, ...blocks });

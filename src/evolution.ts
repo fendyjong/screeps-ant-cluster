@@ -140,7 +140,7 @@ function pool(): GenePool {
   return memory as GenePool;
 }
 
-/** Value delivered per tick of life. */
+/** Energy actually delivered, per tick of life. */
 export function fitnessOf(creep: Creep): number {
   const record = creep.memory.work;
   if (!record || record.ticks <= 0) return 0;
@@ -148,20 +148,45 @@ export function fitnessOf(creep: Creep): number {
 }
 
 /**
- * Called once per creep per tick.
+ * Called once per creep per tick. Accumulates **energy the creep actually
+ * delivered**, which is what fitness now means.
  *
- * `value` is the colony's raw need for the task being performed — the undamped
- * stimulus. Undamped on purpose: congestion damping describes how crowded a task
- * is, not how much the work mattered, and a creep should not be penalised for
- * helping with something genuinely urgent just because others helped too.
+ * The previous definition was the bug that mattered most in this whole project.
+ * It summed the *stimulus of the task being performed* whenever a caller passed
+ * `productive = true` — so the objective function never mentioned energy at all.
+ * It rewarded being busy at something the colony wanted. Two call sites in
+ * `remote.ts` scored a creep as productive for walking home, and for arriving at
+ * a full nest and depositing nothing; a forager that trekked out, came back,
+ * delivered nothing and died full earned maximum fitness for its entire life.
+ * ~7500 generations were selected under that, and best fitness sat frozen at
+ * 0.9055 — an unbeatable busywork champion no honest creep could displace.
  *
- * Idle ticks contribute nothing, which is what punishes a builder standing
- * around with no site to work.
+ * Delivery is measured as **a decrease in the creep's own energy store**, not
+ * self-reported by each task. That is deliberate: a store only falls when energy
+ * leaves the creep, so this counts transfers to spawn, extensions and the
+ * granary, upgrades to the controller, construction and repair — every delivery
+ * path at once — and cannot be gamed by a call site passing the wrong flag.
+ * Harvesting and withdrawing raise the store and are correctly worth nothing;
+ * they are how a creep gets energy, not what it does with it.
+ *
+ * Intents resolve at the end of a tick, so the store read here reflects the
+ * previous tick's action. Comparing consecutive reads therefore attributes each
+ * delivery exactly once, one tick late — which does not matter for a lifetime
+ * average.
+ *
+ * Reservers cannot deliver and would score zero, but they never enter the gene
+ * pool: they spawn without a threshold profile and `retire` returns early
+ * without one. The caste is safe by construction rather than by special case.
  */
-export function recordWork(creep: Creep, productive: boolean, value: number): void {
+export function recordWork(creep: Creep): void {
   const record = creep.memory.work ?? (creep.memory.work = { value: 0, ticks: 0 });
   record.ticks += 1;
-  if (productive) record.value += value;
+
+  const carried = creep.store.getUsedCapacity(RESOURCE_ENERGY);
+  if (record.lastStore !== undefined && carried < record.lastStore) {
+    record.value += record.lastStore - carried;
+  }
+  record.lastStore = carried;
 }
 
 /**
@@ -234,6 +259,51 @@ export function evolutionStats(): { generation: number; best: number; pooled: nu
     best: p.genes.length > 0 ? p.genes[0].fitness : 0,
     pooled: p.genes.length,
   };
+}
+
+/**
+ * Where selection is actually taking the colony.
+ *
+ * `{generation, best, pooled}` cannot answer that: generation only counts
+ * funerals, and a frozen `best` looks identical to healthy stasis. Observed
+ * 2026-07-31 — best pinned at 0.9055 across every sample while generation
+ * climbed past 7500, which was an unbeatable busywork champion, not convergence.
+ *
+ * Reported per gene: the pool mean, and the spread. **Spread is the diagnostic
+ * that matters.** A mean drifting with a collapsing spread is genuine
+ * convergence; a mean drifting with a wide spread is drift under weak selection;
+ * a collapsed spread with a flat mean is a pool that has stopped exploring and
+ * will not find anything new. Mean alone cannot distinguish these.
+ */
+export function evolutionTrajectory(): Record<string, number> {
+  const p = pool();
+  const out: Record<string, number> = {};
+  if (p.genes.length === 0) return out;
+
+  const fits = p.genes.map(g => g.fitness);
+  out.fitMean = fits.reduce((a, b) => a + b, 0) / fits.length;
+  out.fitWorst = fits[fits.length - 1];
+
+  for (const task of TASK_NAMES) {
+    const vals = p.genes.map(g => g.thresholds[task]).filter(v => typeof v === 'number');
+    if (vals.length === 0) continue;
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    out[`${task}Mean`] = Math.round(mean * 1000) / 1000;
+    out[`${task}Spread`] =
+      Math.round(Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length) * 1000) /
+      1000;
+  }
+
+  for (const name of TRAIT_NAMES) {
+    const vals = p.genes
+      .map(g => (g.traits ?? ({} as TraitProfile))[name])
+      .filter(v => typeof v === 'number');
+    if (vals.length === 0) continue;
+    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+    out[`${name}Mean`] = Math.round(mean * 1000) / 1000;
+  }
+
+  return out;
 }
 
 /** Baseline spread, exported so config stays the single source for tuning. */

@@ -6,7 +6,7 @@ import { recordWork } from '../../evolution';
 export function run(creep: Creep, value: number): void {
   if (updatePhase(creep) === 'gathering') {
     gatherEnergy(creep);
-    recordWork(creep, creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0, value);
+    recordWork(creep);
     return;
   }
 
@@ -30,18 +30,18 @@ export function run(creep: Creep, value: number): void {
     const target = worn[0];
     if (!target) {
       // Genuinely nothing to do: this is the idling fitness must punish.
-      recordWork(creep, false, value);
+      recordWork(creep);
       return;
     }
 
     const repaired = creep.repair(target);
     if (repaired === ERR_NOT_IN_RANGE) creep.moveTo(target);
-    recordWork(creep, repaired === OK || repaired === ERR_NOT_IN_RANGE, value);
+    recordWork(creep);
     return;
   }
 
   creep.memory.taskState = { ...creep.memory.taskState, targetId: site.id };
   const result = creep.build(site);
   if (result === ERR_NOT_IN_RANGE) creep.moveTo(site);
-  recordWork(creep, result === OK || result === ERR_NOT_IN_RANGE, value);
+  recordWork(creep);
 }

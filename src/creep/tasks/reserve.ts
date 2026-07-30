@@ -31,13 +31,13 @@ export function isReserver(creep: Creep): boolean {
 export function run(creep: Creep): void {
   const target = creep.memory.remoteRoom;
   if (!target) {
-    recordWork(creep, false, 1);
+    recordWork(creep);
     return;
   }
 
   if (creep.room.name !== target) {
     creep.moveTo(new RoomPosition(25, 25, target));
-    recordWork(creep, false, 1);
+    recordWork(creep);
     return;
   }
 
@@ -46,11 +46,11 @@ export function run(creep: Creep): void {
     // Room has no controller to reserve — forget it so a replacement picks
     // somewhere useful.
     delete creep.memory.remoteRoom;
-    recordWork(creep, false, 1);
+    recordWork(creep);
     return;
   }
 
   const result = creep.reserveController(controller);
   if (result === ERR_NOT_IN_RANGE) creep.moveTo(controller);
-  recordWork(creep, result === OK || result === ERR_NOT_IN_RANGE, 1);
+  recordWork(creep);
 }

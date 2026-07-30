@@ -187,7 +187,7 @@ export function run(creep: Creep, value: number): void {
   // requires stepping onto an exit tile.
   const destination = phase === 'delivering' ? home : creep.memory.remoteRoom;
   if (creep.room.name === destination && moveOffExit(creep)) {
-    recordWork(creep, phase === 'delivering', value);
+    recordWork(creep);
     return;
   }
 
@@ -195,13 +195,13 @@ export function run(creep: Creep, value: number): void {
     if (carried === 0) {
       // Nothing left to deliver — trip over, free to be re-tasked.
       endTrip(creep);
-      recordWork(creep, false, value);
+      recordWork(creep);
       return;
     }
 
     if (creep.room.name !== home) {
       creep.moveTo(new RoomPosition(25, 25, home));
-      recordWork(creep, true, value); // hauling home is productive work
+      recordWork(creep); // hauling home is productive work
       return;
     }
 
@@ -258,27 +258,27 @@ export function run(creep: Creep, value: number): void {
       // Genuinely nowhere to put it — nest full and no granary yet. Not a
       // success: the trip delivered nothing.
       endTrip(creep);
-      recordWork(creep, false, value);
+      recordWork(creep);
       return;
     }
 
     const result = creep.transfer(sink, RESOURCE_ENERGY);
     if (result === ERR_NOT_IN_RANGE) creep.moveTo(sink, AVOID_BORDER);
     if (result === OK) endTrip(creep);
-    recordWork(creep, result === OK || result === ERR_NOT_IN_RANGE, value);
+    recordWork(creep);
     return;
   }
 
   // --- gathering ---
   const target = creep.memory.remoteRoom ?? (creep.memory.remoteRoom = chooseRemote(home));
   if (!target) {
-    recordWork(creep, false, value);
+    recordWork(creep);
     return;
   }
 
   if (creep.room.name !== target) {
     creep.moveTo(new RoomPosition(25, 25, target));
-    recordWork(creep, false, value); // travel is overhead
+    recordWork(creep); // travel is overhead
     return;
   }
 
@@ -291,13 +291,13 @@ export function run(creep: Creep, value: number): void {
     } else {
       delete creep.memory.remoteRoom;
     }
-    recordWork(creep, false, value);
+    recordWork(creep);
     return;
   }
 
   const result = creep.harvest(source);
   if (result === ERR_NOT_IN_RANGE) creep.moveTo(source, AVOID_BORDER);
-  recordWork(creep, result === OK, value);
+  recordWork(creep);
 
   // Record that this room is genuinely being worked, not merely walked through.
   // Reservation is priced per room and only pays where foraging actually
