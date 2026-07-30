@@ -1115,6 +1115,106 @@ real one" until redone.
 
 ---
 
+## 9.5 Governance: what to centralize, and why the ant metaphor has a limit
+
+This colony was built on the premise that decentralization is the point. After
+~4000 generations it had reached RCL 5 and stopped, delivering **1.70 energy/tick
+against ~35 available**. The obvious conclusion — autonomy failed, centralize
+everything — is wrong, but so was the original premise. Both need stating
+precisely.
+
+### 9.5.1 Self-organization is a workaround for limited parts
+
+Camazine and Deneubourg give the condition directly:
+
+> "A biological system will be self-organized when it possesses a large number of
+> subunits, and these subunits **lack either the communicational abilities or the
+> computational abilities, or both, that are needed to implement centralized
+> control.**"
+
+Self-organization is what evolution reaches for when the parts *cannot*
+centralize. Ants use pheromone gradients because an ant cannot perceive the
+colony; the trail is a workaround for a missing global view, not a superior
+design. The same paper notes that even subunits with high cognitive ability stay
+self-organized when there is no preadaptation for a system-wide communication
+network.
+
+**Screeps creeps have neither limitation.** `Game.creeps` is a global object.
+Every creep already has perfect global information at zero communication cost,
+and the whole colony shares one CPU budget. The precondition that makes
+decentralization correct in biology is simply absent here. Porting the pheromone
+solution wholesale means solving a constraint this game does not impose.
+
+### 9.5.2 But the observed failures were not decision failures
+
+Every defect found in this colony:
+
+| failure | a creep deciding badly? |
+|---|---|
+| no storage ever built | no — no build planner existed |
+| creeps outside the home room never processed | no — plain bug in `main.ts` |
+| fitness rewarded busywork | no — wrong objective function |
+| upgraders mined their own energy | no — no withdraw path existed |
+| five threshold-denominator collapses | no — wrong denominators |
+
+None is "an ant chose wrongly." **A dictatorship with the same missing storage
+and the same fitness function performs identically badly.** The colony did not
+stall because ants decided for themselves; it stalled because nothing ever
+defined what a good decision was. A dictator with no objective function is
+exactly as stuck as a democracy with no objective function.
+
+Centralization is not free either. Overmind's author reports that its
+hierarchical, class-heavy architecture makes garbage collection more expensive
+than a flatter design. And the one subsystem here that has consistently worked —
+response-threshold task allocation — is both the cheapest and the one with the
+strongest empirical support in real ant foraging.
+
+### 9.5.3 The split: centralize by information locality, not by ideology
+
+The question is never "who is in charge." It is **which decisions require global
+state that no local signal can encode.**
+
+**Centralize** — a local rule provably cannot produce these:
+- *Structure placement.* A bunker layout cannot emerge from local traffic. This
+  is not hypothetical: the colony had no storage for its entire life because no
+  local signal encodes "we need a granary." Roads emerge from stigmergy because
+  traffic *is* a local signal; storage placement has no equivalent.
+- *The objective function.* What the colony is for. See §9.5.4.
+- Expansion and claim decisions, defense response, caste ratios.
+
+**Leave emergent** — local, cheap, robust, and empirically working:
+- Which task to perform this tick (response thresholds).
+- Which source, when to return, how full to fill.
+- Per-creep heritable genes.
+
+Stated plainly: **the centre decides what to build and what winning means; the
+ants decide who does it.**
+
+This is closer to real colonies than either extreme. The queen issues no orders
+and does not manage division of labour — task allocation genuinely is
+decentralized — yet nest architecture and reproductive allocation are
+colony-level outcomes that no individual controls.
+
+### 9.5.4 Homeostasis is not a goal
+
+The deeper defect this exposed: every stimulus in the colony — supply, upgrade,
+build, remote — is *homeostatic*. Each measures a deficit and pushes toward
+equilibrium. **None measures growth.** A colony that satisfies every stimulus
+sits still forever, which is exactly what was observed: it found equilibrium at
+RCL 5 and stopped.
+
+Real colonies escape this because reproduction is an appetite that never
+satiates, not a deficit that closes. A progressive colony needs at least one
+signal that cannot be satisfied — otherwise "progressive" is not encoded
+anywhere in the system, and no amount of tuning will produce it.
+
+Sources: [Camazine & Deneubourg, *When Is Self-Organization Used in Biological
+Systems?*, Biological Bulletin 202(3)](https://www.journals.uchicago.edu/doi/10.2307/1543484)
+([full text](http://order.ph.utexas.edu/Camazine.pdf)),
+[Verification of response-threshold models in ant foraging](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6586672/),
+[Bartlett, *Screeps #6: Verifiably refreshed* — on hierarchical architecture and GC cost](https://bencbartlett.com/blog/screeps-6-verifiably-refreshed/),
+[Why the ant colony queen isn't really in charge](https://www.natureworldnews.com/articles/72957/20260514/why-ant-colony-queen-isnt-really-charge-swarm-intelligence-ants-explains-how-ant-colonies-work.htm)
+
 ## 10. Design Principles for New Colony
 
 ### 10.1 Core Philosophy: Stigmergy First, Centralization Second
