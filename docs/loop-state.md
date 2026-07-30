@@ -24,6 +24,7 @@ efficiency.
 | 31 | per-creep jitter on replacement lead time | collapses continued (26→2 again) | **did not fix collapses**; birth-gap test still inconclusive |
 | 32 | require full-size body outside survival | bodies all-3-part → 27/28 at 12-part | **worked** for composition; output 2.67@28-29, NOT an improvement |
 | 33 | `COLONY_MAX` derived from spawn capacity (25 → 20) | 2.67@28-29 → **4.47@22**; per-creep 0.094 → **0.203** | **worked**; colony was past carrying capacity |
+| 34 | cap on real bodies + clustering-derived ceiling (→18) | 4.47@22 → 3.89@19; per-creep 0.203 → 0.205 | **falsified**; metric was invalid, ceiling reverted, body cap kept |
 
 # Loop state — progressive ant supercolony
 
@@ -1925,3 +1926,51 @@ clustering itself — and clustering has already resisted the lead-time jitter.
 `spawnCapacityPer100` in the windows *before* the fall would confirm the mechanism end to end; if
 a collapse happens while peak is at or under capacity, the cluster theory is wrong and should be
 withdrawn.
+
+### 2026-07-31 — iteration 34 — I confirmed a mechanism that was not there, and caught it
+
+**A claim made earlier in this same iteration is WITHDRAWN.** After a collapse to 1 creep, the
+`demography` telemetry showed `peakDeathsPer100` at 3-4 against a spawn capacity of 2.78,
+continuously "OVER" for ~2000 ticks before the fall. I called the cluster mechanism confirmed
+end to end. **That was wrong.**
+
+`peak` is the maximum over fifteen integer buckets. At 19-22 creeps the mean is ~1.3 per bucket,
+and the maximum of fifteen Poisson draws at that mean is routinely 3 **with no synchronisation
+whatsoever**. The statistic measures discreteness, not clustering. Checked against the healthy
+colony immediately afterwards: it reads OVER in **43 of 69 samples while nothing is wrong**.
+
+**The error was a base rate one.** I observed the metric exceeding capacity before a collapse and
+never checked whether it also exceeds capacity without one. It does, essentially always. A
+condition that is true in both the failure and the healthy case explains nothing, and I built a
+`CLUSTERING_FACTOR = 2.25` derivation on top of it as though it were measured fact.
+
+**Consequences, both reverted or kept on their own merits:**
+- The ceiling that derivation produced (18 creeps) is **reverted**. It cost total output
+  4.47 → 3.89 energy/tick for a per-creep change of 0.203 → 0.205, which is inside noise. Cutting
+  22 → 19 bought nothing; the real gain was cutting 28 → 22, and that stands.
+- `SPAWN_HEADROOM` returns to 0.5 (`COLONY_MAX` 20), now labelled honestly as **empirical, not
+  derived** — it puts the colony near 22, which measured best.
+- The **body cap is kept**, on independent grounds: the ceiling must bind on creeps that actually
+  exist. `COLONY_MAX` was 20 while real population sat at 22-24, because creeps inside their final
+  lead time were excluded from `alive` while still occupying slots and still needing replacement.
+  One slot of slack, since pre-spawning overlaps a successor with its predecessor by design.
+
+**Metric replaced.** `demography` now reports `worstDeficit` — the worst 500-tick window's deaths
+minus what the spawn can deliver in 500 ticks. A long horizon lets bucket noise average out, so a
+positive deficit is a genuine shortfall rather than a rounding artefact. Whether it discriminates
+is itself unproven and must be checked the same way: **read it during healthy periods too, not
+only before a collapse.**
+
+**Standing method note, because this is the second time a metric has misled me this session.**
+The birth-gap test moved for an unrelated reason (bodies had shrunk to 3 parts). This one was
+true regardless of outcome. Both would have been caught by the same question: *what does this
+metric read when nothing is wrong?* Ask it before crediting any confirmation.
+
+**Trajectory:** fitMean 2.12, supply 0.12 (spread 0.042, converged), upgrade 0.66 (spread 0.098,
+still exploring), remote 0.86. Unchanged through this iteration, as expected — nothing here
+touched selection.
+
+**Next:** verify `worstDeficit` discriminates before using it for anything. If it reads ~0 while
+healthy and clearly positive before a collapse, it is the first honest handle on the mechanism.
+If it is positive in both, the demographic theory of these collapses has no support yet and
+should be set aside rather than patched again.

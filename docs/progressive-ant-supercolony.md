@@ -1468,6 +1468,7 @@ and the measured effect — including when the effect was nil.
 | Variable worker lifespan (de-synchronisation) | ant/bee life-history | adopted, no effect yet | jittered replacement lead time; collapses continued unchanged |
 | Slot scarcity over resource scarcity | economics (capital vs labour) | adopted | body composition all-3-part → 27/28 full-size; `saving-for-full-body` blocked 0 ticks, so waiting cost nothing |
 | Carrying capacity bounds population | central-place foraging (§7.1.1) | adopted | per-creep output rises monotonically as headcount falls: 0.094 at 28.5 creeps → 0.203 at 22. Same total output from 6 fewer creeps |
+| Death-clustering ceiling (peak-of-buckets) | — | **rejected, self-inflicted** | the statistic measured integer-bucket discreteness, not synchronisation: max of 15 Poisson draws at mean 1.3 is routinely 3. It read "over capacity" for healthy colonies, so it could not discriminate. Do not size anything on max-of-buckets |
 
 ### 12.4 What a superorganism actually optimises
 

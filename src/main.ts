@@ -243,20 +243,36 @@ function runRoom(room: Room): void {
     // Death clustering, the quantity that actually decides whether the spawn can
     // keep up. The average replacement rate has always looked fine; it is the
     // busiest window that outruns one spawn and compounds into a collapse.
+    // Death pressure over a horizon long enough that integer bucket noise stops
+    // dominating.
+    //
+    // The first version of this reported the maximum deaths in any single
+    // 100-tick bucket, which was useless: with ~19 creeps spread over fifteen
+    // buckets the mean is 1.3 and the maximum is routinely 3 by discreteness
+    // alone, so it read "over capacity" for a perfectly healthy colony and could
+    // not distinguish one about to collapse. It produced a confident but false
+    // confirmation.
+    //
+    // What actually matters is whether deaths outrun the spawn for long enough to
+    // accumulate an unrecoverable deficit. Over a 500-tick horizon the spawn can
+    // deliver 500 / (parts * CREEP_SPAWN_TIME) creeps, and the worst such window
+    // is compared against that. A deficit here is a real shortfall the colony
+    // must survive, not a rounding artefact.
     const lives = creeps
       .filter(c => c.memory.caste !== 'reserver')
       .map(c => c.ticksToLive ?? 0);
-    const windows: Record<number, number> = {};
-    for (const ttl of lives) {
-      const bucket = Math.floor(ttl / 100);
-      windows[bucket] = (windows[bucket] ?? 0) + 1;
+    const HORIZON = 500;
+    const spawnPerHorizon = HORIZON / (2 * 6 * 3);
+    let worstDeficit = 0;
+    for (let start = 0; start + HORIZON <= 1500; start += 100) {
+      const dying = lives.filter(t => t >= start && t < start + HORIZON).length;
+      worstDeficit = Math.max(worstDeficit, dying - spawnPerHorizon);
     }
-    const peak = Math.max(0, ...Object.values(windows));
     emit('INFO', 'demography', {
       room: room.name,
       alive: lives.length,
-      peakDeathsPer100: peak,
-      spawnCapacityPer100: Math.round((100 / (2 * 6 * 3)) * 100) / 100,
+      worstDeficit: Math.round(worstDeficit * 100) / 100,
+      spawnPerHorizon: Math.round(spawnPerHorizon * 100) / 100,
     });
 
     const blocks = Memory.spawnBlocks ?? {};

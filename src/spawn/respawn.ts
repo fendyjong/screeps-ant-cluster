@@ -170,6 +170,19 @@ export function runSpawning(
   ).length;
   if (alive >= COLONY_MAX) return block('at-cap');
 
+  // The derived ceiling has to bind on bodies that actually exist, not only on
+  // the lead-time-adjusted count, or pre-spawning quietly inflates the colony
+  // past it. Measured: `COLONY_MAX` was 20 and the real population sat at 22-24,
+  // because every creep inside its final lead time was excluded from `alive`
+  // while still eating a population slot, still needing replacement, and still
+  // contributing to the death clusters the ceiling exists to survive.
+  //
+  // One slot of slack, and exactly one: pre-spawning means a successor overlaps
+  // its predecessor by design, and forbidding that would defeat it entirely.
+  // Anything beyond one overlap is the ceiling failing to hold.
+  const bodies = mine.filter(c => c.memory.caste !== 'reserver').length;
+  if (bodies > COLONY_MAX) return block('at-cap-bodies');
+
   // Survival floor scales with target size, so a large colony reacts to decline
   // instead of waiting until it is nearly extinct. Declared here because the
   // reserver gate below also needs it.

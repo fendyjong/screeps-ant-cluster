@@ -74,6 +74,24 @@ const CREEP_LIFE_TIME_TICKS = 1500;
 const CREEP_SPAWN_TICKS = 3;
 const BODY_UNIT_PARTS = 6;
 const MAX_BODY_UNITS_VALUE = 2;
+/**
+ * Fraction of the spawn's throughput the colony is allowed to consume on average.
+ *
+ * A derivation based on "measured clustering" was tried and WITHDRAWN. It sized
+ * this as the reciprocal of `peakDeathsPer100 / mean`, which looked like a 2.14x
+ * clustering factor — but `peak` is the maximum over fifteen integer buckets, and
+ * at a mean of ~1.3 per bucket the maximum of fifteen Poisson draws is routinely
+ * 3 with no synchronisation whatever. That statistic measures discreteness, not
+ * clustering, and it reads "over capacity" for a perfectly healthy colony. The
+ * ceiling it produced (18) cost total output — 4.47 to 3.89 energy/tick — with no
+ * per-creep gain (0.203 to 0.205, inside noise), so it is reverted.
+ *
+ * 0.5 is retained as an explicitly empirical value, not a derived one: it puts
+ * the colony near 22 creeps, which measured best on total output while holding
+ * the best per-creep figure seen. The honest position is that the average-load
+ * argument below is sound and the right *peak* margin is still unknown, because
+ * no metric yet distinguishes a colony about to collapse from a healthy one.
+ */
 const SPAWN_HEADROOM = 0.5;
 
 export const COLONY_MAX = Math.floor(
