@@ -55,6 +55,9 @@ declare global {
      */
     traffic?: Record<string, Record<string, number>>;
 
+    /** Tick of the last growth spawn, used to stagger the population's ages. */
+    lastGrowthSpawn?: number;
+
     /** Gene pool of retired creeps' threshold profiles, best-first. */
     evolution?: {
       genes: Array<{ thresholds: ThresholdProfile; fitness: number }>;

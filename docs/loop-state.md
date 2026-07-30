@@ -661,3 +661,37 @@ Worth using opportunistically, not by default.
 **Cheaper real speedups:** write the docs/commit while the colony is reacting rather than
 after, and shorten the observation window — at ~20ms/tick, 60s is already ~3000 ticks, two
 full creep generations, which is enough to judge most changes.
+
+### 2026-07-30 — iteration 11 — synchronized cohort death
+
+**Caught by the regime monitor:** colony fell **24 → 2 creeps in ~400 ticks**, then rebuilt,
+repeatedly. `upgrade` sat at **0** through each trough, burning exactly the GCL progress that
+gates expansion.
+
+**First hypothesis was wrong, and checking mattered.** I expected the iteration-8 body scaling
+to have produced oversized creeps draining the economy. It had not — bodies were 6 parts
+(400 energy), nowhere near the 1200 I feared, because `bodyFor` reads *available* energy at
+spawn time and availability stays low while population is low. Had I "fixed" body scaling I
+would have removed a working feature and left the real fault untouched.
+
+**Actual cause: the population is one age-cohort.** Creeps live 1500 ticks. After each crash
+the colony rebuilt as fast as energy allowed, so the entire population shared a birth window
+and therefore a death window — and the rebuild recreated the cohort, making the oscillation
+self-perpetuating. The creep names show it plainly: 16 of them spawned inside a single
+900-tick window.
+
+**Fix: `SPAWN_STAGGER_TICKS = 60` on growth spawns.** `CREEP_LIFE_TIME / COLONY_MAX` =
+1500 / 25 = 60 spreads births evenly across one lifetime, which is what a steady-state age
+distribution requires. Survival spawning below `COLONY_MIN` is deliberately exempt — a colony
+near death must replace immediately, and real colonies likewise do not ration brood while
+facing collapse.
+
+**Also fixed a monitoring defect that hid this.** The regime monitor's bands tested
+`creeps < 2` for CRITICAL, so a 25 → 2 collapse was reported as *HEALTHY*. Rebanded to
+DEAD / COLLAPSE (≤5) / RECOVERING (<12) / HEALTHY. Worth noting as a class of bug: an alerting
+threshold that never fires is indistinguishable from a system that never fails.
+
+**Next iteration:** confirm the oscillation is gone — population should hold near
+`COLONY_MAX` with deaths spread out rather than sawtoothing — then resume the open candidates
+(room scouting + reservation; pheromone-weighted pathfinding; idle state for
+all-negative-margin creeps).

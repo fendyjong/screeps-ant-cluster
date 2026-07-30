@@ -4,6 +4,7 @@ import {
   COLONY_MIN,
   DEFAULT_TASK,
   GROWTH_MIN_RESERVE,
+  SPAWN_STAGGER_TICKS,
   MAX_BODY_UNITS,
   IDEAL_BODY,
   IDEAL_BODY_COST,
@@ -53,8 +54,16 @@ export function runSpawning(
   if (alive >= COLONY_MAX) return null;
 
   const reason: SpawnReason = alive < COLONY_MIN ? 'survival' : 'growth';
-  // Absolute, not a share of capacity — see GROWTH_MIN_RESERVE.
-  if (reason === 'growth' && energy.available < GROWTH_MIN_RESERVE) return null;
+
+  if (reason === 'growth') {
+    // Absolute, not a share of capacity — see GROWTH_MIN_RESERVE.
+    if (energy.available < GROWTH_MIN_RESERVE) return null;
+
+    // Stagger growth so the population does not become a single age-cohort that
+    // dies together. Survival spawning skips this entirely.
+    const last = Memory.lastGrowthSpawn ?? -SPAWN_STAGGER_TICKS;
+    if (Game.time - last < SPAWN_STAGGER_TICKS) return null;
+  }
 
   const body = bodyFor(energy.available);
   if (!body) return null;
@@ -67,5 +76,6 @@ export function runSpawning(
     },
   });
 
+  if (result === OK && reason === 'growth') Memory.lastGrowthSpawn = Game.time;
   return result === OK ? reason : null;
 }

@@ -45,6 +45,25 @@ export const COLONY_MAX = 25;
 export const GROWTH_MIN_RESERVE = 400;
 
 /**
+ * Minimum ticks between *growth* spawns, so the population has a staggered age
+ * structure instead of being one cohort.
+ *
+ * Observed 2026-07-30: the colony collapsed 24 -> 2 creeps in ~400 ticks and
+ * then rebuilt, repeatedly. Nothing was wrong with the economy — the population
+ * had grown as a single age-cohort, so it aged out together. Rebuilding as fast
+ * as energy allowed simply recreated the cohort, making the oscillation
+ * self-perpetuating. `upgrade` sat at zero through each trough, burning exactly
+ * the GCL progress that gates expansion.
+ *
+ * CREEP_LIFE_TIME / COLONY_MAX = 1500 / 25 = 60 spreads births evenly across one
+ * lifetime, which is what a steady-state age distribution requires. Survival
+ * spawning below COLONY_MIN is deliberately exempt: a colony near death must
+ * replace immediately, and real colonies likewise do not ration brood while
+ * facing collapse.
+ */
+export const SPAWN_STAGGER_TICKS = 60;
+
+/**
  * Quorum control. Real colonies avoid over-recruiting to one source because
  * arriving ants congest it — they collide, slow down, and some turn back. That
  * negative feedback caps recruitment at the productive level (research doc §4.3).
