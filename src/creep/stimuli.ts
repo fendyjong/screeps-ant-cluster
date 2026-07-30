@@ -3,6 +3,7 @@ import {
   CAPACITY_BUILD_PER_SITE,
   CAPACITY_REMOTE,
   REMOTE_ENABLED,
+  REMOTE_MAX_STIMULUS,
   CAPACITY_SUPPLY,
   CAPACITY_UPGRADE,
   CONGESTION_FACTOR,
@@ -102,7 +103,8 @@ export function computeStimuli(s: RoomSnapshot): Stimuli {
     supply: clamp01(supply),
     upgrade: s.hasController ? UPGRADE_BASELINE : 0,
     build: clamp01(s.constructionSiteCount / BUILD_SATURATION_SITES),
-    remote: REMOTE_ENABLED ? clamp01(surplusWork) : 0,
+    // Capped so remote can compete for labor but never monopolise it.
+    remote: REMOTE_ENABLED ? Math.min(REMOTE_MAX_STIMULUS, clamp01(surplusWork)) : 0,
   };
 }
 

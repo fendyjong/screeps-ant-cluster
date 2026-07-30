@@ -129,8 +129,29 @@ export const CAPACITY_REMOTE = 6;
  */
 export const REMOTE_ENABLED = false;
 
-/** Carry this much before walking home; shorter trips waste the journey. */
-export const REMOTE_MIN_ENERGY_TO_RETURN = 100;
+/**
+ * Head home at this fraction of carry capacity rather than waiting to fill
+ * completely. Foragers previously stalled at 77/100 forever because the shared
+ * phase logic only released them on a totally full store.
+ */
+export const REMOTE_RETURN_FRACTION = 0.7;
+
+/**
+ * How long a homeward commitment lasts. Bounded on purpose: an open-ended
+ * commitment locked every forager permanently and collapsed the colony. This
+ * covers one leg of the trip and lapses by itself if anything goes wrong.
+ */
+export const REMOTE_COMMIT_TICKS = 300;
+
+/**
+ * Ceiling on the remote stimulus.
+ *
+ * Uncapped it reached 1.0 while the room was oversubscribed, which outbid every
+ * other task at once and drew most of the colony out at the same moment. Held
+ * just above `UPGRADE_BASELINE` it competes honestly for labor without being
+ * able to monopolise it — a blast radius limit, not a tuning preference.
+ */
+export const REMOTE_MAX_STIMULUS = 0.55;
 
 /**
  * WORK parts one home source sustains: SOURCE_ENERGY_CAPACITY / ENERGY_REGEN_TIME

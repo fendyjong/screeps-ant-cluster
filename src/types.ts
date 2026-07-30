@@ -44,6 +44,10 @@ declare global {
     /** Room it is currently foraging, remembered so it does not oscillate at
      *  the border. */
     remoteRoom?: string;
+
+    /** Expiry tick of a homeward commitment. Bounded so it cannot lock a creep
+     *  permanently, which previously collapsed the colony. */
+    commitUntil?: number;
   }
 
   interface Memory {

@@ -85,12 +85,19 @@ function runRoom(room: Room): void {
       // Carrying-only still prevents the real waste (abandoning a haul
       // mid-journey) while leaving outbound creeps free to be re-tasked, which
       // is what the anti-thrash buffer and recruitment limiter already handle.
-      // Only holds a creep long enough to finish delivering a load it already
-      // carries, and only while remote foraging is enabled at all.
-      const committed =
-        REMOTE_ENABLED &&
-        previous === 'remote' &&
-        creep.store.getUsedCapacity(RESOURCE_ENERGY) > 0;
+      // Commitment covers one leg — carrying a load home — and is stamped with
+      // an expiry by the task itself, so a stuck creep frees itself rather than
+      // locking the colony as an open-ended version once did.
+      const commitUntil = creep.memory.commitUntil ?? 0;
+      // Covers a whole round trip, not just the way home — but strictly
+      // time-bounded, so a stuck forager releases itself instead of locking the
+      // colony the way an open-ended version did. The stimulus cap and
+      // congestion damping keep the number of simultaneously committed foragers
+      // small enough that the rest of the colony carries on.
+      const committed = REMOTE_ENABLED && previous === 'remote' && Game.time < commitUntil;
+      if (commitUntil > 0 && Game.time >= commitUntil) {
+        delete creep.memory.commitUntil;
+      }
 
       if (committed) {
         distribution.remote += 1;
