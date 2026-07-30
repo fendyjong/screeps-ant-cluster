@@ -1,4 +1,4 @@
-import { NEST_PRIORITY_FILL, REMOTE_COMMIT_TICKS } from '../../config';
+import { NEST_SPAWN_RESERVE, REMOTE_COMMIT_TICKS } from '../../config';
 import { readEnergy } from '../stimuli';
 import { ensureTraits, recordWork } from '../../evolution';
 
@@ -240,8 +240,7 @@ export function run(creep: Creep, value: number): void {
     // competition, not a fixed queue — repletes are filled during a glut, not
     // after the last larva is fed.
     const nest = readEnergy(creep.room);
-    const nestHungry =
-      nest.capacity > 0 && nest.available / nest.capacity < NEST_PRIORITY_FILL;
+    const nestHungry = nest.available < Math.min(NEST_SPAWN_RESERVE, nest.capacity);
 
     const granary = creep.room
       .find(FIND_STRUCTURES)

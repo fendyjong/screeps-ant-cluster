@@ -1439,3 +1439,47 @@ is now unblocked because delivery is measurable. Keep it as the next change.
 No amount of buffering escapes that. Per the new §9.5.4, nothing in the stimulus set measures
 growth, so equilibrium is the system's fixed point and it will return there after every fix.
 The growth term matters more than any further plumbing.
+
+### 2026-07-31 — iteration 25c — the same wrong-denominator error, a third time
+
+The colony collapsed again after the previous fix (26 -> 2 -> 26 -> 4). Checked for an
+exception first, per trap (a), because "sources full while the nest starves" is a
+looks-impossible signature. There was none — no ERROR severity, no console entries — so the
+logic was running and this was a real dynamic.
+
+**What the data showed:** creep bodies had degraded to 3 parts `[WORK, CARRY, MOVE]` (200 energy)
+from the 6-part 350-energy unit, and 21 of 23 creeps were carrying energy while all four sources
+sat at or near full. A poverty trap: a poor nest can only afford small creeps, small creeps earn
+less, the nest stays poor.
+
+**The cause was `NEST_PRIORITY_FILL = 0.75` — unreachable by construction.** Nest capacity is
+1800, so the rule demanded 1350 before a forager would bank. Measured nest fill across every
+sample ever taken: 52.8% at the very highest. The banking branch could not execute, which is
+why the granary read 0 at every single sample. Arithmetic, not observation, should have caught
+this when I wrote it.
+
+**This is the wrong-denominator failure for the third time in two iterations**, and the pattern
+is now unmistakable: 0.75 was measured against *total nest capacity*, a quantity with no
+relationship to what the nest is for. Replaced with `NEST_SPAWN_RESERVE = MAX_BODY_UNITS *
+BODY_UNIT_COST` (700) — spawning is the only thing that draws on the nest, so the amount worth
+reserving is the cost of the largest creep the colony builds. Past that, energy in extensions
+buys nothing.
+
+**Result over six samples:** population stable at **25-26** (was oscillating to 2 and 4), bodies
+back to full size at **24 of 25** (was 6 of 15), nest healthy at 501-1172 (was 130-950). Those
+are real fixes.
+
+**GCL rate 1.85 energy/tick against 1.70 before the whole granary effort.** Marginal, and I am
+not going to call it a win. The granary still reads 0 at every sample — energy now passes
+through it to upgraders rather than accumulating, so the buffer that would damp the oscillation
+still does not exist. What actually stabilised the population was body size recovering, not
+banking.
+
+**Standing lesson for the next iteration, stated as a rule:** before shipping any threshold,
+compute the range the measured quantity actually takes and confirm the threshold falls inside
+it. Two of these three failures were unreachable-by-construction (`granary ?? nest` always true,
+`0.75 * 1800` never reached) and both were provable at the keyboard without touching the colony.
+
+**Next remains the fitness function.** Nothing here changed that assessment: output is still
+~1.85 against ~35 available, the colony sits at equilibrium, and per §9.5.4 no stimulus in the
+system measures growth.

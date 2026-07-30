@@ -507,14 +507,20 @@ export const COLORS = {
 } as const;
 
 /**
- * Nest fill below which returning foragers feed spawn and extensions instead of
- * banking. Spawning draws only from the nest, so starving it stops reproduction
- * outright — measured: a fixed preference for the granary took spawn to 36 of
- * 300 and the population from 26 to 2. Above this line the nest can cover a
- * spawn cycle on its own and surplus is better banked than left in a full nest
- * with nowhere to go.
+ * Energy the nest must hold before foragers bank their loads instead of feeding
+ * spawn and extensions.
  *
- * Expressed as a fraction of nest capacity rather than an absolute, because
- * capacity changes with RCL as extensions are added.
+ * Derived from what the nest is actually *for*, not from its size. Spawning is
+ * the only thing that draws on it, so the amount worth reserving is the cost of
+ * the largest creep the colony builds — past that, more energy sitting in
+ * extensions buys nothing, while the same energy in the granary is available to
+ * upgraders continuously.
+ *
+ * The previous version of this was a fraction of nest capacity (0.75), and it
+ * was unreachable: capacity is 1800, so it demanded 1350, while the nest was
+ * measured at 52.8% at its highest across every sample. The granary read 0 every
+ * time because the banking branch could never execute. That is the
+ * wrong-denominator failure again — the fraction was measured against total
+ * capacity, a number with no relationship to what spawning needs.
  */
-export const NEST_PRIORITY_FILL = 0.75;
+export const NEST_SPAWN_RESERVE = MAX_BODY_UNITS * BODY_UNIT_COST;
