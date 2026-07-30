@@ -972,3 +972,18 @@ ratio available, and much cheaper than claiming.
    independence play, not an income one. Worth doing when the goal is a second nest rather
    than more energy.
 3. Pheromone-weighted pathfinding; idle state for all-negative-margin creeps.
+
+**Verified same iteration:** 3 of 4 neighbours reserved (W6N8, W5N9, W5N7), 4 reservers alive,
+the fourth en route to W4N8. Population 18.7 avg, energy avg 543.
+
+Worth recording — reservations sit permanently at "1–2 ticks remaining". That is the steady
+state, not a fault: `CONTROLLER_RESERVE` adds 1 tick per CLAIM part per tick while reservation
+decays 1/tick, so a single-CLAIM reserver **exactly breaks even**. It holds the reservation
+while standing there but accumulates no buffer, so the room drops to unreserved the moment
+that creep dies and stays so until a replacement walks over. A `[CLAIM, CLAIM, MOVE]` body
+(1250 energy) would add 2/tick and build a cushion that survives the gap — a candidate for a
+later iteration, deliberately not bundled here.
+
+Energy average dipped 780 → 543 as four reservers were paid for (650 each, ~4.3 energy/tick
+amortised across all four) against a projected +20/tick gain. Net positive but worth
+confirming over a longer window before treating the payoff as established.
