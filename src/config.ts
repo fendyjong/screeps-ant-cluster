@@ -130,6 +130,12 @@ export const CAPACITY_UPGRADE = 999;
 /** Build capacity scales with actual sites — no sites means no capacity at all. */
 export const CAPACITY_BUILD_PER_SITE = 2;
 
+/** Structures below this fraction of max HP count as needing maintenance. */
+export const REPAIR_THRESHOLD = 0.6;
+
+/** Build capacity when there are no sites but there is repair work outstanding. */
+export const CAPACITY_REPAIR = 3;
+
 /**
  * Remote foraging capacity. Each remote source sustains 5 WORK parts
  * (SOURCE_ENERGY_NEUTRAL_CAPACITY 1500 / ENERGY_REGEN_TIME 300 / HARVEST_POWER 2),

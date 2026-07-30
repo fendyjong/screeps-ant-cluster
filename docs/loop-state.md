@@ -1258,3 +1258,54 @@ is build spending (roads and extensions) rather than the body.
 margin, but a much thinner one. If reservation coverage collapses (unreserved remote sources
 sustain half as much WORK), the fleet could become genuinely WORK-limited. Watch harvest
 throughput alongside upgrade output.
+
+### 2026-07-31 — iteration 23 — two real bugs found from a screenshot
+
+The human asked whether a cluster of dots on the map were dead creeps. They were not — the
+room held 22 creeps, 30 extensions, 23 roads, 2 dropped-energy piles and exactly **one**
+tombstone. But answering the question surfaced two genuine defects.
+
+**1. Nothing ever repaired anything, and the road network was dissolving.**
+Roads had gone **125 → 22, with all 22 below half health** and the worst at 200 hits. Verified
+on disk: `ROAD_WEAROUT` charges 1 hit per body part per tile crossed, so a 12-part creep costs
+a road 12 hits every time it passes — the colony was destroying its own infrastructure through
+ordinary use. `REPAIR_COST` is 0.01 energy per hit, so restoring a 5000-hit road costs 50
+energy against 300 to rebuild: **maintenance is ~6x cheaper than replacement.**
+
+Galling detail: research doc §5.4 already recorded that *Atta* colonies keep workers dedicated
+to trail upkeep, and even said "repair creeps prioritize roads". I researched the mechanism,
+wrote it down, and never implemented it.
+
+Fixed by folding maintenance into `build`: the stimulus is now
+`max(sites / BUILD_SATURATION_SITES, disrepair)`, and a builder with no construction site
+repairs the most worn road or container instead of idling. This also resolves the older
+"builders idle when no sites exist" problem properly, rather than by generating more roads.
+Result after ~100s: roads under threshold **22 of 22 → 14 of 21**, health now spanning
+12–100% with some fully restored.
+
+**2. The population metric was wrong, and it invalidates several earlier readings.**
+`emitSnapshot` reported `room.find(FIND_MY_CREEPS).length` — creeps standing in the *home
+room only*. With remote foraging as the dominant task, every forager away in a neighbour
+silently vanished from the figure. A "20 → 0 crash" in the series was creeps *leaving*, not
+dying.
+
+**This falsifies the cohort-collapse hypothesis for the current population.** Actual creep ages,
+read directly: 1470, 1270, 1150, 1073, 977, 920, 869, 809, 769, 690, 614, 554, 494, 434, 374,
+314, 254, 194, 134, 74, 14 — evenly spread across the full 1500-tick lifespan, recent births
+exactly 60 ticks apart. That is a textbook healthy age structure. No hostiles in any room, every
+creep at full HP. The stagger fixes from iterations 11 and 21 are working; I was reading a
+broken gauge.
+
+Snapshot now reports `creeps` as the true total and `creepsHome` separately. Post-fix the
+series reads **25–27 total against 19–23 at home**, i.e. 4–8 creeps abroad at any moment —
+previously invisible.
+
+**Lesson, and it is the same shape as the energyAvailable mistake two iterations ago.** Twice
+now a conclusion has rested on a metric that did not measure what its name implied.
+`energyAvailable` was a buffer level read as income; `creeps` was a home-room census read as
+population. Before trusting any series, check what the field actually counts — and prefer
+cross-checking against raw game state, which is how both were caught.
+
+**Next iteration:** re-measure GCL rate against the 2.91 baseline now that the body reshape has
+had time to take effect, and confirm road health keeps climbing rather than stabilising at a
+worn equilibrium. Population figures before this fix should be treated as suspect.

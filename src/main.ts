@@ -229,7 +229,16 @@ function runRoom(room: Room): void {
   drawCreepLabels(room);
 
   if (Game.time % SNAPSHOT_INTERVAL === 0) {
-    emitSnapshot(room, stimuli, distribution, energy, switches, deferred, evolutionStats());
+    emitSnapshot(
+      room,
+      { home: room.find(FIND_MY_CREEPS).length, total: creeps.length },
+      stimuli,
+      distribution,
+      energy,
+      switches,
+      deferred,
+      evolutionStats(),
+    );
   }
 }
 

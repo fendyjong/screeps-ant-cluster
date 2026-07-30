@@ -33,6 +33,7 @@ export function emit(level: LogLevel, event: string, data: Record<string, unknow
 /** The periodic colony snapshot. Task distribution is the key series. */
 export function emitSnapshot(
   room: Room,
+  population: { home: number; total: number },
   stimuli: Stimuli,
   distribution: TaskDistribution,
   energy: { available: number; capacity: number },
@@ -42,7 +43,16 @@ export function emitSnapshot(
 ): void {
   emit('INFO', 'snapshot', {
     room: room.name,
-    creeps: room.find(FIND_MY_CREEPS).length,
+    // Total across all rooms, not `room.find(FIND_MY_CREEPS)`.
+    //
+    // That call counts only creeps standing in the home room, so every forager
+    // away in a neighbour silently vanished from the population figure. With
+    // remote foraging as the dominant task this made the series read like
+    // repeated collapses — a 20 -> 0 "crash" was creeps leaving, not dying. The
+    // creep ages tell the true story: evenly spread across the full 1500-tick
+    // lifespan, which is a healthy age structure, not a cohort.
+    creeps: population.total,
+    creepsHome: population.home,
     // Taken from readEnergy, not room.energyAvailable — the room properties
     // arrive undefined on this server and serialized as null.
     energyAvailable: energy.available,

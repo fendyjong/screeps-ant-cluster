@@ -2,12 +2,14 @@ import {
   BUILD_SATURATION_SITES,
   CAPACITY_BUILD_PER_SITE,
   CAPACITY_REMOTE,
+  CAPACITY_REPAIR,
   REMOTE_ENABLED,
   REMOTE_MAX_STIMULUS,
   CAPACITY_SUPPLY,
   CAPACITY_UPGRADE,
   CONGESTION_FACTOR,
   MIN_BODY_COST,
+  REPAIR_THRESHOLD,
   UPGRADE_BASELINE,
   WORK_PER_SOURCE,
 } from '../config';
@@ -18,6 +20,8 @@ export interface RoomSnapshot {
   energyCapacityAvailable: number;
   hasController: boolean;
   constructionSiteCount: number;
+  /** Structures below the repair threshold, as a fraction of all repairable. */
+  disrepair: number;
   /** Sources in the home room — sets the room's hard income ceiling. */
   sourceCount: number;
   /** WORK parts the colony is fielding, to compare against that ceiling. */
@@ -56,6 +60,26 @@ export function readEnergy(room: Room): { available: number; capacity: number } 
   return { available, capacity };
 }
 
+/**
+ * Share of repairable structures sitting below REPAIR_THRESHOLD.
+ *
+ * Roads wear out under the colony's own traffic — ROAD_WEAROUT charges 1 hit per
+ * body part per tile crossed, so a 12-part creep costs a road 12 hits every time
+ * it passes. With nothing repairing them the network dissolves: 125 roads decayed
+ * to 22, every one of them under half health. Repair costs 0.01 energy per hit
+ * against 300 to rebuild a road, so maintenance is roughly six times cheaper than
+ * replacement — and *Atta* colonies likewise keep workers dedicated to trail
+ * upkeep rather than re-clearing trails from scratch (research doc §5.4).
+ */
+function measureDisrepair(room: Room): number {
+  const repairable = room
+    .find(FIND_STRUCTURES)
+    .filter(s => s.structureType === STRUCTURE_ROAD || s.structureType === STRUCTURE_CONTAINER);
+  if (repairable.length === 0) return 0;
+  const damaged = repairable.filter(s => s.hits < s.hitsMax * REPAIR_THRESHOLD).length;
+  return damaged / repairable.length;
+}
+
 export function readRoom(room: Room): RoomSnapshot {
   const energy = readEnergy(room);
   return {
@@ -63,6 +87,7 @@ export function readRoom(room: Room): RoomSnapshot {
     energyCapacityAvailable: energy.capacity,
     hasController: room.controller !== undefined && room.controller.my,
     constructionSiteCount: room.find(FIND_CONSTRUCTION_SITES).length,
+    disrepair: measureDisrepair(room),
     sourceCount: room.find(FIND_SOURCES).length,
     workParts: room
       .find(FIND_MY_CREEPS)
@@ -102,7 +127,10 @@ export function computeStimuli(s: RoomSnapshot): Stimuli {
   return {
     supply: clamp01(supply),
     upgrade: s.hasController ? UPGRADE_BASELINE : 0,
-    build: clamp01(s.constructionSiteCount / BUILD_SATURATION_SITES),
+    // Building and repairing are the same job to a creep, so one stimulus covers
+    // both. Without the disrepair term the stimulus fell to zero whenever no
+    // sites existed, builders idled, and the road network decayed unattended.
+    build: clamp01(Math.max(s.constructionSiteCount / BUILD_SATURATION_SITES, s.disrepair)),
     // Capped so remote can compete for labor but never monopolise it.
     remote: REMOTE_ENABLED ? Math.min(REMOTE_MAX_STIMULUS, clamp01(surplusWork)) : 0,
   };
@@ -124,7 +152,11 @@ export function applyCongestion(
   const capacity: Record<TaskName, number> = {
     supply: CAPACITY_SUPPLY,
     upgrade: CAPACITY_UPGRADE,
-    build: snapshot.constructionSiteCount * CAPACITY_BUILD_PER_SITE,
+    // With no sites, capacity still exists if there is maintenance outstanding —
+    // otherwise congestion damping would repel every repairer.
+    build:
+      snapshot.constructionSiteCount * CAPACITY_BUILD_PER_SITE +
+      (snapshot.disrepair > 0 ? CAPACITY_REPAIR : 0),
     remote: CAPACITY_REMOTE,
   };
 
