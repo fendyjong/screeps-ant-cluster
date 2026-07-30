@@ -33,6 +33,8 @@ own specs.
   are placed by hand (see below), creeps should drift toward `build`; when those sites
   complete, they should drift back — with no code change.
 - Runs on the private server against a freshly wiped world.
+- Colony behavior is observable after the fact, not just live: structured logs reach
+  SigNoz so task distribution over time can be inspected and debugged (see Observability).
 
 ### How the colony gets perturbed (important)
 
@@ -54,6 +56,8 @@ for. Placing and cancelling sites is the primary way to exercise the milestone.
 - Automated tests — **this project uses none**; verification is by watching the bot run
   against the real private server (matches how emergent/tick-based behavior actually gets
   validated in this domain; matches prior project convention of no test framework).
+- SigNoz dashboards, alerting, traces, or metrics-proper. M1 ships **logs only**; building
+  saved views on top of them is a follow-up once there is data worth charting.
 
 ## Architecture
 
@@ -76,8 +80,15 @@ src/
     respawn.ts            — dumb fixed-N respawner; stamps a fresh jittered
                             threshold profile into memory at spawn time
   visuals.ts               — per-creep room.visual task label; shared color constants
+  telemetry.ts             — emits structured JSON lines via console.log (snapshot on a
+                             tick cadence, events immediately); see Observability
   types.ts                 — Stimuli, ThresholdProfile, TaskName; augments the global
                              CreepMemory interface via declaration merging
+
+tools/
+  log-shipper/            — NOT game code and NOT part of the bundle. Plain Node 20
+                             script: tails the private server's log files, parses the
+                             bot's JSON lines, POSTs them to SigNoz over OTLP/HTTP.
 ```
 
 No `Overseer`/`Colony`/`Overlord`/`Task`-class-hierarchy equivalents. No generic
@@ -188,9 +199,67 @@ Reusing Overmind's color language (inspiration only, no code):
 
 M1 HUD: a `room.visual.text()` label over each creep showing its current task, colored
 by the scheme above. This is not decoration — it's the actual instrument for validating
-the milestone's success criterion (watching labor reallocate live). No external dashboard
-for M1; SigNoz integration (log shipping, private-server-only) is a separate follow-up
-once there's something worth shipping logs about.
+the milestone's success criterion (watching labor reallocate live). The HUD covers the
+live view; SigNoz (below) covers everything after the fact.
+
+## Observability — SigNoz
+
+**In scope for M1.** The HUD shows what is happening right now; it cannot answer "why did
+every creep pile onto `build` around tick 4000." That needs a time series.
+
+### The constraint
+
+Screeps user code runs in an isolated VM with **no network access** — no `fetch`, no
+`http`, no sockets. The bot cannot talk to SigNoz directly. Telemetry has to leave through
+the server's own I/O, and since this server is Steam-authenticated, the usual API-polling
+route is closed too (see Deploy plan).
+
+### Pipeline
+
+```
+bot console.log(JSON)  →  server writes to its log files  →  tools/log-shipper
+                          [.screepsrc: log_console = true]     (tails, parses)
+                                                            →  OTLP/HTTP → SigNoz
+                                                               service.name = screeps
+```
+
+- `.screepsrc` currently has `log_console = false`; setting it to `true` makes the server
+  forward console output into its rotating logs under `logdir` (`logs/`). This is a server
+  config change and needs a server restart — which the world reset requires anyway, so
+  they happen together.
+- `tools/log-shipper` is a plain Node 20 script (`fetch` is built in, so no dependencies):
+  tail → filter to this bot's JSON lines → POST OTLP-JSON to `/v1/logs`. It must handle
+  the server's log rotation (`log_rotate_keep = 5`).
+- SigNoz is already running on this machine and its OTLP endpoints are live: gRPC on
+  `4317` and HTTP on `4318`, published on portctl-managed host ports (`17817` / `17818`
+  at time of writing; UI on `17800`, `signoz.local.zeven.day`). Per the portctl rule, the
+  shipper **resolves these from the registry rather than hardcoding them**.
+- `service.name = screeps`.
+
+### What gets emitted
+
+- **Snapshot**, every N ticks (throttled — `JSON.stringify` costs CPU in Screeps): tick,
+  room, creep count, energy available/capacity, all three stimulus values, and **task
+  distribution** (count of creeps per task). The distribution series is the single most
+  important signal in the whole milestone — it is literally the shape of labor
+  reallocating over time.
+- **Events**, immediately: spawn, death, task switch (from, to, and the margins that
+  caused it), and FATAL on colony starvation.
+
+### Private-server only
+
+This is structural rather than a setting: the shipper reads the local private server's log
+directory, and official-server play never writes there. No filtering or environment flag
+is needed to keep official-server activity out of SigNoz.
+
+### One thing to verify, not assume
+
+`log_console = true` forwards console output, but **which** file it lands in
+(`engine_runner1.log`, `engine_main.log`, or process stdout) has not been confirmed — user
+scripts execute in the runner process, and the engine log currently carries only
+`Game time set to N` lines. Confirm empirically once the flag is flipped. If that path
+proves unusable, the fallback is polling the server's CLI socket (`localhost:21026`, see
+Deploy plan) and reading `Memory.stats` directly instead of parsing logs.
 
 ## Error handling
 
@@ -237,13 +306,26 @@ copies to the pserver folder alone:
 
 Use that exclusively during this build-out.
 
-Steps:
-1. Reset the private server world. **Open question, to resolve at execution time**: the
-   Steam server ships a CLI (`system.resetAllData()` is the usual command) but CLI access
-   on this particular install has not been verified, so the exact mechanism is confirmed
-   with the user rather than assumed here.
+### Server-side changes (world reset + console forwarding)
+
+The server exposes a CLI on a plain TCP socket — `.screepsrc` has `cli_port = 21026`,
+`cli_host = localhost`. This is not affected by Steam authentication, so it is the route
+for administrative commands including the world reset (`system.resetAllData()`).
+
+Two server-side changes are needed and should be done in one pass, since both require a
+restart:
+1. `.screepsrc`: set `log_console = true` (enables the telemetry pipeline above).
+2. Reset the world via the CLI socket.
+
+Exact CLI invocation is confirmed interactively at execution time rather than scripted
+blind — it destroys the existing world, so it gets a look before it runs.
+
+### Deploy steps
+
+1. Server-side changes above (config edit, restart, world reset).
 2. `npm run build` (type-check) → `npm run deploy:pserver` → Steam client syncs
    automatically.
+3. Start `tools/log-shipper` and confirm lines are arriving in SigNoz.
 
 ## Migration / prerequisite steps
 
