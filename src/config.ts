@@ -210,8 +210,28 @@ export const TRAFFIC_DECAY = 0.85;
 export const TRAFFIC_DECAY_INTERVAL = 100;
 export const TRAFFIC_PRUNE_BELOW = 1;
 
-/** Accumulated traffic before a tile is worth paving. */
+/**
+ * Floor on the traffic a tile needs before it is worth paving.
+ *
+ * An absolute floor alone does not work: traffic accumulates without bound on
+ * used tiles, so *every* walked tile eventually crosses any fixed number. With
+ * this at 60 the colony had paved 125 roads and still had 54 tiles queued, which
+ * gave `build` permanent work. Build then outcompeted `upgrade` (a flat 0.5) and
+ * held 9-13 of 18 creeps, so RCL progress stalled and foragers never left — the
+ * colony was paving instead of growing.
+ */
 export const ROAD_TRAFFIC_THRESHOLD = 60;
+
+/**
+ * A tile must also carry this fraction of the room's *current busiest* tile.
+ *
+ * This is what makes road building saturate. Trunk trails in real colonies are a
+ * handful of major routes, not pavement over the whole territory — the network
+ * is where traffic concentrates. Judging a tile against the current maximum
+ * rather than a fixed number means that once the genuinely hot corridors are
+ * paved, nothing else qualifies, and the colony stops.
+ */
+export const ROAD_TRAFFIC_PERCENTILE = 0.6;
 
 /** Ticks between road-planning passes. */
 export const ROAD_PLAN_INTERVAL = 150;
@@ -329,7 +349,24 @@ export const IDEAL_BODY_COST = 400;
  * creep stays at full speed off-road. MAX_CREEP_SIZE is 50 parts, hence 16 units.
  */
 export const BODY_UNIT_COST = 200;
-export const MAX_BODY_UNITS = 16;
+
+/**
+ * Cap on body size, and it is an ECONOMIC limit rather than a mechanical one.
+ *
+ * `MAX_CREEP_SIZE` allows 50 parts (16 units, 3200 energy), and bodies scale to
+ * whatever energy happens to be in the spawn — so as capacity grew to 1800 the
+ * colony began building creeps it could not afford to replace. A creep costing C
+ * with lifetime `CREEP_LIFE_TIME` consumes C/1500 per tick forever; twenty
+ * 1800-energy creeps demand 24 energy/tick against a two-source home income of
+ * 20, which is a guaranteed death spiral. Observed exactly that: population fell
+ * 18 -> 3 with upgrade at zero.
+ *
+ * Four units (800 energy) costs 20 creeps ~10.7/tick, roughly half of income,
+ * leaving the rest for upgrading and building. This is the same mistake as the
+ * capacity-ratio growth gate: scaling something to what is momentarily available
+ * rather than to what can be sustained.
+ */
+export const MAX_BODY_UNITS = 4;
 
 export const COLORS = {
   hud: '#c9c9c9',

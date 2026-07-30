@@ -1,6 +1,7 @@
 import {
   ROAD_MAX_PENDING_SITES,
   ROAD_PLAN_INTERVAL,
+  ROAD_TRAFFIC_PERCENTILE,
   ROAD_TRAFFIC_THRESHOLD,
   TRAFFIC_DECAY,
   TRAFFIC_DECAY_INTERVAL,
@@ -80,8 +81,18 @@ export function proposeRoads(room: Room): RoadPlan | null {
   if (pending >= ROAD_MAX_PENDING_SITES) return null;
 
   const map = mapFor(room.name);
+  const weights = Object.values(map);
+  if (weights.length === 0) return { placed: 0, hottest: 0 };
+
+  // Relative bar, not just an absolute one. Traffic grows without bound on used
+  // tiles, so any fixed threshold is eventually crossed by everything and the
+  // colony paves the room. Requiring a share of the current busiest tile means
+  // road building saturates once the real corridors are covered.
+  const busiest = Math.max(...weights);
+  const bar = Math.max(ROAD_TRAFFIC_THRESHOLD, busiest * ROAD_TRAFFIC_PERCENTILE);
+
   const hot = Object.entries(map)
-    .filter(([, weight]) => weight >= ROAD_TRAFFIC_THRESHOLD)
+    .filter(([, weight]) => weight >= bar)
     .sort((a, b) => b[1] - a[1]);
 
   if (hot.length === 0) return { placed: 0, hottest: 0 };
