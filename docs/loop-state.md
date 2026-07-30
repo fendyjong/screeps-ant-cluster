@@ -26,6 +26,7 @@ efficiency.
 | 33 | `COLONY_MAX` derived from spawn capacity (25 → 20) | 2.67@28-29 → **4.47@22**; per-creep 0.094 → **0.203** | **worked**; colony was past carrying capacity |
 | 34 | cap on real bodies + clustering-derived ceiling (→18) | 4.47@22 → 3.89@19; per-creep 0.203 → 0.205 | **falsified**; metric was invalid, ceiling reverted, body cap kept |
 | 35 | diagnosis only: TTL-at-death + backward death rate | baseline: 0/40 died young, median TTL 1 | **unverified**; second bad metric killed, baseline established |
+| 36 | source→controller link pair (build + transfer + withdraw + fill) | 3.95/0.188@21 → 4.40/**0.205**@21-22 | **unverified** (inside noise); pair confirmed moving energy |
 
 # Loop state — progressive ant supercolony
 
@@ -2023,3 +2024,57 @@ collapse:
    verified against telemetry this iteration (21 = 21), so that is unlikely.
 If it resolves quickly, spend the remainder on **the growth term**, which is untouched and does
 not depend on this.
+
+### 2026-07-31 — iteration 36 — collapses stopped, and the first transport that needs no creep
+
+**The collapse question is settled, and the answer is that they stopped.** Population minima by
+10k-tick bucket: collapses at buckets 1070000 (min 1) and 1120000 (min 3), then **eight
+consecutive buckets — 80,000 ticks — with min 20, max 22, mean 21.2-21.5.** The previous
+inter-collapse interval was ~50,000 ticks.
+
+Clean post-deploy death data (timestamp-filtered, 826 samples): mean **1.10 deaths per 100 ticks**
+against a spawn capacity of 2.78, max 3, and `diedYoung` **0 in every single sample** with
+`medianDeathTTL` 1 throughout. Every creep ages out; nothing is removed early.
+
+**Attribution is plausible but NOT proven, and it should not be recorded as understood.** The
+collapses ceased when iteration 34 made the ceiling bind on real bodies (22-24 actual → 20-22).
+But mean death rate was never close to spawn capacity at either size — 1.26 versus 1.10 per 100
+against 2.78 — so the arithmetic does not explain why 24 fails and 21 holds. Something about the
+larger colony tipped it that the death-rate model does not capture. Recorded as an open question
+rather than a solved one; absence of collapse for 80k ticks is evidence, not proof.
+
+**Changed: a source→controller link pair**, the first mechanism in this colony that moves energy
+**without a creep carrying it**. `LINK_CAPACITY` 800 per transfer at a flat 3% loss over any
+distance in the room, all verified on disk. This targets the quantity now known to bind:
+per-creep delivery rises monotonically as the colony shrinks (0.094 at 28.5 creeps to 0.205 at
+19), which says creeps spend their lives travelling. A link is the only infrastructure that raises
+delivery *without adding creeps*, and adding creeps has been measured to make things worse.
+
+Placement is central by necessity, exactly as §9.5 argues: no local signal can encode "a link
+belongs beside the controller", because the entire purpose is to eliminate the traffic that would
+reveal it.
+
+**Two bugs shipped and caught in the same iteration, both worth recording:**
+1. **Both links landed at the controller.** `nearController` checked only built structures, so on
+   the pass after placing the first link that link was still a *construction site*, "no link near
+   the controller" was still true, and it built a second one beside the first. Now counted by
+   ROLE — one near a source and one near the controller — over structures *and* pending sites.
+   The stray duplicate remains at 39,34 and is explicitly skipped as a sender.
+2. **The pair was inert once built.** Nothing ever put energy into the source end: supply only
+   targeted spawn, extensions and the granary. A link pair with no filler transports nothing.
+   Source-side links are now supply targets, and only source-side ones — feeding the controller
+   link directly would be a creep walking to the controller to hand energy to the structure whose
+   job is to spare it that walk.
+
+**Result: the pair works, the output claim does not yet stand.** Source link 800, controller link
+799 — transfer confirmed. Output 3.95 → 4.40 total and 0.188 → **0.205** per-creep, which matches
+the best figure ever recorded. But the total moved 0.45, **inside the ±1.1 noise floor**, so it is
+recorded as unverified. Take a second window before crediting it.
+
+**Trajectory:** fitMean 2.12, supply 0.12 (spread 0.042, converged), upgrade 0.66 (spread 0.098,
+still exploring), remote 0.86 — unchanged, as expected, since nothing here touched selection.
+
+**Next:** second window on the link pair. Then the third link is still unbuilt (RCL 6 allows 3,
+two are wasted at the controller) — consider whether `structure.destroy()` on the duplicate is
+worth 5000 energy of rebuild elsewhere, or simply leave it. After that, the growth term proper:
+reaching RCL 7 grants a second spawn and doubles the demographic ceiling.

@@ -1,5 +1,5 @@
 import { decayTraffic, depositTraffic, proposeRoads } from './pheromone';
-import { runNestExpansion, runStoragePlan } from './spawn/nest';
+import { runLinkPlan, runLinks, runNestExpansion, runStoragePlan } from './spawn/nest';
 import { runSpawning } from './spawn/respawn';
 import { applyCongestion, computeStimuli, readEnergy, readRoom } from './creep/stimuli';
 import { decide } from './creep/decide';
@@ -233,6 +233,14 @@ function runRoom(room: Room): void {
 
   // The granary. Proposed before extensions matter, because a colony that
   // cannot store cannot bank a surplus and its growth tracks its worst tick.
+  runLinks(room);
+
+  // Links: the one structure that raises delivery without adding a creep, which
+  // matters because added creeps measurably lower per-creep delivery.
+  if (runLinkPlan(room)) {
+    emit('INFO', 'link-plan', { room: room.name, level: room.controller?.level ?? 0 });
+  }
+
   if (runStoragePlan(room)) {
     emit('INFO', 'storage-plan', { room: room.name, level: room.controller?.level ?? 0 });
   }

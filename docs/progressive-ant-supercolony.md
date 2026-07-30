@@ -1469,6 +1469,7 @@ and the measured effect — including when the effect was nil.
 | Slot scarcity over resource scarcity | economics (capital vs labour) | adopted | body composition all-3-part → 27/28 full-size; `saving-for-full-body` blocked 0 ticks, so waiting cost nothing |
 | Carrying capacity bounds population | central-place foraging (§7.1.1) | adopted | per-creep output rises monotonically as headcount falls: 0.094 at 28.5 creeps → 0.203 at 22. Same total output from 6 fewer creeps |
 | Death-clustering ceiling (peak-of-buckets) | — | **rejected, self-inflicted** | the statistic measured integer-bucket discreteness, not synchronisation: max of 15 Poisson draws at mean 1.3 is routinely 3. It read "over capacity" for healthy colonies, so it could not discriminate. Do not size anything on max-of-buckets |
+| Link pair (transport without a carrier) | human infrastructure / Screeps mechanics | adopted, unverified | source link 800 and controller link 799 confirm transfer works; output 3.95→4.40 total, 0.188→0.205 per-creep, inside the noise floor so pending a second window |
 | Forward-looking death projection (`worstDeficit`) | — | **rejected** | reads 0 always: it needs 66% of the colony dying inside 500 ticks to fire, and it inspects creeps currently alive — during a collapse those are freshly spawned replacements with full TTL, so the survivors look healthy while the old cohort dies around them. Measure deaths backward, never forward |
 
 ### 12.4 What a superorganism actually optimises

@@ -48,6 +48,28 @@ export function storageWithEnergy(room: Room): StructureStorage | undefined {
  */
 export function gatherEnergy(creep: Creep, fromStore = false): void {
   if (fromStore) {
+    // The controller link first: it sits beside the controller, so an upgrader
+    // drawing from it does not travel at all. That is the entire point of
+    // building it, and it beats the granary even when both are full.
+    const controller = creep.room.controller;
+    if (controller) {
+      const link = creep.room
+        .find(FIND_STRUCTURES)
+        .find(
+          (s): s is StructureLink =>
+            s.structureType === STRUCTURE_LINK &&
+            (s as StructureLink).my &&
+            s.pos.getRangeTo(controller) <= 3 &&
+            (s as StructureLink).store.getUsedCapacity(RESOURCE_ENERGY) > 0,
+        );
+      if (link) {
+        if (creep.withdraw(link, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+          creep.moveTo(link, { visualizePathStyle: { stroke: COLORS.hud } });
+        }
+        return;
+      }
+    }
+
     const store = storageWithEnergy(creep.room);
     if (store) {
       if (creep.withdraw(store, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {

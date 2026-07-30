@@ -119,6 +119,122 @@ export function runStoragePlan(room: Room): boolean {
   return room.createConstructionSite(spot, STRUCTURE_STORAGE) === OK;
 }
 
+/** First free buildable tile in a ring around a target. */
+function freeTileNear(room: Room, origin: RoomPosition, maxRange: number): RoomPosition | null {
+  const terrain = room.getTerrain();
+  for (let radius = 1; radius <= maxRange; radius++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const x = origin.x + dx;
+        const y = origin.y + dy;
+        if (x < 2 || x > 47 || y < 2 || y > 47) continue;
+        if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
+        if (room.lookForAt(LOOK_STRUCTURES, x, y).length > 0) continue;
+        if (room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y).length > 0) continue;
+        return new RoomPosition(x, y, room.name);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Proposes a link pair: one beside a source, one beside the controller.
+ *
+ * This is the fix for the quantity now known to bind. Per-creep delivery rises
+ * monotonically as the colony shrinks (0.094 at 28.5 creeps to 0.205 at 19),
+ * which says creeps spend their lives travelling rather than working — the
+ * central-place limit of §7.1.1. A link moves energy *without a creep carrying
+ * it*: `LINK_CAPACITY` 800 per transfer at a flat 3% loss, verified on disk, over
+ * any distance in the room. An upgrader standing at the controller link never
+ * walks anywhere again.
+ *
+ * That is a genuinely different mechanism from anything the colony has, and it is
+ * the one piece of infrastructure that raises output without adding creeps —
+ * which matters because adding creeps has been measured to *lower* per-creep
+ * delivery.
+ *
+ * Placement is central by necessity, exactly as §9.5 argues: no local signal can
+ * encode "a link belongs beside the controller". Traffic cannot discover it,
+ * because the whole point is to eliminate the traffic that would reveal it.
+ *
+ * Controller first, then source, because a lone controller link still receives
+ * from creeps while a lone source link has nowhere to send.
+ */
+export function runLinkPlan(room: Room): boolean {
+  if (Game.time % NEST_PLAN_INTERVAL !== 0) return false;
+
+  const level = room.controller?.level ?? 0;
+  if ((CONTROLLER_STRUCTURES.link[level] ?? 0) < 2) return false;
+
+  // Pending sites count. The first version checked only built structures, so on
+  // the planning pass after placing the controller link that link was still a
+  // construction site, "no link near the controller" was still true, and it
+  // placed a second one right beside the first. Both ended up at the controller
+  // with neither near a source, which is a link pair that can move nothing.
+  const placed = [
+    ...room
+      .find(FIND_STRUCTURES)
+      .filter(s => s.structureType === STRUCTURE_LINK)
+      .map(s => s.pos),
+    ...room
+      .find(FIND_CONSTRUCTION_SITES)
+      .filter(s => s.structureType === STRUCTURE_LINK)
+      .map(s => s.pos),
+  ];
+
+  const controller = room.controller;
+  if (!controller) return false;
+  const sources = room.find(FIND_SOURCES);
+
+  // Wanted by ROLE, not by count — two links are useless if both sit at the same
+  // end. The pair only transports anything if one is beside a source and one
+  // beside the controller.
+  const haveController = placed.some(p => p.getRangeTo(controller) <= 3);
+  const haveSource = sources.some(src => placed.some(p => p.getRangeTo(src) <= 3));
+  if (haveController && haveSource) return false;
+  if (placed.length >= (CONTROLLER_STRUCTURES.link[level] ?? 0)) return false;
+
+  const target = haveController ? sources[0]?.pos : controller.pos;
+  if (!target) return false;
+
+  const spot = freeTileNear(room, target, 3);
+  if (!spot) return false;
+
+  return room.createConstructionSite(spot, STRUCTURE_LINK) === OK;
+}
+
+/**
+ * Runs the link pair: everything not beside the controller pushes to the one
+ * that is. Cooldown and partial loads are handled by the engine, so a failed
+ * transfer is free and simply retried next tick.
+ */
+export function runLinks(room: Room): void {
+  const controller = room.controller;
+  if (!controller) return;
+
+  const links = room
+    .find(FIND_STRUCTURES)
+    .filter((s): s is StructureLink => s.structureType === STRUCTURE_LINK && s.my);
+  if (links.length < 2) return;
+
+  const sink = links.find(l => l.pos.getRangeTo(controller) <= 3);
+  if (!sink) return;
+
+  for (const link of links) {
+    if (link.id === sink.id) continue;
+    // A second link parked at the controller is a mistake this code already made
+    // once; shipping energy between two controller-adjacent links moves nothing
+    // and burns the 3% loss for it.
+    if (link.pos.getRangeTo(controller) <= 3) continue;
+    if (link.cooldown > 0) continue;
+    if (link.store.getUsedCapacity(RESOURCE_ENERGY) === 0) continue;
+    if (sink.store.getFreeCapacity(RESOURCE_ENERGY) === 0) continue;
+    link.transferEnergy(sink);
+  }
+}
+
 export interface NestPlan {
   placed: boolean;
   have: number;
