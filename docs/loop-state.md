@@ -20,6 +20,7 @@ efficiency.
 | 28 | stagger scales with deficit (`base / deficit`) | stagG during decline 24-48 → **0** | worked as designed; did NOT stop collapses |
 | 29a | *(settled)* confirm iteration 27's fitness change | 1.85@25-26 → **4.57@25-26** | **worked**; 2.29 was an understatement taken mid-reset |
 | 29 | pre-spawn: "alive" = outlives spawn+travel lead time | 4.57@25-26 → 3.91 & 5.02@26-27 | **no-gain** in steady state (by design); pop floor 24 → 25 |
+| 30 | growth reserve scales with deficit | growth-reserve blocked 9-45 ticks/100 during die-off | unverified until next collapse |
 
 # Loop state — progressive ant supercolony
 
@@ -1719,3 +1720,52 @@ passing through without a crash.
 **Next: the growth term.** `at-cap` still accounts for 15-57 ticks per 100 while `too-poor` stays
 at 0 — the colony is bounded by a constant, not by its economy, and now delivers ~4.5-5.0
 energy/tick with which to fund expansion.
+
+### 2026-07-31 — iteration 30 — a growth gate was throttling maintenance
+
+A collapse occurred immediately after the pre-spawn deploy (26 → 2), and with instrumentation
+live it exposed a blocker that had never appeared before. Reading across the fall, not at its
+bottom:
+
+| tick | creeps | spawn-busy | stagger-growth | **growth-reserve** | too-poor |
+|---|---|---|---|---|---|
+| 901300 | 26 | 54 | 45 | 0 | 0 |
+| 901500 | 21 | **97** | 0 | 0 | 0 |
+| 901600 | 17 | 88 | 0 | **9** | 0 |
+| 901700 | 12 | 68 | 0 | **28** | 0 |
+| 901800 | 4 | 16 | 0 | **45** | 37 |
+| 901900 | 2 | 0 | 0 | 0 | **100** |
+
+**Two findings, and the second is structural.**
+
+**1. `GROWTH_MIN_RESERVE` was gating replacement, not growth.** From 17 creeps downward the
+colony refused to spawn because it held under 400 energy — while `too-poor` was still 0, meaning
+it *could* afford a creep and declined to build one. With a fixed `COLONY_MAX` almost every spawn
+is replacing a creep that died, not adding one; a gate meant to prevent over-investment was
+throttling maintenance, and did so hardest exactly when maintenance was survival. The colony was
+saving for a rainy day during the storm.
+
+Fixed by scaling the requirement with the deficit, the same shape as the stagger fix: one short
+still demands the full 400, eight short demands 50. `bodyFor` already sizes the body to what is
+affordable, so `too-poor` is the real floor and this gate no longer pre-empts it. Range check:
+`energy.available` spans 0-1800 and the requirement spans 400 down to 16, inside the range at
+every deficit.
+
+**2. One spawn is a hard physical limit until RCL 7.** Verified on disk —
+`CONTROLLER_STRUCTURES.spawn` is 1 for RCL 1-6 and only reaches 2 at RCL 7. `spawn-busy` hit
+**97%** during the fall: the spawn was running flat out and still losing. A 12-part body takes 36
+ticks, so rebuilding 25 creeps costs ~900 ticks minimum no matter what any policy says.
+
+**This reframes the whole collapse problem.** Recovery speed cannot be meaningfully improved
+before RCL 7, so **preventing die-offs is worth far more than accelerating recovery** — and the
+three spawn-policy fixes so far (deficit stagger, pre-spawn, scaled reserve) have all been
+recovery-side. The remaining question is still what synchronises the cohort in the first place,
+which none of them addresses. RCL 5 sits at ~98% toward RCL 6, so RCL 7 is not near.
+
+**Unverified, and deliberately not claimed.** This change can only be tested by another die-off.
+Do not record it as working until a collapse is observed passing through with `growth-reserve`
+staying at 0 while creeps are below strength.
+
+**Next:** the growth term remains queued, and the RCL-7 finding gives it a second motive — a
+second spawn is itself an investment that raises future capacity, which is exactly the
+consumption-versus-investment distinction §12.2 says the colony cannot currently express.

@@ -222,8 +222,30 @@ export function runSpawning(
   if (Game.time - last < stagger) return block(`stagger-${reason}`);
 
   if (reason === 'growth') {
-    // Absolute, not a share of capacity — see GROWTH_MIN_RESERVE.
-    if (energy.available < GROWTH_MIN_RESERVE) return block('growth-reserve');
+    // The reserve requirement relaxes as the colony falls further behind.
+    //
+    // `GROWTH_MIN_RESERVE` exists to stop the colony investing in an extra worker
+    // it cannot afford. But with a fixed `COLONY_MAX`, genuine growth barely
+    // happens — almost every spawn is *replacing* a creep that died. Gating
+    // replacement behind a growth reserve is a category error, and telemetry
+    // caught it doing real damage during a die-off (ticks 901600-901800):
+    //
+    //   creeps 17 -> 12 -> 4, blocked by growth-reserve for 9, 28 then 45 ticks
+    //   per 100, while `too-poor` was still 0 — the colony could afford a creep
+    //   and refused to build one because it was saving for a rainy day during
+    //   the storm.
+    //
+    // Scaling by the deficit keeps the gate where it belongs and removes it where
+    // it is lethal, exactly as the stagger above does. One short is ordinary
+    // turnover and still demands the full 400. Eight short demands 50, which the
+    // colony had. `bodyFor` already scales the body to what is affordable, so
+    // `too-poor` remains the real floor and this gate stops pre-empting it.
+    //
+    // Range: `energy.available` spans 0-1800 and the requirement spans 400 down
+    // to 16, so the threshold stays inside the range at every deficit rather than
+    // becoming unreachable at either end.
+    const required = Math.ceil(GROWTH_MIN_RESERVE / deficit);
+    if (energy.available < required) return block('growth-reserve');
   }
 
   const body = bodyFor(energy.available);
