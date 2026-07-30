@@ -181,3 +181,25 @@ never deliver energy to the spawn, which would explain the death spiral directly
 (2) after a respawn, verify a creep actually refills the spawn and the colony sustains
 itself across a generation; (3) then consider letting all-negative-margin creeps genuinely
 idle rather than working at a loss.
+
+**Late in iteration 1**, two more changes shipped:
+- `SNAPSHOT_INTERVAL` 10 → 100. The human set tick duration to ~20ms (~50 ticks/sec), so the
+  old value emitted five snapshots per second and swamped SigNoz. At 100 it is roughly one
+  every two seconds, still ~15 samples per 1500-tick creep generation (~30s of wall clock).
+- **Removed both uses of `FIND_MY_STRUCTURES`** (`stimuli.ts:readEnergy`,
+  `tasks/supply.ts`), replaced with `FIND_STRUCTURES` + an explicit `my` check. The
+  hypothesis logged above was confirmed by evidence: `readEnergy` reported a capacity of 0
+  for a room containing a spawn, which must report 300. Since `supply.ts` used the same call
+  to find delivery targets, no creep could ever deliver energy to the spawn — the direct
+  mechanical cause of the starvation. `runSpawning` was unaffected because it uses
+  `FIND_MY_SPAWNS`, which works.
+
+**State at end of iteration 1:** colony still dead (controller + empty spawn, zero creeps),
+awaiting a human respawn. All fixes are deployed, so the next generation starts on corrected
+code. SigNoz is live and streaming under `service.name=screeps`.
+
+**First thing next iteration must check:** after respawn, whether a creep actually delivers
+energy into the spawn (`supply` appears in `distribution`, and snapshot `energyAvailable`
+climbs above 0). That single observation confirms or refutes the whole `FIND_MY_STRUCTURES`
+diagnosis. If `energyCapacity` still reports 0 with a spawn present, the diagnosis was wrong
+and the next suspect is the `store` API shape on this server version.
