@@ -783,6 +783,50 @@ Army ants don't send scouts; the entire worker force moves as a coordinated fron
 **Polygyne budding:** Multiple queens, nests connected by trails. Functional supercolony.
 - Screeps: Multi-room empire with shared logistics (`Memory.strategy.empireLogistics`).
 
+### 7.1.1 Polydomy: a colony cannot outgrow its central place
+
+A colony's income is capped by the resource density around its nest, not by how
+many workers it fields. Past that point additional workers add nothing — they
+queue at the same depleted patches. The biological answer is **polydomy**: a
+large central nest plus smaller subnests distributed across the foraging
+territory. Its documented advantages are precisely increased food encounter and
+exploitation rates, plus defence of resources and territory. Colonies also
+relocate workers and brood between nests in response to spatial variation in
+resources, so nest placement tracks where food actually is. *Camponotus gigas*
+has been recorded running 17 nests and ~7,000 foragers over 0.8 ha.
+
+Notably, colony size does *not* reliably predict foraging distance — colonies do
+not simply forage further as they grow, they reorganise spatially. Growth past
+the central place's carrying capacity is a structural change, not a scaling one.
+
+**Measured here (2026-07-30), and the numbers are stark.** Verified against
+`@screeps/common/lib/constants.js`: `SOURCE_ENERGY_CAPACITY = 3000`,
+`ENERGY_REGEN_TIME = 300`, `HARVEST_POWER = 2`. So one source sustains
+3000/300 = 10 energy/tick, and 10 ÷ 2 = **5 WORK parts saturate it completely**.
+
+W5N8 has 2 sources — a hard ceiling of **20 energy/tick and 10 useful WORK
+parts, no matter how large the colony grows**. The colony was fielding 22 creeps
+carrying **74 WORK parts: 7.4× oversubscribed**, with roughly 64 of those parts
+contributing nothing. This is the mechanical explanation for slow controller
+progress and for population oscillation: the colony had grown far past its
+central place's carrying capacity, exactly the condition polydomy exists to solve.
+
+**Remote sources are worth more than they look**, because
+`SOURCE_ENERGY_NEUTRAL_CAPACITY = 1500` while a *reserved* room's sources hold
+the full 3000. An unreserved remote source yields 5 energy/tick; a reserved one
+yields 10. Reservation therefore doubles remote income, and it requires no GCL —
+only a CLAIM part (`CONTROLLER_RESERVE = 1` tick per CLAIM part,
+`CONTROLLER_RESERVE_MAX = 5000`).
+
+Four adjacent rooms hold **6 unowned sources with no Source Keeper lairs**
+(W6N8 ×2, W5N9 ×2, W4N8 ×1, W5N7 ×1). Exploiting them takes the colony's income
+ceiling from 20 energy/tick to ~50 unreserved, or ~80 reserved — a **4× increase**
+that no amount of additional workers in the home room could ever produce.
+
+Sources: [Royal Society — Polydomy enhances foraging performance](https://royalsocietypublishing.org/doi/10.1098/rspb.2017.0269),
+[Polydomy: organisation and adaptive function](https://www.sciencedirect.com/science/article/pii/S221457451400073X),
+[Oecologia — Polydomy and foraging in Camponotus gigas](https://link.springer.com/article/10.1007/s004420050695)
+
 ### 7.2 Temnothorax House-Hunting (Decision Making)
 
 *Temnothorax* ants choose new nest sites through distributed consensus:
