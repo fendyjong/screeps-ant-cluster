@@ -1028,15 +1028,29 @@ node --check tools/log-shipper/index.js
 
 Expected: no output, exit code 0.
 
-Then smoke-test the filter and parse path against a fixture, with no SigNoz needed:
+Then smoke-test the filter and parse path against a fixture, with no SigNoz needed.
+
+**The line must be appended while the shipper is already watching.** `tail -n 0 -F` starts
+at end-of-file and never replays what was already there, so pre-writing the fixture and
+then launching the shipper reads nothing and silently proves nothing. (`-n 0` is correct
+for production — otherwise every restart would re-ship the entire historical log.)
 
 ```bash
 cd /home/jin/.config/Screeps/scripts
-printf 'noise from another player\n[ANT]{"tick":1,"level":"INFO","event":"snapshot","room":"W1N1"}\n' > /tmp/ant-fixture.log
-SIGNOZ_OTLP_URL=http://127.0.0.1:9/v1/logs timeout 5 node tools/log-shipper/index.js /tmp/ant-fixture.log
+rm -f /tmp/ant-fixture.log; : > /tmp/ant-fixture.log
+( sleep 2
+  printf 'noise from another player\n' >> /tmp/ant-fixture.log
+  printf '[ANT]{"tick":1,"level":"INFO","event":"snapshot","room":"W1N1"}\n' >> /tmp/ant-fixture.log
+) &
+SIGNOZ_OTLP_URL=http://127.0.0.1:9/v1/logs timeout 9 node tools/log-shipper/index.js /tmp/ant-fixture.log
+wait
 ```
 
-Expected: prints the `[shipper] tailing ...` banner, then a `[shipper] send failed:` line — that failure is the success signal here. It proves the sentinel line was matched, parsed, batched, and a send attempted, while the noise line was ignored. (Port 9 is the discard port and always refuses.)
+Expected: the `[shipper] tailing ...` banner, then a `[shipper] send failed:` line — that
+failure is the success signal here. It proves the sentinel line was matched, parsed,
+batched, and a send attempted, while the noise line was ignored. (Port 9 is the discard
+port and always refuses.) If the `send failed` line does NOT appear, the pipeline did not
+process anything — that is the real failure.
 
 - [ ] **Step 4: Wave 1 barrier — orchestrator only**
 
