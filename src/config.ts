@@ -12,8 +12,24 @@ import { TaskName } from './types';
  * growth pauses until foragers refill the reserve. If added creeps cost more
  * than they bring in, the ratio never recovers and growth stops on its own.
  */
-/** Survival floor — always replace below this, regardless of reserves. */
-export const COLONY_MIN = 2;
+/**
+ * Survival floor, as a FRACTION of target size rather than an absolute count.
+ *
+ * This was a fixed 2, chosen before COLONY_MAX was 25 — so the colony had to
+ * fall to a single creep before emergency spawning bypassed the energy gate.
+ * Observed consequence: population fell 23 → 0 over ~900 ticks while spawning
+ * stalled for a 385-tick stretch because energy sat under GROWTH_MIN_RESERVE.
+ * At 14, 11 and 6 creeps the colony was already dying and did nothing about it.
+ *
+ * Below this fraction the colony spawns whatever it can afford, ignoring both
+ * the energy reserve and the stagger — the `MINIMUM_CIVILIAN_FLOOR` idea from
+ * the design doc (§1.1), where founding-stage survival outranks efficiency.
+ *
+ * Fifth instance in this project of the same mistake: a threshold expressed as
+ * an absolute when the thing it guards is relative. It was harmless while
+ * COLONY_MAX was small and became fatal when that grew.
+ */
+export const COLONY_MIN_FRACTION = 0.35;
 
 /**
  * Safety ceiling, so a runaway feedback loop cannot exhaust CPU.

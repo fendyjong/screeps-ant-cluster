@@ -1138,3 +1138,52 @@ out. Moving a decision from code into the genome converts a systemic risk into a
 genome (congestion factor, recruit limit, spawn stagger — though these are colony-level rather
 than per-creep and would need a different mechanism). Also still open: reducing the
 creep-replacement share of the energy budget; pheromone-weighted pathfinding.
+
+### 2026-07-31 — iteration 20 — the survival floor was set uselessly low
+
+**Collapse to 4 creeps, and it was NOT the trait change.** Diagnosed from the trajectory
+rather than guessed:
+
+```
+tick 528700 -> 530000:  23, 23, 21, 17, 14, 11, 6, 1, 0, 1, 2, 3
+energy during crash:    908, 911, 562, 779, 283, 489, 86, 186, 286, 300
+spawn gaps:             60, 74, 60, 60, [385 TICKS], 65, 127
+```
+
+Energy fell under `GROWTH_MIN_RESERVE` (400), so growth spawning stalled for **385 ticks**
+while creeps kept dying. Fewer workers meant less income, which kept energy low, which
+prevented spawning — a runaway.
+
+**The emergency brake existed and was set uselessly low.** `COLONY_MIN = 2` meant the colony
+had to fall to a single creep before survival spawning bypassed the energy gate and the
+stagger. At 14, 11 and 6 creeps it was plainly dying and did nothing.
+
+**Fifth instance of the same mistake in this project:** a threshold expressed as an absolute
+when the thing it guards is relative. `COLONY_MIN = 2` was chosen when the colony was small
+and became fatal once `COLONY_MAX` reached 25. Now `COLONY_MIN_FRACTION = 0.35`, giving a
+floor of 9 — below which the colony spawns whatever it can afford, ignoring both the reserve
+gate and the stagger. This is the design doc's `MINIMUM_CIVILIAN_FLOOR` (§1.1): in founding-
+stage conditions survival outranks efficiency.
+
+**Result:** minimum population **0 → 17**, average 21.2, no spawn gaps. Survival spawns have
+not needed to fire at all, because the decline never reaches the floor — the fix works
+preventively rather than as a rescue.
+
+**Also caught: a shell pipeline was masking type errors.** `npx tsc --noEmit | head -5 && echo
+CLEAN` takes its exit status from `head`, so a genuine compile error (a
+use-before-declaration) printed while "TSC CLEAN" still echoed and the deploy proceeded.
+Verification commands must not pipe the thing whose exit status is the verification. Use
+`if npx tsc --noEmit -p .; then ... fi`.
+
+**Running tally of the recurring pattern — every collapse this project has had:**
+| what | measured against | should have been |
+|---|---|---|
+| growth gate | share of capacity | absolute reserve |
+| body size | available energy | sustainable income |
+| road threshold | absolute traffic count | share of current traffic |
+| reserver spawning | all bodies | working bodies |
+| survival floor | absolute count | share of target size |
+
+Three of these needed an absolute where a ratio was used; two needed a ratio where an absolute
+was used. The question that catches all five: **when the thing this is measured against
+changes, does this threshold still mean what I intended?**

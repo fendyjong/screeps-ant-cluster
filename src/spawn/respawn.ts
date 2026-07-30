@@ -6,7 +6,7 @@ import {
   RESERVE_MAX,
   RESERVE_WORKFORCE_FRACTION,
   COLONY_MAX,
-  COLONY_MIN,
+  COLONY_MIN_FRACTION,
   DEFAULT_TASK,
   GROWTH_MIN_RESERVE,
   SPAWN_STAGGER_TICKS,
@@ -76,6 +76,11 @@ export function runSpawning(
   const alive = mine.filter(c => c.memory.caste !== 'reserver').length;
   if (alive >= COLONY_MAX) return null;
 
+  // Survival floor scales with target size, so a large colony reacts to decline
+  // instead of waiting until it is nearly extinct. Declared here because the
+  // reserver gate below also needs it.
+  const survivalFloor = Math.ceil(COLONY_MAX * COLONY_MIN_FRACTION);
+
   // Reservers are a morphological caste — a [CLAIM, MOVE] body cannot harvest —
   // so they are spawned explicitly rather than emerging from thresholds. See
   // creep/tasks/reserve.ts for why this is the one deliberate exception.
@@ -87,7 +92,12 @@ export function runSpawning(
   // to 5. A reservation is worthless if there is nobody left to forage the room
   // it protects.
   const workforceHealthy = alive >= Math.ceil(COLONY_MAX * RESERVE_WORKFORCE_FRACTION);
-  if (RESERVE_ENABLED && workforceHealthy && energy.available >= RESERVER_COST) {
+  if (
+    RESERVE_ENABLED &&
+    workforceHealthy &&
+    alive >= survivalFloor &&
+    energy.available >= RESERVER_COST
+  ) {
     const targets = reservationTargets();
     const existing = Object.values(Game.creeps).filter(c => c.memory.caste === 'reserver');
     const unheld = targets.find(room => !existing.some(c => c.memory.remoteRoom === room));
@@ -99,7 +109,7 @@ export function runSpawning(
     }
   }
 
-  const reason: SpawnReason = alive < COLONY_MIN ? 'survival' : 'growth';
+  const reason: SpawnReason = alive < survivalFloor ? 'survival' : 'growth';
 
   if (reason === 'growth') {
     // Absolute, not a share of capacity — see GROWTH_MIN_RESERVE.
