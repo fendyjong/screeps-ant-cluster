@@ -585,6 +585,35 @@ This naturally limits recruitment to the productive level.
 manager. +1 hauler per 5k stored energy. +1 builder per 20k construction
 backlog. The "recruitment cascade" is the spawn queue ramping up.
 
+### 4.3.1 A shortage must push foraging outward, not inward
+
+An intuitive crisis response — send everyone to the nearest food — is actively
+harmful once the near source is already saturated. Adding workers to a patch
+that is fully exploited yields nothing while removing them from everywhere else.
+
+The literature is genuinely mixed on direction and worth stating honestly rather
+than cherry-picking: *Formica* range further when local food is scarce, while
+Argentine ants restrict their range under scarcity and travel further when
+resources are plentiful. What transfers cleanly is **exploitation competition** —
+resource depletion near the nest drives individuals to forage at greater
+distances, where better load sizes are available.
+
+**Measured here (2026-07-31), as a failure.** When energy collapsed to 27-268 of
+1800 capacity, the `supply` stimulus saturated to 1.0 and outbid `remote` at its
+0.55 ceiling. Every creep crowded the two home sources, which sustain 10 WORK
+between them and were already saturated. The colony's own crisis response
+switched off the only activity that brings *new* energy in, and the shortage
+deepened — population fell from 26 to 2.
+
+The distinction that matters: **supply moves energy that already exists; remote
+foraging creates income.** During a shortage the second is what counts. Letting a
+shortage raise the remote signal as well as the supply signal changed foraging
+under low energy from **0 creeps to an average of 9.5**, and population went from
+oscillating 26→2 to holding steady at 25-26.
+
+Sources: [PMC — Foraging loads of red wood ants](https://pmc.ncbi.nlm.nih.gov/articles/PMC4878371/),
+[AskNature — Food availability regulates foraging speed](https://asknature.org/strategy/food-availability-regulates-foraging-speed/)
+
 **Measured here (2026-07-30).** Quorum control is not optional at scale. With a
 saturating supply stimulus and no congestion term, a colony of 24 put **23 creeps
 on `supply`** (tick 131800) — a task needing roughly two — while `build` and

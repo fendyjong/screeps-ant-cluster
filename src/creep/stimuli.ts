@@ -4,6 +4,7 @@ import {
   CAPACITY_REMOTE,
   CAPACITY_REPAIR,
   REMOTE_ENABLED,
+  REMOTE_CRISIS_WEIGHT,
   REMOTE_MAX_STIMULUS,
   CAPACITY_SUPPLY,
   CAPACITY_UPGRADE,
@@ -124,6 +125,11 @@ export function computeStimuli(s: RoomSnapshot): Stimuli {
   const sustainable = s.sourceCount * WORK_PER_SOURCE;
   const surplusWork = sustainable > 0 ? (s.workParts - sustainable) / sustainable : 0;
 
+  // A shortage should pull creeps OUTWARD, not just onto the nearest source.
+  // Home sources cap at 10 WORK, so crowding them during a shortage adds
+  // nothing; remote foraging is the only thing that raises income.
+  const crisisPull = clamp01(supply) * REMOTE_CRISIS_WEIGHT;
+
   return {
     supply: clamp01(supply),
     upgrade: s.hasController ? UPGRADE_BASELINE : 0,
@@ -132,7 +138,9 @@ export function computeStimuli(s: RoomSnapshot): Stimuli {
     // sites existed, builders idled, and the road network decayed unattended.
     build: clamp01(Math.max(s.constructionSiteCount / BUILD_SATURATION_SITES, s.disrepair)),
     // Capped so remote can compete for labor but never monopolise it.
-    remote: REMOTE_ENABLED ? Math.min(REMOTE_MAX_STIMULUS, clamp01(surplusWork)) : 0,
+    remote: REMOTE_ENABLED
+      ? Math.max(Math.min(REMOTE_MAX_STIMULUS, clamp01(surplusWork)), crisisPull)
+      : 0,
   };
 }
 

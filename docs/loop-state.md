@@ -1309,3 +1309,46 @@ cross-checking against raw game state, which is how both were caught.
 **Next iteration:** re-measure GCL rate against the 2.91 baseline now that the body reshape has
 had time to take effect, and confirm road health keeps climbing rather than stabilising at a
 worn equilibrium. Population figures before this fix should be treated as suspect.
+
+### 2026-07-31 — iteration 24 — prediction falsified; the crisis response was the bug
+
+**The outstanding prediction FAILED.** Reshaping bodies was supposed to raise upgrade output
+above 2.91/tick. Measured over 1972 ticks: **1.25 energy/tick** — worse, not better.
+
+But the two mechanisms shipped last iteration did work in isolation:
+- replacement cost **11.6 → 4.4** energy/tick
+- roads under repair threshold **14 of 21 → 3 of 23**
+- MOVE now balanced against non-MOVE
+
+Output fell because *population* fell (24 → 11), which the falsified prediction usefully
+exposed rather than hid.
+
+**Two hypotheses tested and rejected before finding the real cause:**
+1. *Cohort death* — rejected in iteration 23; ages are evenly spread across the full lifespan.
+2. *An oscillator in the remote stimulus*, since `workParts` counts only creeps in the home
+   room (the same bug class as the population metric). Rejected by arithmetic: the stimulus is
+   capped at 0.55 and the WORK surplus is large enough that the cap absorbs all the variation,
+   so undercounting changes nothing in practice. Worth recording as a hypothesis killed by
+   numbers rather than argument.
+
+**Actual cause: the crisis response made the crisis worse.** When energy collapsed to 27-268,
+`supply` saturated to 1.0 and outbid `remote` at its 0.55 ceiling. Every creep crowded the two
+home sources — which sustain 10 WORK between them and were already saturated — so the colony
+switched off the only activity that brings *new* energy in. Population fell 26 → 2.
+
+The distinction the design was missing: **supply moves energy that already exists; remote
+foraging creates income.** During a shortage the second is what matters.
+
+**Improved: `REMOTE_CRISIS_WEIGHT = 0.85`.** A shortage now raises the remote signal as well as
+the supply signal, so the two compete instead of one silencing the other. Folded the supporting
+biology into research doc §4.3.1, including the honest caveat that the literature is mixed on
+direction (Formica range further under scarcity; Argentine ants restrict) — what transfers is
+exploitation competition, where depleted near-nest resources push foraging outward.
+
+**Result, measured on the specific failure case:** remote foraging during low energy (<400)
+went from **0 creeps to 9.5 average**. Population now holds **25-26 across every sample** with
+energy cycling 337-1200 and all four tasks staffed. At the deepest dip (337) remote rose to 13.
+
+**Next iteration:** re-measure GCL rate now that population is stable — the 1.25 reading was
+taken at 11 workers and is not comparable to the 2.91 baseline taken at ~24. Only compare
+output at similar headcount, otherwise the metric measures population rather than efficiency.

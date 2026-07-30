@@ -193,6 +193,27 @@ export const REMOTE_COMMIT_TICKS = 300;
 export const REMOTE_MAX_STIMULUS = 0.55;
 
 /**
+ * How strongly an energy shortage pulls creeps to forage REMOTELY rather than
+ * pile onto home sources.
+ *
+ * Observed failure: when energy collapsed (27-268 of 1800), `supply` saturated
+ * to 1.0 and outbid `remote` at its 0.55 cap, so every creep crowded the two
+ * home sources — which sustain only 10 WORK between them and were already
+ * saturated. The colony's crisis response therefore shut off the one activity
+ * that actually brings new energy in, and the shortage deepened: 26 creeps to 2.
+ *
+ * Supply only *moves* energy that already exists; remote foraging *creates*
+ * income. During a shortage the second is what matters, so a crisis now raises
+ * the remote signal too and the two compete rather than one silencing the other.
+ *
+ * The biology is real but genuinely mixed — Formica range further when local
+ * food is scarce, Argentine ants restrict range instead. What transfers cleanly
+ * is exploitation competition: depleted near-nest resources push foraging
+ * outward, which is precisely the situation here.
+ */
+export const REMOTE_CRISIS_WEIGHT = 0.85;
+
+/**
  * Reservation. A reserved remote room's sources hold 3000 rather than the
  * neutral 1500, so each yields 10 energy/tick instead of 5 — reservation doubles
  * the return on foraging the colony already does. Needs no GCL, unlike claiming.
