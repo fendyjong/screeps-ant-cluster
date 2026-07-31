@@ -28,6 +28,7 @@ efficiency.
 | 35 | diagnosis only: TTL-at-death + backward death rate | baseline: 0/40 died young, median TTL 1 | **unverified**; second bad metric killed, baseline established |
 | 36 | source→controller link pair (build + transfer + withdraw + fill) | 3.95/0.188@21 → 4.40/**0.205**@21-22 | **unverified** (inside noise); pair confirmed moving energy |
 | 37 | **invader detection + hostile-room avoidance + towers** | `diedYoung` 0 → 27, medianDeathTTL 1 → 573 | **THE collapse cause found**; towers built, untested |
+| 38 | observation only — session close | 3.48@22 \| 0.158; granary +0.76/tick | towers still untested; link pair **withdrawn as unverified** |
 
 # Loop state — progressive ant supercolony
 
@@ -2132,3 +2133,30 @@ therefore UNTESTED.** They are not credited with anything until one fires and th
 deaths continue with towers loaded, the towers are misplaced or the invaders outrange them, and
 `HOSTILE_AVOID_TICKS` (3000, two creep lifetimes) may need to outlast `INVADER_CORE_EXPAND_TIME`
 (2000-4000 by level) instead.
+
+### 2026-07-31 — iteration 38 — session close, and a claim withdrawn
+
+**No wave arrived**, so the towers remain untested across a 30-minute window with zero
+`hostile-room`, `tower-fired` or `creep-died-young` events and `diedYoung` at 0 in all 473
+demography samples. Quiet is not evidence they work.
+
+**The link pair claim is withdrawn.** Three windows now exist: 3.95/0.188 (pre), 4.40/0.205
+(post), **3.48/0.158 (latest)**. The spread is inside the ±1.1 noise floor in every direction, so
+the pair is neither confirmed nor refuted, and the earlier writeup leaned too favourable on a
+single window. The pair is definitely *operating* — source link 800, controller link 729 — but
+operating is not the same as paying.
+
+**New and important: the colony has surplus for the first time.** The granary held ~0 for its
+entire existence and now holds **53,058, accumulating at 0.76 energy/tick** while only 3.48
+reaches the controller. That is the condition flagged long ago as "a large balance means upgraders
+cannot drain it and the constraint has moved" — it has now happened.
+
+This makes **the growth term actionable rather than theoretical**: there is finally investable
+surplus and no mechanism that distinguishes investment from consumption. The caution from
+iteration 33 stands and matters here — adding creeps has measurably *hurt* (0.094 per-creep at
+28.5 versus 0.203 at 22), so surplus should go into infrastructure, not headcount.
+
+**Session totals:** GCL 1.82M → 4.10M control points (34% → 77.7% toward GCL 3); RCL 5 → 6, now
+62.5% toward RCL 7 and a second spawn. Full writeup in `report/2026-07-31-report.md`.
+
+**Loop stopped here at the user's request.**
